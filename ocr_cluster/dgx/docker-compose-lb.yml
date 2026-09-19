@@ -1,0 +1,30 @@
+services:
+  gateway:
+    image: nginx:1.27-alpine
+    configs:
+      - source: nginx-config
+        # The image's entrypoint renders every *.template in this directory
+        # with envsubst before nginx starts.
+        target: /etc/nginx/templates/nginx.conf.template
+    environment:
+      # `:?` makes compose refuse to start the stack when the key is unset,
+      # so the gateway can never come up accepting unauthenticated traffic.
+      GATEWAY_API_KEY: "${GATEWAY_API_KEY:?set GATEWAY_API_KEY in .env - generate one with: openssl rand -hex 32}"
+      # Render to /etc/nginx/nginx.conf rather than the default conf.d/, since
+      # the template is a whole config (events{} + http{}), not a server block.
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
+      # Substitute only GATEWAY_* so nginx's own $host, $scheme, $http_* and
+      # the map capture $token survive envsubst untouched.
+      NGINX_ENVSUBST_FILTER: "^GATEWAY_"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+    restart: unless-stopped
+
+configs:
+  nginx-config:
+    file: ./nginx.conf.template
