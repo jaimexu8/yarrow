@@ -6,9 +6,11 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
-from app.models import Base
+from yarrow_db.config import db_settings
+from yarrow_db.models import Base
 
 config = context.config
+config.set_main_option("sqlalchemy.url", db_settings.async_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "yarrow-db"
+version = "0.1.0"
+description = "Yarrow shared database models and sessions"
+authors = ["Team 13"]
+packages = [{ include = "yarrow_db", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+sqlalchemy = {extras = ["asyncio"], version = ">=2.0"}
+asyncpg = "*"
+psycopg2-binary = "*"
+pydantic-settings = "*"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = ["B008", "BLE001"]

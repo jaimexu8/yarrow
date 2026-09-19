@@ -1,18 +1,21 @@
-from collections.abc import AsyncGenerator
+"""Thin re-export of the shared database layer.
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+The engines, session factories and models live in the ``yarrow-db`` package so
+that the Celery worker can use exactly the same definitions. This module only
+keeps the names the FastAPI app already depends on.
+"""
 
-from .config import settings
-
-DATABASE_URL = f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
-
-engine = create_async_engine(DATABASE_URL, echo=False)
-async_session_maker = sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
+from yarrow_db.session import (
+    get_async_engine as _get_async_engine,
+)
+from yarrow_db.session import (
+    get_async_session as get_db,
+)
+from yarrow_db.session import (
+    get_async_session_maker,
 )
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_maker() as session:
-        yield session
+__all__ = ["get_async_session_maker", "get_db"]
 
+engine = _get_async_engine()
+async_session_maker = get_async_session_maker()

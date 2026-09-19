@@ -7,7 +7,7 @@ from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.models.user import User
+from yarrow_db.models import User
 
 from .config import settings
 

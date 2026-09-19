@@ -14,9 +14,7 @@ fastapi = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 pydantic = {extras = ["email"], version = ">=2.6"}
 pydantic-settings = "*"
-sqlalchemy = {extras = ["asyncio"], version = ">=2.0"}
-asyncpg = "*"
-psycopg2-binary = "*"
+yarrow-db = {path = "../packages/yarrow-db", develop = true}
 alembic = "*"
 passlib = {extras = ["bcrypt"], version = "*"}
 python-jose = {extras = ["cryptography"], version = "*"}

@@ -1,12 +1,9 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
+from yarrow_db.config import DatabaseSettings
 
 
-class Settings(BaseSettings):
-    POSTGRES_USER: str = "yarrow"
-    POSTGRES_PASSWORD: str = "yarrow_password"
-    POSTGRES_DB: str = "yarrow"
-    POSTGRES_HOST: str = "postgres"
-    POSTGRES_PORT: str = "5432"
+class Settings(DatabaseSettings):
+    """Backend settings. Postgres fields are inherited from DatabaseSettings."""
 
     VALKEY_HOST: str = "valkey"
     VALKEY_PORT: str = "6379"
