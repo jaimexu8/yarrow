@@ -1,8 +1,9 @@
 import asyncio
 
-from app.core.security import get_password_hash
 from yarrow_db.models import User
 from yarrow_db.session import get_async_session_maker
+
+from app.core.security import get_password_hash
 
 
 async def seed():

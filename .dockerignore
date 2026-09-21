@@ -1,0 +1,23 @@
+# Root build context, shared by the backend and worker images.
+# (The frontend image still builds from ./frontend with its own .dockerignore.)
+
+__pycache__
+*.pyc
+.venv
+venv
+.env
+.git
+.github
+.husky
+
+# Not needed by the Python services
+frontend/
+docs/
+ocr_cluster/
+node_modules/
+package-lock.json
+
+# Local state
+storage/
+*.log
+.DS_Store

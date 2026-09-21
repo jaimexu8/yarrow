@@ -1,0 +1,121 @@
+{
+  "file": "one_page.pdf",
+  "bytes": 3222,
+  "sha256": "0f294300a74a73f8d80eff596b282a000d4cc9e10945cf5995b61f224e71feff",
+  "detected_extension": "pdf",
+  "kind": "processable",
+  "expected_pages": 1,
+  "model_graph": {
+    "pages": [
+      {
+        "page_number": 1,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph_title",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 1,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 2,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 3,
+            "region_type": "table",
+            "block_label": "table",
+            "is_table": true,
+            "has_text": false
+          }
+        ]
+      }
+    ],
+    "unmerged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 4,
+        "region_texts": 3,
+        "tables": 1,
+        "region_tables": 1,
+        "table_cells": 6
+      },
+      "tables": [
+        {
+          "row_count": 3,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 1,
+              "region_reading_order": 3,
+              "row_start": 0,
+              "row_end": 2,
+              "col_start": 0,
+              "col_end": 1,
+              "cells": [
+                [0, 0, 1, 1, false],
+                [0, 1, 1, 1, false],
+                [1, 0, 1, 1, false],
+                [1, 1, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "merged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 4,
+        "region_texts": 3,
+        "tables": 1,
+        "region_tables": 1,
+        "table_cells": 6
+      },
+      "tables": [
+        {
+          "row_count": 3,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 1,
+              "region_reading_order": 3,
+              "row_start": 0,
+              "row_end": 2,
+              "col_start": 0,
+              "col_end": 1,
+              "cells": [
+                [0, 0, 1, 1, false],
+                [0, 1, 1, 1, false],
+                [1, 0, 1, 1, false],
+                [1, 1, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

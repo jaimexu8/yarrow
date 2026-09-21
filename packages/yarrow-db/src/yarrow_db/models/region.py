@@ -13,7 +13,7 @@ class Region(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     page_id = Column(UUID(as_uuid=True), ForeignKey("pages.id"), nullable=False)
     reading_order = Column(Integer)
-    region_type = Column(String) # header, paragraph, figure, table, footer
+    region_type = Column(String) # the OCR's block_label as-is, e.g. text, table, image
     x0 = Column(Float)
     y0 = Column(Float)
     x1 = Column(Float)
