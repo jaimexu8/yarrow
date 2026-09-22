@@ -3,6 +3,8 @@ ownership rules behind the document endpoints."""
 
 import uuid
 
+from yarrow_db.models import Job
+
 from tests.conftest import FIXTURES_DIR
 
 DOCUMENTS = "/api/v1/documents/"
@@ -49,6 +51,19 @@ class TestUpload:
         library = (await client.get(DOCUMENTS, headers=auth_headers)).json()
         assert [d["filename"] for d in library] == ["sample.pdf"]
         assert library[0]["status"] == "queued"
+
+    async def test_upload_persists_celery_task_id_on_job(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        """US-42 needs the task id to revoke a queued job."""
+        response = await client.post(UPLOAD, headers=auth_headers, files=[_pdf()])
+        job_id = uuid.UUID(response.json()["accepted"][0]["job_id"])
+
+        job = await db_session.get(Job, job_id)
+
+        assert job is not None
+        assert job.celery_task_id == "task-1"
+        assert job.status == "queued"
 
     async def test_unsupported_type_is_rejected_with_reason(
         self, client, auth_headers, fake_storage, fake_queue

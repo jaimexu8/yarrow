@@ -88,6 +88,7 @@ async def upload_documents(
     storage = get_storage()
     accepted: list[UploadAccepted] = []
     rejected: list[UploadRejected] = []
+    jobs_by_id: dict[UUID, Job] = {}
     # Running total, so that several files in one request cannot each pass a
     # quota check that they only collectively exceed.
     used_bytes = current_user.storage_used_bytes or 0
@@ -152,6 +153,7 @@ async def upload_documents(
             total_pages=0,
         )
         db.add_all([document, job])
+        jobs_by_id[job.id] = job
         used_bytes += size
         accepted.append(
             UploadAccepted(
@@ -172,6 +174,10 @@ async def upload_documents(
 
     for item in accepted:
         item.task_id = enqueue_document_processing(item.job_id)
+        # Persisted so that a queued job can be revoked later (US-42).
+        jobs_by_id[item.job_id].celery_task_id = item.task_id
+    if accepted:
+        await db.commit()
 
     if not accepted and rejected:
         # Nothing was stored, so the request as a whole did not succeed.

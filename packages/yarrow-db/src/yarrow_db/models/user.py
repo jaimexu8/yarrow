@@ -17,7 +17,13 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+    # Email verification (US-1): a short code sent by email, stored hashed,
+    # valid until verification_expires_at.
     verification_token = Column(String)
+    verification_expires_at = Column(DateTime)
+    # Password reset (US-67): single-use token, stored hashed, with an expiry.
+    reset_token = Column(String)
+    reset_token_expires_at = Column(DateTime)
     storage_used_bytes = Column(BigInteger, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
