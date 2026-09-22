@@ -35,38 +35,71 @@ services:
       retries: 5
     restart: unless-stopped
 
-  minio:
-    image: quay.io/minio/minio:latest
-    container_name: yarrow_minio
+  rustfs:
+    image: rustfs/rustfs:1.0.0
+    container_name: yarrow_rustfs
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
-    command: server /data --console-address ":9001"
+      RUSTFS_VOLUMES: /data/rustfs0
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      RUSTFS_OBS_LOG_DIRECTORY: /app/logs
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio_data:/data
+      - rustfs_data:/data/rustfs0
+      - rustfs_logs:/app/logs
+    depends_on:
+      rustfs-volumes:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
       interval: 5s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
+  rustfs-volumes:
+    image: alpine:3.22
+    container_name: yarrow_rustfs_volumes
+    command: sh -c "chown -R 10001:10001 /data /logs"
+    volumes:
+      - rustfs_data:/data
+      - rustfs_logs:/logs
+    restart: "no"
+
   create-bucket:
-    image: quay.io/minio/mc:latest
-    container_name: yarrow_minio_setup
+    image: rclone/rclone:1.75
+    container_name: yarrow_s3_setup
     depends_on:
-      minio:
+      rustfs:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc config host add myminio http://minio:9000 minioadmin minioadmin;
-      /usr/bin/mc mb myminio/yarrow-documents --ignore-existing;
-      /usr/bin/mc anonymous set public myminio/yarrow-documents;
-      exit 0;
-      "
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        rclone config create rustfs s3 provider Minio access_key_id ${S3_ACCESS_KEY:-rustfsadmin} secret_access_key ${S3_SECRET_KEY:-rustfsadmin} endpoint http://rustfs:9000
+        && rclone mkdir rustfs:${S3_BUCKET_NAME:-yarrow-documents}
+
+  set-bucket-policy:
+    image: amazon/aws-cli:2.36.50
+    container_name: yarrow_s3_policy
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-rustfsadmin}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      AWS_DEFAULT_REGION: us-east-1
+    depends_on:
+      create-bucket:
+        condition: service_completed_successfully
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        aws configure set default.s3.addressing_style path
+        && aws s3api put-bucket-policy --endpoint-url http://rustfs:9000 --bucket ${S3_BUCKET_NAME:-yarrow-documents} --policy '{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"AWS": ["*"]}, "Action": ["s3:ListBucket"], "Resource": ["arn:aws:s3:::${S3_BUCKET_NAME:-yarrow-documents}"]}, {"Effect": "Allow", "Principal": {"AWS": ["*"]}, "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::${S3_BUCKET_NAME:-yarrow-documents}/*"]}]}'
 
   backend:
     build:
@@ -86,9 +119,9 @@ services:
       - VALKEY_HOST=valkey
       - VALKEY_PORT=6379
       - CELERY_BROKER_URL=redis://valkey:6379/0
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
-      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-rustfsadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-rustfsadmin}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-yarrow-documents}
       - USE_LOCAL_STORAGE=false
       - SECRET_KEY=${SECRET_KEY:-supersecretkey_please_change_in_production}
@@ -99,7 +132,7 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
@@ -121,16 +154,16 @@ services:
       - VALKEY_HOST=valkey
       - VALKEY_PORT=6379
       - CELERY_BROKER_URL=redis://valkey:6379/0
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
-      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-rustfsadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-rustfsadmin}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-yarrow-documents}
     depends_on:
       postgres:
         condition: service_healthy
       valkey:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
     command: celery -A app.celery_app worker --loglevel=info
     restart: unless-stopped
@@ -155,4 +188,5 @@ services:
 volumes:
   pg_data:
   valkey_data:
-  minio_data:
+  rustfs_data:
+  rustfs_logs:

@@ -12,9 +12,9 @@ class Settings(BaseSettings):
     VALKEY_PORT: str = "6379"
     CELERY_BROKER_URL: str = "redis://valkey:6379/0"
 
-    S3_ENDPOINT: str = "http://minio:9000"
-    S3_ACCESS_KEY: str = "minioadmin"
-    S3_SECRET_KEY: str = "minioadmin"
+    S3_ENDPOINT: str = "http://rustfs:9000"
+    S3_ACCESS_KEY: str = "rustfsadmin"
+    S3_SECRET_KEY: str = "rustfsadmin"
     S3_BUCKET_NAME: str = "yarrow-documents"
     USE_LOCAL_STORAGE: bool = False
 
