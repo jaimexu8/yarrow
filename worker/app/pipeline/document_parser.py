@@ -212,17 +212,30 @@ class DocumentParser:
         self.page_errors[page_index] = error_message
         return {}
 
-    async def process_async(self) -> None:
+    async def process_async(self, page_to_process: Optional[Tuple] = None) -> None:
         self.page_errors = {}
-        tasks = [asyncio.to_thread(self._process_page_isolated, index, page) for index, page in enumerate(self.pages)]
+        
+        # Creates processing tasks for each page that needs to be processed
+        tasks = [asyncio.to_thread(self._process_page_isolated, index, page) for index, page in enumerate(self.pages) if page_to_process is None or index + 1 in page_to_process]
+        results = list(await asyncio.gather(*tasks))
+        
+        if page_to_process is None:
+            # Assumed that all pages are being processed
+            self.parsed_result = results
+        else:
+            if len(self.parsed_result) != len(self.pages):
+                # Initialize the parsed_result list with empty dictionaries for all pages
+                self.parsed_result = [{} for _ in range(len(self.pages))]
+            
+            # Selectively updating the parsed results for the specified pages
+            for i, result in zip(page_to_process, results):
+                self.parsed_result[i - 1] = result
 
-        self.parsed_result = list(await asyncio.gather(*tasks))
-
-    def process_sync(self) -> None:
-        asyncio.run(self.process_async())
+    def process_sync(self, page_to_process: Optional[Tuple] = None) -> None:
+        asyncio.run(self.process_async(page_to_process))
 
     def get_pruned_result(self) -> List[JsonDict]:
-        return [response.get("result").get("layoutParsingResults", {})[0].get("prunedResult") for response in self.parsed_result]
+        return [response.get("result", {}).get("layoutParsingResults", {})[0].get("prunedResult") for response in self.parsed_result]
 
     def get_markdown(self) -> List[str]:
         markdown: List[str] = []
@@ -484,7 +497,6 @@ class DocumentParser:
                         "position": len(region_tables_data),
                         "page_table_count": page_table_count,
                         "region": region,
-                        "result": table_result,
                         "bbox": bbox,
                         "cells": parser.cells,
                         "cell_boxes": cell_boxes,
@@ -515,12 +527,13 @@ class DocumentParser:
 
         return regions, region_tables_data
 
-    def to_model_objects(self, document: Document, merge_consecutive_tables: bool = False) -> List[Base]:
+    def to_model_objects(self, document: Document, target_pages: Optional[Tuple] = None, merge_consecutive_tables: bool = False) -> List[Base]:
         """
         Converts the parsed result into model objects.
 
         Args:
             document: The Document these pages belong to
+            target_pages (Optional[Tuple]): Specific pages to include in the model objects. Defaults to all pages.
             merge_consecutive_tables (bool): Whether to merge consecutive tables across pages that
             have the same number of columns
 
@@ -539,10 +552,10 @@ class DocumentParser:
 
         # Reconstruct each page sequentially, constructing regions
         for page_index, page_data in enumerate(pruned_result):
-            if page_data == {}:
-                # Page processing failed, continue
+            if target_pages is not None and page_index + 1 not in target_pages:
+                # Page is not in the target pages, skip it
                 continue
-
+            
             # Construct page object
             page_id = uuid.uuid4()
             error_message = self.page_errors.get(page_index)
@@ -556,6 +569,10 @@ class DocumentParser:
                 error_message=error_message,
             )
             pages.append(page)
+            
+            if page_data == {}:
+                # Page processing failed, continue
+                continue
 
             # Construct regions for each page
             page_regions, region_tables_data_per_page = self._construct_regions(page_index, page_id, page_data)

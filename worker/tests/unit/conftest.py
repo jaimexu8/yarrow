@@ -5,6 +5,48 @@ from app.tasks import ingestion
 from yarrow_db.models import Page, Document, Job
 import pytest
 
+class FakeResult:
+    def __init__(self, rows=None):
+        self.rows = list(rows or [])
+
+    def scalar(self):
+        return self.rows[0] if self.rows else None
+
+    def scalar_one(self):
+        if len(self.rows) != 1:
+            raise Exception(
+                f"Expected exactly one result, got {len(self.rows)}"
+            )
+        return self.rows[0]
+
+    def scalar_one_or_none(self):
+        if len(self.rows) > 1:
+            raise Exception(
+                f"Expected at most one result, got {len(self.rows)}"
+            )
+        return self.rows[0] if self.rows else None
+
+    def scalars(self):
+        return FakeScalarResult(self.rows)
+    
+class FakeScalarResult:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def all(self):
+        return self.rows
+
+    def first(self):
+        return self.rows[0] if self.rows else None
+
+    def one(self):
+        if len(self.rows) != 1:
+            raise Exception(
+                f"Expected exactly one result, got {len(self.rows)}"
+            )
+        return self.rows[0]
+    
+
 class FakeSession:
     def __init__(self, store):
         self.store = store
@@ -15,6 +57,15 @@ class FakeSession:
     
     def add_all(self, objects):
         self.added.extend(objects)
+        
+    def execute(self, statement):
+        return FakeResult()
+    
+    def scalar(self, statement):
+        return 0
+    
+    def flush(self):
+        return
         
 class FakeStorage:
     def __init__(self, store: Dict[str, bytes]):
@@ -55,11 +106,11 @@ class FakeDocumentParser:
         
         self.pages = [f"page_{i}" for i in range(FakeDocumentParser.page_count)]
     
-    def process_sync(self):
+    def process_sync(self, page_to_process = None):
         if FakeDocumentParser.inference_error is not None:
             raise FakeDocumentParser.inference_error
     
-    def to_model_objects(self, document, merge_consecutive_tables=False):
+    def to_model_objects(self, document, target_pages = None, merge_consecutive_tables=False):
         output = []
         for number in range(1, len(self.pages) + 1):
             failed = number in FakeDocumentParser.failed

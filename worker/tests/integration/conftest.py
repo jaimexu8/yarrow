@@ -165,20 +165,20 @@ class TestInitializer:
     def _delete_rows(document_ids: List[UUID]) -> None:
         """Delete the documents and everything related to them from the database."""
 
-        pages = select(Page.id).where(Page.document_id.in_(document_ids))
-        regions = select(Region.id).where(Region.page_id.in_(pages))
-        tables = select(Table.id).where(Table.document_id.in_(document_ids))
-        region_tables = select(RegionTable.id).where(RegionTable.region_id.in_(regions) | RegionTable.table_id.in_(tables))
+        page_ids = select(Page.id).where(Page.document_id.in_(document_ids))
+        region_ids = select(Region.id).where(Region.page_id.in_(page_ids))
+        table_ids = select(Table.id).where(Table.document_id.in_(document_ids))
+        region_table_ids = select(RegionTable.id).where(RegionTable.region_id.in_(region_ids) | RegionTable.table_id.in_(table_ids))
 
         statements = [
-            delete(TableCell).where(TableCell.region_table_id.in_(region_tables)),
-            delete(RegionTable).where(RegionTable.id.in_(region_tables)),
-            delete(RegionText).where(RegionText.region_id.in_(regions)),
-            delete(RegionImage).where(RegionImage.region_id.in_(regions)),
-            delete(Warning).where(Warning.page_id.in_(pages)),
-            delete(Region).where(Region.id.in_(regions)),
-            delete(Page).where(Page.id.in_(pages)),
-            delete(Table).where(Table.id.in_(tables)),
+            delete(TableCell).where(TableCell.region_table_id.in_(region_table_ids)),
+            delete(RegionTable).where(RegionTable.id.in_(region_table_ids)),
+            delete(RegionText).where(RegionText.region_id.in_(region_ids)),
+            delete(RegionImage).where(RegionImage.region_id.in_(region_ids)),
+            delete(Warning).where(Warning.page_id.in_(page_ids)),
+            delete(Region).where(Region.id.in_(region_ids)),
+            delete(Page).where(Page.id.in_(page_ids)),
+            delete(Table).where(Table.id.in_(table_ids)),
             delete(Job).where(Job.document_id.in_(document_ids)),
             delete(DocumentShare).where(DocumentShare.document_id.in_(document_ids)),
             delete(Document).where(Document.id.in_(document_ids)),
