@@ -1,0 +1,9 @@
+{
+  "file": "unsupported.txt",
+  "bytes": 63,
+  "sha256": "350a5bc9a028d3dda9462a2798e3a79fd9f9bc0e08585976ea3c242c3fd6cfa5",
+  "detected_extension": null,
+  "kind": "unsupported",
+  "expected_pages": 0,
+  "expected_error_message": "No loader found for file extension: None"
+}

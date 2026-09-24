@@ -18,4 +18,3 @@ class Warning(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     page = relationship("Page")
-

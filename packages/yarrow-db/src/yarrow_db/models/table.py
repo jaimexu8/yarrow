@@ -19,6 +19,7 @@ class Table(Base):
 
     document = relationship("Document")
 
+
 class RegionTable(Base):
     __tablename__ = "region_tables"
 
@@ -34,11 +35,14 @@ class RegionTable(Base):
     region = relationship("Region")
     table = relationship("Table")
 
+
 class TableCell(Base):
     __tablename__ = "table_cells"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    region_table_id = Column(UUID(as_uuid=True), ForeignKey("region_tables.id"), nullable=False)
+    region_table_id = Column(
+        UUID(as_uuid=True), ForeignKey("region_tables.id"), nullable=False
+    )
     row_idx = Column(Integer)
     col_idx = Column(Integer)
     row_span = Column(Integer, default=1)
@@ -51,4 +55,3 @@ class TableCell(Base):
     is_header = Column(Boolean, default=False)
 
     region_table = relationship("RegionTable")
-

@@ -1,0 +1,1 @@
+Sentinel: unsupported.txt -- no loader should claim this file.

@@ -4,8 +4,8 @@ import base64
 import io
 import logging
 import os
-from html.parser import HTMLParser
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from html.parser import HTMLParser
 
 import requests
 from fastapi import FastAPI, HTTPException
@@ -15,13 +15,25 @@ from pydantic import BaseModel, ConfigDict
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hybrid_gateway")
 
-STRUCTURE_GATEWAY_URL = os.environ.get("STRUCTURE_GATEWAY_URL", "http://paddlex-pipeline:8080/layout-parsing")
-VL_GATEWAY_URL = os.environ.get("VL_GATEWAY_URL", "http://paddleocr-vl-api:8080/layout-parsing")
+STRUCTURE_GATEWAY_URL = os.environ.get(
+    "STRUCTURE_GATEWAY_URL", "http://paddlex-pipeline:8080/layout-parsing"
+)
+VL_GATEWAY_URL = os.environ.get(
+    "VL_GATEWAY_URL", "http://paddleocr-vl-api:8080/layout-parsing"
+)
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "300"))
 VLM_MAX_WORKERS = int(os.environ.get("VLM_MAX_WORKERS", "16"))
 
 # Layout labels worth re-recognizing with the VLM.
-RECOGNIZABLE_LABELS = {"text", "table", "formula", "paragraph_title", "doc_title", "abstract", "content"}
+RECOGNIZABLE_LABELS = {
+    "text",
+    "table",
+    "formula",
+    "paragraph_title",
+    "doc_title",
+    "abstract",
+    "content",
+}
 
 # Picture-like blocks, which are never sent to PaddleOCR-VL
 IMAGE_LABELS = {"image", "chart", "seal", "figure", "header_image", "footer_image"}
@@ -50,7 +62,7 @@ class LayoutParsingRequest(BaseModel):
 
 
 def _crop_to_b64_png(image: Image.Image, bbox) -> str:
-    x0, y0, x1, y1 = [int(round(v)) for v in bbox]
+    x0, y0, x1, y1 = [round(v) for v in bbox]
     x0, y0 = max(x0, 0), max(y0, 0)
     x1, y1 = min(x1, image.width), min(y1, image.height)
     crop = image.crop((x0, y0, x1, y1))
@@ -117,7 +129,7 @@ def _table_html_to_markdown(html: str) -> str | None:
     try:
         parser.feed(html)
         parser.close()
-    except Exception:
+    except (ValueError, IndexError, AttributeError, TypeError):
         logger.warning("could not parse VLM table HTML; leaving it as-is")
         return None
     rows = [r for r in parser.rows if any(c for c in r)]
@@ -129,12 +141,17 @@ def _table_html_to_markdown(html: str) -> str | None:
     def _row(cells):
         return "| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |"
 
-    return "\n".join([_row(rows[0]), "| " + " | ".join(["---"] * width) + " |",
-                       *(_row(r) for r in rows[1:])])
+    return "\n".join(
+        [
+            _row(rows[0]),
+            "| " + " | ".join(["---"] * width) + " |",
+            *(_row(r) for r in rows[1:]),
+        ]
+    )
 
 
 def _clamp_bbox(image: Image.Image, bbox):
-    x0, y0, x1, y1 = [int(round(v)) for v in bbox]
+    x0, y0, x1, y1 = [round(v) for v in bbox]
     return max(x0, 0), max(y0, 0), min(x1, image.width), min(y1, image.height)
 
 
@@ -154,7 +171,7 @@ def _extract_figure(image: Image.Image, bbox) -> tuple[str, str] | None:
 
 def _is_degenerate_crop(image: Image.Image, bbox) -> bool:
     """True if bbox is too small or the crop is near-blank (flat pixel stddev)."""
-    x0, y0, x1, y1 = [int(round(v)) for v in bbox]
+    x0, y0, x1, y1 = [round(v) for v in bbox]
     width, height = x1 - x0, y1 - y0
     if width < MIN_CROP_WIDTH or height < MIN_CROP_HEIGHT:
         return True
@@ -164,7 +181,9 @@ def _is_degenerate_crop(image: Image.Image, bbox) -> bool:
     return stat.stddev[0] < MIN_CROP_STDDEV
 
 
-def _recognize_with_vlm(crop_b64: str, prompt_label: str = DEFAULT_PROMPT_LABEL) -> str | None:
+def _recognize_with_vlm(
+    crop_b64: str, prompt_label: str = DEFAULT_PROMPT_LABEL
+) -> str | None:
     """Sends one cropped element to PaddleOCR-VL and returns its recognized text."""
     payload = {
         "file": crop_b64,
@@ -182,7 +201,9 @@ def _recognize_with_vlm(crop_b64: str, prompt_label: str = DEFAULT_PROMPT_LABEL)
             return None
         return blocks[0].get("block_content")
     except Exception:
-        logger.exception("VLM recognition failed for a crop; keeping PP-StructureV3 text")
+        logger.exception(
+            "VLM recognition failed for a crop; keeping PP-StructureV3 text"
+        )
         return None
 
 
@@ -218,7 +239,9 @@ def layout_parsing(req: LayoutParsingRequest):
         "useDocOrientationClassify": False,
         "useDocUnwarping": False,
     }
-    resp = requests.post(STRUCTURE_GATEWAY_URL, json=structure_payload, timeout=REQUEST_TIMEOUT)
+    resp = requests.post(
+        STRUCTURE_GATEWAY_URL, json=structure_payload, timeout=REQUEST_TIMEOUT
+    )
     resp.raise_for_status()
     body = resp.json()
 
@@ -236,7 +259,9 @@ def layout_parsing(req: LayoutParsingRequest):
 
     def _job(block):
         crop_b64 = _crop_to_b64_png(image, block["block_bbox"])
-        prompt_label = PROMPT_LABEL_BY_BLOCK.get(block.get("block_label"), DEFAULT_PROMPT_LABEL)
+        prompt_label = PROMPT_LABEL_BY_BLOCK.get(
+            block.get("block_label"), DEFAULT_PROMPT_LABEL
+        )
         return block, _recognize_with_vlm(crop_b64, prompt_label)
 
     with ThreadPoolExecutor(max_workers=VLM_MAX_WORKERS) as pool:

@@ -13,7 +13,7 @@ class Region(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     page_id = Column(UUID(as_uuid=True), ForeignKey("pages.id"), nullable=False)
     reading_order = Column(Integer)
-    region_type = Column(String) # header, paragraph, figure, table, footer
+    region_type = Column(String)  # the OCR's block_label as-is, e.g. text, table, image
     x0 = Column(Float)
     y0 = Column(Float)
     x1 = Column(Float)
@@ -21,6 +21,7 @@ class Region(Base):
     confidence = Column(Float)
 
     page = relationship("Page")
+
 
 class RegionText(Base):
     __tablename__ = "region_texts"
@@ -32,6 +33,7 @@ class RegionText(Base):
 
     region = relationship("Region")
 
+
 class RegionImage(Base):
     __tablename__ = "region_images"
 
@@ -41,4 +43,3 @@ class RegionImage(Base):
     caption = Column(String)
 
     region = relationship("Region")
-

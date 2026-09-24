@@ -29,9 +29,7 @@ def get_engine() -> Engine:
 
 @lru_cache(maxsize=1)
 def get_async_session_maker() -> sessionmaker:
-    return sessionmaker(
-        get_async_engine(), class_=AsyncSession, expire_on_commit=False
-    )
+    return sessionmaker(get_async_engine(), class_=AsyncSession, expire_on_commit=False)
 
 
 @lru_cache(maxsize=1)

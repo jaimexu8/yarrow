@@ -21,4 +21,3 @@ class User(Base):
     storage_used_bytes = Column(BigInteger, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-

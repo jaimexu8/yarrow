@@ -20,6 +20,7 @@ from app.core.security import get_password_hash
 from yarrow_db.models import User
 from yarrow_db.session import get_async_session_maker
 
+
 async def seed():
     async_session = get_async_session_maker()
 
@@ -30,7 +31,7 @@ async def seed():
             hashed_password=get_password_hash("admin123"),
             is_admin=True,
             is_active=True,
-            is_verified=True
+            is_verified=True,
         )
         session.add(admin)
 
@@ -40,7 +41,7 @@ async def seed():
             hashed_password=get_password_hash("user123"),
             is_admin=False,
             is_active=True,
-            is_verified=True
+            is_verified=True,
         )
         session.add(user)
 

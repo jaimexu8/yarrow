@@ -1,0 +1,93 @@
+{
+  "file": "three_page.pdf",
+  "bytes": 2753,
+  "sha256": "28da3cb678b6058a4bc6d7cf93b077f2ba5753f9f385490ad3e187a2522a73d2",
+  "detected_extension": "pdf",
+  "kind": "processable",
+  "expected_pages": 3,
+  "model_graph": {
+    "pages": [
+      {
+        "page_number": 1,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "doc_title",
+            "block_label": "doc_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 1,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          }
+        ]
+      },
+      {
+        "page_number": 2,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "doc_title",
+            "block_label": "doc_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 1,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          }
+        ]
+      },
+      {
+        "page_number": 3,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "doc_title",
+            "block_label": "doc_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 1,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          }
+        ]
+      }
+    ],
+    "unmerged": {
+      "counts": {
+        "documents": 1,
+        "pages": 3,
+        "regions": 6,
+        "region_texts": 6,
+        "tables": 0,
+        "region_tables": 0,
+        "table_cells": 0
+      },
+      "tables": []
+    },
+    "merged": {
+      "counts": {
+        "documents": 1,
+        "pages": 3,
+        "regions": 6,
+        "region_texts": 6,
+        "tables": 0,
+        "region_tables": 0,
+        "table_cells": 0
+      },
+      "tables": []
+    }
+  }
+}

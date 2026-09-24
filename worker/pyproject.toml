@@ -12,12 +12,53 @@ authors = ["Team 13"]
 python = "^3.11"
 celery = {extras = ["redis"], version = "*"}
 redis = "*"
-pypdf = "*"
-pdfplumber = "*"
-sqlalchemy = {extras = ["asyncio"], version = ">=2.0"}
-asyncpg = "*"
-psycopg2-binary = "*"
+requests = "*"
+
+# app/pipeline/document_parser.py -- sniffs the uploaded file's type from its
+# magic bytes rather than trusting the filename extension.
+filetype = "*"
+
+# app/pipeline/file_loaders/gif_loader.py -- splits animated GIFs into frames.
+pillow = "*"
+
+# app/pipeline/file_loaders/pdf_loader.py -- imported as `fitz`. Rasterizes PDF
+# pages to PNG at 150 DPI, which pypdf cannot do at all and pdfplumber only does
+# by shelling out to poppler.
+#
+# NOTE: PyMuPDF is AGPL-3.0. That is fine for internal use, but it does attach
+# conditions to distributing or hosting this service. If that becomes a problem,
+# the swap is pdf2image + poppler (both permissive) in pdf_loader.py only --
+# nothing else in the worker touches fitz.
+pymupdf = "*"
+
+# app/core/config.py imports this directly. It also arrives transitively via
+# yarrow-db, but a transitive dependency is not a contract -- yarrow-db is free
+# to drop it.
+pydantic-settings = "*"
+
+yarrow-db = {path = "../packages/yarrow-db", develop = true}
+
+# app/tasks/ingestion.py -- fetches the uploaded file from MinIO/S3 by its
+# storage_key. Shared with the backend so that the two agree on bucket,
+# key layout, and endpoint configuration.
+yarrow-storage = {path = "../packages/yarrow-storage", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
+
+[tool.pytest.ini_options]
+# Tests import the service as `app.*` and the fakes as `tests.conftest`, both
+# resolved from the worker directory rather than from an installed package.
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "integration: needs postgres, object storage and the inference gateway",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = ["B008", "BLE001"]
 
