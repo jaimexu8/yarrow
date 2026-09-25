@@ -139,6 +139,7 @@ def page_graph(page_number, pruned_page):
 
     for part in parts:
         part["table_count_on_page"] = len(parts)
+        part["page_total_reading_order"] = len(blocks) - 1
 
     return {"page_number": page_number, "regions": regions}, parts
 
@@ -151,8 +152,8 @@ def continues(part, previous):
     """
     return (
         part["page_number"] == previous["page_number"] + 1
-        and previous["position_on_page"] == previous["table_count_on_page"] - 1
-        and part["position_on_page"] == 0
+        and previous["region_reading_order"] == previous["page_total_reading_order"]
+        and part["region_reading_order"] == 0
         and part["col_count"] > 0
         and part["col_count"] == previous["col_count"]
     )

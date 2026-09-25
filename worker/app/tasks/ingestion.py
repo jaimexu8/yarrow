@@ -1,9 +1,8 @@
 import logging
-from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import delete, select, func
-from yarrow_db.models import Page, Region, Table, RegionTable, Document, Job, Warning
+from sqlalchemy import delete, func, select
+from yarrow_db.models import Document, Job, Page, Region, RegionTable, Table, Warning
 from yarrow_db.models.region import RegionImage, RegionText
 from yarrow_db.models.table import TableCell
 from yarrow_db.session import session_scope
@@ -14,6 +13,8 @@ from app.celery_app import celery_app
 
 # from app.pipeline.document_parser import DocumentParser
 from app.pipeline.document_parser import DocumentParser
+
+# from app.pipeline.document_parser import DocumentParser
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class AllPagesFailedError(Exception):
     """
 
 
-def _describe_failed_pages(failed: List[int], total: int) -> str:
+def _describe_failed_pages(failed: list[int], total: int) -> str:
     shown = ", ".join(str(number) for number in failed[:MAX_REPORTED_FAILED_PAGES])
     if len(failed) > MAX_REPORTED_FAILED_PAGES:
         shown += f", ... (+{len(failed) - MAX_REPORTED_FAILED_PAGES} more)"
@@ -53,14 +54,14 @@ def _mark_failed(job_id: str, message: str) -> None:
 
 
 @celery_app.task(bind=True)
-def process_document_task(self, job_id: str, page_to_process: Optional[Tuple] = None, merge_consecutive_tables: bool = False):
+def process_document_task(self, job_id: str, page_to_process: tuple | None = None, merge_consecutive_tables: bool = False):
     """
     Processes a document for the given job ID.
 
     Args:
         self: The Celery task instance.
         job_id: The ID of the job to process.
-        page_to_process: Optional tuple specifying which pages to process. Defaults to processing every page.
+        page_to_process: Optional tuple specifying which pages to process. This expects a tuple of 1-based page numbers. Defaults to processing every page.
         merge_consecutive_tables: Whether to merge consecutive tables across pages.
     """
 
@@ -155,6 +156,7 @@ def process_document_task(self, job_id: str, page_to_process: Optional[Tuple] = 
 
             all_objects = parser.to_model_objects(document, target_pages=page_to_process, merge_consecutive_tables=merge_consecutive_tables)
             session.add_all(all_objects)
+            session.flush()
 
             if merge_consecutive_tables:
                 for obj in all_objects:

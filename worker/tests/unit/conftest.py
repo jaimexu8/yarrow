@@ -1,9 +1,11 @@
 from contextlib import contextmanager
-from typing import Dict, List
 from uuid import uuid4
-from app.tasks import ingestion
-from yarrow_db.models import Page, Document, Job
+
 import pytest
+from yarrow_db.models import Document, Job, Page
+
+from app.tasks import ingestion
+
 
 class FakeResult:
     def __init__(self, rows=None):
@@ -14,14 +16,14 @@ class FakeResult:
 
     def scalar_one(self):
         if len(self.rows) != 1:
-            raise Exception(
+            raise ValueError(
                 f"Expected exactly one result, got {len(self.rows)}"
             )
         return self.rows[0]
 
     def scalar_one_or_none(self):
         if len(self.rows) > 1:
-            raise Exception(
+            raise ValueError(
                 f"Expected at most one result, got {len(self.rows)}"
             )
         return self.rows[0] if self.rows else None
@@ -41,7 +43,7 @@ class FakeScalarResult:
 
     def one(self):
         if len(self.rows) != 1:
-            raise Exception(
+            raise ValueError(
                 f"Expected exactly one result, got {len(self.rows)}"
             )
         return self.rows[0]
@@ -68,7 +70,7 @@ class FakeSession:
         return
         
 class FakeStorage:
-    def __init__(self, store: Dict[str, bytes]):
+    def __init__(self, store: dict[str, bytes]):
         self.store = store
     
     def download_bytes(self, storage_key) -> bytes:
@@ -83,7 +85,7 @@ class FakeDocumentParser:
     inference_error = None
     
     def __init__(self) -> None:
-        self.pages: List[str] = []
+        self.pages: list[str] = []
         self.page_count = 0
         self.failed = ()
         self.load_error = None
@@ -97,7 +99,7 @@ class FakeDocumentParser:
         cls.inference_error = inference_error
         
     @property
-    def failed_page_numbers(self) -> List[int]:
+    def failed_page_numbers(self) -> list[int]:
         return sorted(FakeDocumentParser.failed)
     
     def load_file(self, file_data):

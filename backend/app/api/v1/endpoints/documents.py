@@ -100,21 +100,25 @@ async def upload_documents(
             rejected.append(UploadRejected(filename=filename, reason="File is empty"))
             continue
         if extension not in ALLOWED_EXTENSIONS:
-            rejected.append(UploadRejected(
-                filename=filename,
-                reason=f"Unsupported file type ({extension or 'unrecognized'})",
-            ))
+            rejected.append(
+                UploadRejected(
+                    filename=filename,
+                    reason=f"Unsupported file type ({extension or 'unrecognized'})",
+                )
+            )
             continue
         if size > settings.MAX_UPLOAD_BYTES:
-            rejected.append(UploadRejected(
-                filename=filename,
-                reason=f"File exceeds the {settings.MAX_UPLOAD_BYTES} byte limit",
-            ))
+            rejected.append(
+                UploadRejected(
+                    filename=filename,
+                    reason=f"File exceeds the {settings.MAX_UPLOAD_BYTES} byte limit",
+                )
+            )
             continue
         if used_bytes + size > settings.STORAGE_QUOTA_BYTES:
-            rejected.append(UploadRejected(
-                filename=filename, reason="Storage quota exceeded"
-            ))
+            rejected.append(
+                UploadRejected(filename=filename, reason="Storage quota exceeded")
+            )
             continue
 
         document_id = uuid4()
@@ -125,9 +129,9 @@ async def upload_documents(
             storage.upload_file(upload.file, key)
         except Exception as exc:
             logger.exception(f"Storing {filename} failed")
-            rejected.append(UploadRejected(
-                filename=filename, reason=f"Could not be stored: {exc}"
-            ))
+            rejected.append(
+                UploadRejected(filename=filename, reason=f"Could not be stored: {exc}")
+            )
             continue
 
         document = Document(
@@ -149,13 +153,15 @@ async def upload_documents(
         )
         db.add_all([document, job])
         used_bytes += size
-        accepted.append(UploadAccepted(
-            document_id=document_id,
-            job_id=job.id,
-            task_id="",  # filled in after the commit below
-            filename=filename,
-            file_size_bytes=size,
-        ))
+        accepted.append(
+            UploadAccepted(
+                document_id=document_id,
+                job_id=job.id,
+                task_id="",  # filled in after the commit below
+                filename=filename,
+                file_size_bytes=size,
+            )
+        )
 
     if accepted:
         current_user.storage_used_bytes = used_bytes

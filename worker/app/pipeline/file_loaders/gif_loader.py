@@ -1,14 +1,14 @@
-from app.pipeline.file_loaders.file_loader import FileLoader
-from typing import List
 import base64
 import io
 
 from PIL import Image
 
+from app.pipeline.file_loaders.file_loader import FileLoader
+
 
 class GIFLoader(FileLoader):
-    def process_file(self, file_data: bytes) -> List[str]:
-        output: List[str] = []
+    def process_file(self, file_data: bytes) -> list[str]:
+        output: list[str] = []
 
         gif = Image.open(io.BytesIO(file_data))
 
@@ -28,9 +28,7 @@ class GIFLoader(FileLoader):
             frame.save(image_buffer, format="PNG")
 
             # Encode PNG as base64
-            image_data = base64.b64encode(
-                image_buffer.getvalue()
-            ).decode("utf-8")
+            image_data = base64.b64encode(image_buffer.getvalue()).decode("utf-8")
 
             output.append(image_data)
 

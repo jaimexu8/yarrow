@@ -2,7 +2,9 @@
 """
 
 import pytest
+
 from app.tasks.ingestion import AllPagesFailedError, process_document_task
+
 
 # Test parsing successes given supported files
 class TestSuccess:

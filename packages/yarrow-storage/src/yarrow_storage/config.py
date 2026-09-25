@@ -9,7 +9,7 @@ class StorageSettings(BaseSettings):
     so it picks up the task or instance role.
     """
 
-    S3_ENDPOINT: str | None = "http://minio:9000" # None on real AWS
+    S3_ENDPOINT: str | None = "http://minio:9000"  # None on real AWS
     S3_ACCESS_KEY: str | None = None
     S3_SECRET_KEY: str | None = None
     S3_REGION: str = "us-east-1"

@@ -1,10 +1,10 @@
-from yarrow_db.models import Document, Table, RegionTable
-from sqlalchemy.orm import Session
-from sqlalchemy import func
 import uuid
 
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from yarrow_db.models import RegionTable, Table
 from yarrow_db.models.region import Region
-from yarrow_db.models.table import TableCell
 
 
 def is_consecutive(session: Session, region_table_prev: RegionTable, region_table_next: RegionTable) -> bool:
@@ -110,12 +110,44 @@ def merge_consecutive_tables(session: Session, document_id: uuid.UUID) -> None:
         if is_consecutive(session, end_region_table, next_start_region_table):
             merge_two_tables(session, table, next_table)
 
-def split_consecutive_tables(session: Session) -> None:
+def split_consecutive_tables(session: Session, document_id: uuid.UUID) -> None:
     """
     Splits all consecutive tables into individual tables.
     """
     # TODO
-    pass
+    
+    # Get all the stitched tables associated with the document
+    tables = session.query(Table).filter(Table.document_id == document_id, Table.is_stitched == True).all()
+    # Get all the region tables associated with the stitched tables
+    region_tables = session.query(RegionTable).filter(RegionTable.table_id.in_([t.id for t in tables])).all()
+    
+    # For each region table, create its own table object
+    new_tables: list[Table] = []
+    for rt in region_tables:
+        new_table = Table(
+            id=uuid.uuid4(),
+            document_id=document_id,
+            is_stitched=False,
+            row_count=(rt.row_end - rt.row_start),
+            col_count=(rt.col_end - rt.col_start),
+            title=rt.table.title if rt.table else None
+        )
+        new_tables.append(new_table)
+        rt.table_id = new_table.id
+
+        # Reset the row range to be 0-based within the new standalone table.
+        # TableCell.row_idx is already local to its own region table (the
+        # global row is row_start + row_idx), so cells need no adjustment.
+        row_offset = rt.row_start
+        rt.row_end -= row_offset
+        rt.row_start = 0
+
+    session.add_all(new_tables)
+
+    # Remove the stitched tables
+    for table in tables:
+        session.delete(table)
+    session.flush()
 
 def merge_two_tables(session: Session, table_prev: Table, table_next: Table) -> None:
     """
@@ -128,19 +160,27 @@ def merge_two_tables(session: Session, table_prev: Table, table_next: Table) -> 
     if table_prev.id == table_next.id:
         return
 
-    table_next_region_tables = session.query(RegionTable).filter(RegionTable.table_id == table_next.id).all()
+    table_next_region_tables = (
+        session.query(RegionTable)
+        .filter(RegionTable.table_id == table_next.id)
+        .order_by(RegionTable.reading_order)
+        .all()
+    )
 
     row_offset = table_prev.row_count
+    next_reading_order = session.query(func.count(RegionTable.id)).filter(RegionTable.table_id == table_prev.id).scalar()
 
     for rt in table_next_region_tables:
-        # Transfer the region tables of the next table to the previous table
-        rt.table_id = table_prev.id
+        # Transfer the region tables of the next table to the previous table,
+        # continuing the reading order and row range after table_prev's own parts.
+        rt.table = table_prev
+        rt.reading_order = next_reading_order
+        rt.row_start += row_offset
+        rt.row_end += row_offset
         table_prev.is_stitched = True
-
-        # Update the table cells of the transferred region table to reflect the row offset
-        table_cells = session.query(TableCell).filter(TableCell.region_table_id == rt.id).all()
-        for cell in table_cells:
-            cell.row_idx += row_offset
+        next_reading_order += 1
+        # TableCell.row_idx stays local to its own region table; the global row
+        # is row_start + row_idx, so no offset is applied to the cells here.
 
     table_prev.row_count = row_offset + table_next.row_count
 

@@ -86,9 +86,7 @@ class S3StorageProvider(StorageProvider):
             obj = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
         except ClientError as exc:
             if exc.response.get("Error", {}).get("Code") in _MISSING_OBJECT_CODES:
-                raise ObjectNotFoundError(
-                    f"s3://{self.bucket_name}/{key}"
-                ) from exc
+                raise ObjectNotFoundError(f"s3://{self.bucket_name}/{key}") from exc
             raise
         return obj["Body"].read()
 

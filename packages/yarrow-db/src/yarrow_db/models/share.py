@@ -13,10 +13,11 @@ class DocumentShare(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
-    shared_with_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    permission = Column(String) # view, review
+    shared_with_user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    permission = Column(String)  # view, review
     created_at = Column(DateTime, default=datetime.utcnow)
 
     document = relationship("Document")
     shared_with_user = relationship("User")
-

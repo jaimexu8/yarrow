@@ -19,4 +19,3 @@ class Page(Base):
     error_message = Column(String)
 
     document = relationship("Document")
-

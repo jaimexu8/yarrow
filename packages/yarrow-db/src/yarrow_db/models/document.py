@@ -18,10 +18,11 @@ class Document(Base):
     file_type = Column(String, nullable=False)
     storage_key = Column(String, nullable=False)
     page_count = Column(Integer)
-    status = Column(String, default="queued") # queued, processing, completed, failed, canceled
+    status = Column(
+        String, default="queued"
+    )  # queued, processing, completed, failed, canceled
     error_message = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     owner = relationship("User")
-

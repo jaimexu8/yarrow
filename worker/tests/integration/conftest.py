@@ -2,12 +2,12 @@ import logging
 import os
 from dataclasses import dataclass
 from io import BytesIO
-from typing import List, Optional
+from typing import ClassVar
 from uuid import UUID, uuid4
 
 import filetype
 import pytest
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 from yarrow_db.models import (
     Document,
     DocumentShare,
@@ -24,6 +24,9 @@ from yarrow_db.models import (
 )
 from yarrow_db.session import session_scope
 from yarrow_storage import get_storage
+
+from app.pipeline.document_parser import DocumentParser
+from app.tasks import ingestion
 
 logger = logging.getLogger(__name__)
 
@@ -47,25 +50,25 @@ class TestInitializer:
     __test__ = False
 
     def __init__(self):
-        self.records: List[SeededDocument] = []
-        self.owner_id: Optional[UUID] = None
+        self.records: list[SeededDocument] = []
+        self.owner_id: UUID | None = None
         self._storage = get_storage()
 
     @property
-    def document_ids(self) -> List[UUID]:
+    def document_ids(self) -> list[UUID]:
         return [record.document_id for record in self.records]
 
     @property
-    def job_ids(self) -> List[UUID]:
+    def job_ids(self) -> list[UUID]:
         return [record.job_id for record in self.records]
 
-    def configure(self, filenames: List[str], filepaths: List[str]) -> List[SeededDocument]:
+    def configure(self, filenames: list[str], filepaths: list[str]) -> list[SeededDocument]:
         """Upload each file and insert its document and job rows"""
 
         if len(filenames) != len(filepaths):
             raise ValueError(f"filenames and filepaths must be the same length, " f"got {len(filenames)} and {len(filepaths)}")
 
-        owner: Optional[User] = None
+        owner: User | None = None
         if self.owner_id is None:
             # Creates the user who holds the test document records
             owner = User(
@@ -79,8 +82,8 @@ class TestInitializer:
             )
             self.owner_id = owner.id
 
-        new_records: List[SeededDocument] = []
-        rows: List[object] = []
+        new_records: list[SeededDocument] = []
+        rows: list[object] = []
 
         for filename, filepath in zip(filenames, filepaths):
             with open(filepath, "rb") as handle:
@@ -162,7 +165,7 @@ class TestInitializer:
         self.owner_id = None
 
     @staticmethod
-    def _delete_rows(document_ids: List[UUID]) -> None:
+    def _delete_rows(document_ids: list[UUID]) -> None:
         """Delete the documents and everything related to them from the database."""
 
         page_ids = select(Page.id).where(Page.document_id.in_(document_ids))
@@ -189,9 +192,33 @@ class TestInitializer:
             for statement in statements:
                 session.execute(statement.execution_options(synchronize_session=False))
 
+class FakeDocumentParser(DocumentParser):
+    failed: ClassVar[set[int]] = set()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failed = set(FakeDocumentParser.failed)
+
+    @classmethod
+    def configure(cls, failed=()):
+        cls.failed = set(failed)
+
+    def _process_page_isolated(self, page_index: int, page_data: str):
+        if page_index in self.failed:
+            self.page_errors[page_index] = "Exception: Simulated failure"
+            return {}
+
+        return super()._process_page_isolated(page_index, page_data)
+        
 
 @pytest.fixture
 def test_initializer():
     initializer = TestInitializer()
     yield initializer
     initializer.teardown()
+
+@pytest.fixture
+def parser(monkeypatch):
+    parser = FakeDocumentParser()
+    monkeypatch.setattr(ingestion, "DocumentParser", FakeDocumentParser)
+    return parser

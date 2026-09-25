@@ -1,8 +1,9 @@
 import asyncio
-from html.parser import HTMLParser
 import logging
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 import uuid
+from collections.abc import Iterator
+from html.parser import HTMLParser
+from typing import Any, ClassVar
 
 import filetype
 import requests
@@ -27,10 +28,10 @@ from app.pipeline.file_loaders.png_loader import PNGLoader
 
 logger = logging.getLogger(__name__)
 
-JsonDict = Dict[str, Any]
-Box = Tuple[float, float, float, float]
-BlockWithTable = Tuple[JsonDict, Optional[JsonDict]]
-CellBBoxPair = Tuple[JsonDict, Optional[Box]]
+JsonDict = dict[str, Any]
+Box = tuple[float, float, float, float]
+BlockWithTable = tuple[JsonDict, JsonDict | None]
+CellBBoxPair = tuple[JsonDict, Box | None]
 
 LAYOUT_SCORE_IOU_THRESHOLD = 0.5
 
@@ -56,7 +57,7 @@ def iou(a: Box, b: Box) -> float:
     return inter / union if union > 0 else 0.0
 
 
-def _uniform_edges(lo: float, hi: float, count: int) -> List[float]:
+def _uniform_edges(lo: float, hi: float, count: int) -> list[float]:
     """Generates the boundary coordinates for an evenly divided interval."""
     if count <= 0:
         return [lo, hi]
@@ -65,7 +66,7 @@ def _uniform_edges(lo: float, hi: float, count: int) -> List[float]:
     return [lo + index * step for index in range(count + 1)]
 
 
-def _positive_int(value: Optional[str]) -> int:
+def _positive_int(value: str | None) -> int:
     """Cap the value at a minimum of 1"""
     try:
         return max(1, int(str(value)))
@@ -78,17 +79,17 @@ class _TableHtmlParser(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.cells: List[JsonDict] = []
-        self._occupied: Set[Tuple[int, int]] = set()
+        self.cells: list[JsonDict] = []
+        self._occupied: set[tuple[int, int]] = set()
         self._row = -1
         self._col = 0
-        self._current_cell_data: Optional[JsonDict] = None
+        self._current_cell_data: JsonDict | None = None
         self._depth = 0
 
     def handle_starttag(
         self,
         tag: str,
-        attrs: List[Tuple[str, Optional[str]]],
+        attrs: list[tuple[str, str | None]],
     ) -> None:
         if tag == "tr":
             self._row += 1
@@ -102,7 +103,7 @@ class _TableHtmlParser(HTMLParser):
             return
 
         # Extract tag attributes for the cell
-        attr: Dict[str, Optional[str]] = dict(attrs)
+        attr: dict[str, str | None] = dict(attrs)
         row_span = _positive_int(attr.get("rowspan"))
         col_span = _positive_int(attr.get("colspan"))
 
@@ -154,7 +155,7 @@ class _TableHtmlParser(HTMLParser):
 
 
 class DocumentParser:
-    FILE_EXTENSION_TO_LOADER: Dict[str, FileLoader] = {
+    FILE_EXTENSION_TO_LOADER: ClassVar[dict[str, FileLoader]] = {
         "png": PNGLoader(),
         "jpg": JPGLoader(),
         "jpeg": JPEGLoader(),
@@ -163,16 +164,16 @@ class DocumentParser:
     }
 
     def __init__(self) -> None:
-        self.pages: List[str] = []
-        self.parsed_result: List[JsonDict] = []
-        self.page_errors: Dict[int, str] = {}
+        self.pages: list[str] = []
+        self.parsed_result: list[JsonDict] = []
+        self.page_errors: dict[int, str] = {}
 
     @property
-    def failed_page_numbers(self) -> List[int]:
+    def failed_page_numbers(self) -> list[int]:
         """1-based page numbers that produced no result."""
         return sorted(index + 1 for index in self.page_errors)
 
-    def detect_extension(self, file_data: bytes) -> Optional[str]:
+    def detect_extension(self, file_data: bytes) -> str | None:
         kind = filetype.guess(file_data)
         return None if kind is None else kind.extension
 
@@ -212,7 +213,7 @@ class DocumentParser:
         self.page_errors[page_index] = error_message
         return {}
 
-    async def process_async(self, page_to_process: Optional[Tuple] = None) -> None:
+    async def process_async(self, page_to_process: tuple | None = None) -> None:
         self.page_errors = {}
         
         # Creates processing tasks for each page that needs to be processed
@@ -231,14 +232,23 @@ class DocumentParser:
             for i, result in zip(page_to_process, results):
                 self.parsed_result[i - 1] = result
 
-    def process_sync(self, page_to_process: Optional[Tuple] = None) -> None:
+    def process_sync(self, page_to_process: tuple | None = None) -> None:
         asyncio.run(self.process_async(page_to_process))
 
-    def get_pruned_result(self) -> List[JsonDict]:
-        return [response.get("result", {}).get("layoutParsingResults", {})[0].get("prunedResult") for response in self.parsed_result]
+    def get_pruned_result(self) -> list[JsonDict]:
+        pruned_results = []
+        for response in self.parsed_result:
+            if not response:
+                # Page processing failed, no result to prune.
+                pruned_results.append({})
+                continue
+            pruned_results.append(
+                response.get("result", {}).get("layoutParsingResults", {})[0].get("prunedResult")
+            )
+        return pruned_results
 
-    def get_markdown(self) -> List[str]:
-        markdown: List[str] = []
+    def get_markdown(self) -> list[str]:
+        markdown: list[str] = []
         for response in self.parsed_result:
             markdown.extend((item.get("markdown") or {}).get("text", "") for item in self._result_items(response))
         return markdown
@@ -251,14 +261,14 @@ class DocumentParser:
         """
         return (
             part_curr["page_index"] == part_prev["page_index"] + 1
-            and part_prev["position"] == part_prev["page_table_count"] - 1
-            and part_curr["position"] == 0
+            and part_prev["region_reading_order"] == part_prev["page_total_reading_order"] - 1
+            and part_curr["region_reading_order"] == 0
             and part_curr["col_count"] > 0
             and part_curr["col_count"] == part_prev["col_count"]
         )
 
     def _group_region_tables(self, region_table_data, merge_consecutive_tables):
-        groups: List[List[JsonDict]] = []
+        groups: list[list[JsonDict]] = []
 
         for part in region_table_data:
             if merge_consecutive_tables and groups and self._consecutive_parts(groups[-1][-1], part):
@@ -270,9 +280,9 @@ class DocumentParser:
 
     def _get_cell_bbox_pair(
         self,
-        cells: List[JsonDict],
-        cell_boxes: List[Optional[Box]],
-        table_box: Optional[Box],
+        cells: list[JsonDict],
+        cell_boxes: list[Box | None],
+        table_box: Box | None,
         row_count: int,
         col_count: int,
     ) -> Iterator[CellBBoxPair]:
@@ -313,11 +323,11 @@ class DocumentParser:
     def _build_table(
         self,
         document: Document,
-        group: List[JsonDict],
-    ) -> Tuple[List[Table], List[RegionTable], List[TableCell]]:
-        tables: List[Table] = []
-        region_tables: List[RegionTable] = []
-        table_cells: List[TableCell] = []
+        group: list[JsonDict],
+    ) -> tuple[list[Table], list[RegionTable], list[TableCell]]:
+        tables: list[Table] = []
+        region_tables: list[RegionTable] = []
+        table_cells: list[TableCell] = []
         title = None
         
         for part in group:
@@ -358,7 +368,6 @@ class DocumentParser:
                 row_count=part["row_count"],
                 col_count=part["col_count"],
             ):
-                print(cell)
                 table_cell = TableCell(
                     id=uuid.uuid4(),
                     region_table_id=region_table.id,
@@ -379,13 +388,13 @@ class DocumentParser:
 
         return tables, region_tables, table_cells
 
-    def _pair_tables(self, page_data: JsonDict) -> List[BlockWithTable]:
+    def _pair_tables(self, page_data: JsonDict) -> list[BlockWithTable]:
         """Attach each region data entry to the table_res_list item it describes
 
         Returns a list of tuple that represents the matching. If the region data
         is not a table, then it pairs with None.
         """
-        blocks: List[JsonDict] = page_data.get("parsing_res_list") or []
+        blocks: list[JsonDict] = page_data.get("parsing_res_list") or []
         table_results = iter(page_data.get("table_res_list", []))
 
         return [
@@ -396,7 +405,7 @@ class DocumentParser:
             for block in blocks
         ]
 
-    def _get_bbox_score(self, layout_det_res: JsonDict, label: Optional[str], bbox: Optional[list[float]]) -> Optional[float]:
+    def _get_bbox_score(self, layout_det_res: JsonDict, label: str | None, bbox: list[float] | None) -> float | None:
         if not bbox:
             return None
 
@@ -425,7 +434,7 @@ class DocumentParser:
         best_iou, score = max(candidates, key=lambda pair: pair[0])
         return score if best_iou >= LAYOUT_SCORE_IOU_THRESHOLD else None
 
-    def _sort_region_data(self, pairs: List[BlockWithTable]) -> List[BlockWithTable]:
+    def _sort_region_data(self, pairs: list[BlockWithTable]) -> list[BlockWithTable]:
         """The page's region data in the order their regions are written in.
 
         block_order is the model's reading order but is usable only when every block
@@ -443,20 +452,17 @@ class DocumentParser:
         regions = []  # Any region except table regions
         region_tables_data = []  # Partially initialized regions tables
 
-        previous_title: Optional[str] = None
+        previous_title: str | None = None
 
-        region_data_to_table_results: List[Tuple[JsonDict, Optional[JsonDict]]] = self._pair_tables(page_data)
+        region_data_to_table_results: list[tuple[JsonDict, JsonDict | None]] = self._pair_tables(page_data)
         region_data_to_table_results = self._sort_region_data(region_data_to_table_results)
-        page_table_count = sum(int(region_data.get("block_label") in TABLE_LABELS) for region_data, _ in region_data_to_table_results)
 
         for reading_order, (region_data, table_result) in enumerate(region_data_to_table_results):
-            label: Optional[str] = region_data.get("block_label")
-            content: Optional[str] = region_data.get("block_content")
-            bbox: Optional[list[float]] = region_data.get("block_bbox")
+            label: str | None = region_data.get("block_label")
+            content: str | None = region_data.get("block_content")
+            bbox: list[float] | None = region_data.get("block_bbox")
 
-            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
-                bbox = None
-            elif any(component is None for component in bbox):
+            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4 or any(component is None for component in bbox):
                 bbox = None
             else:
                 bbox = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
@@ -479,7 +485,7 @@ class DocumentParser:
                 parser.feed(content)
                 parser.close()
 
-                cell_boxes: List[Optional[Box]] = [
+                cell_boxes: list[Box | None] = [
                     (
                         float(box[0]),
                         float(box[1]),
@@ -494,8 +500,8 @@ class DocumentParser:
                     {
                         "page_index": page_index,
                         "page_id": page_id,
-                        "position": len(region_tables_data),
-                        "page_table_count": page_table_count,
+                        "region_reading_order": reading_order,
+                        "page_total_reading_order": len(region_data_to_table_results) - 1,
                         "region": region,
                         "bbox": bbox,
                         "cells": parser.cells,
@@ -527,7 +533,7 @@ class DocumentParser:
 
         return regions, region_tables_data
 
-    def to_model_objects(self, document: Document, target_pages: Optional[Tuple] = None, merge_consecutive_tables: bool = False) -> List[Base]:
+    def to_model_objects(self, document: Document, target_pages: tuple | None = None, merge_consecutive_tables: bool = False) -> list[Base]:
         """
         Converts the parsed result into model objects.
 

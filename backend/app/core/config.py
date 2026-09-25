@@ -32,7 +32,9 @@ class Settings(DatabaseSettings):
     NEXT_PUBLIC_API_URL: str = "http://localhost:8000"
     NEXT_PUBLIC_APP_URL: str = "http://localhost:3000"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
 
 settings = Settings()
-

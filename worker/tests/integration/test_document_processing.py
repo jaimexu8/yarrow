@@ -1,7 +1,9 @@
 import json
 import os
+import random
 import re
 from collections import defaultdict
+from typing import ClassVar
 from uuid import UUID
 
 import pytest
@@ -18,26 +20,21 @@ from yarrow_db.models import (
 )
 from yarrow_db.session import session_scope
 
-from app.tasks.ingestion import process_document_task
+from app.tasks.ingestion import _describe_failed_pages, process_document_task
 
 pytestmark = pytest.mark.integration
 
 
+
 def assert_matches_ground_truth(document_id: UUID, model_graph_gt: dict, merged: bool = False):
     """Rebuild the persisted row graph in ground-truth shape and compare it"""
-    
+
     expected = model_graph_gt["merged" if merged else "unmerged"]
 
     # Get relevant db objects from the database for the given document_id
     with session_scope() as session:
-        documents = session.scalar(
-            select(func.count()).select_from(Document).where(Document.id == document_id)
-        )
-        pages = session.execute(
-            select(Page.id, Page.page_number)
-            .where(Page.document_id == document_id)
-            .order_by(Page.page_number)
-        ).all()
+        documents = session.scalar(select(func.count()).select_from(Document).where(Document.id == document_id))
+        pages = session.execute(select(Page.id, Page.page_number).where(Page.document_id == document_id).order_by(Page.page_number)).all()
         regions = session.execute(
             select(Region.id, Region.page_id, Region.reading_order, Region.region_type)
             .join(Page, Region.page_id == Page.id)
@@ -51,8 +48,7 @@ def assert_matches_ground_truth(document_id: UUID, model_graph_gt: dict, merged:
             .where(Page.document_id == document_id)
         ).all()
         tables = session.execute(
-            select(Table.id, Table.row_count, Table.col_count, Table.is_stitched, Table.title)
-            .where(Table.document_id == document_id)
+            select(Table.id, Table.row_count, Table.col_count, Table.is_stitched, Table.title).where(Table.document_id == document_id)
         ).all()
         table_regions = session.execute(
             select(
@@ -93,6 +89,7 @@ def assert_matches_ground_truth(document_id: UUID, model_graph_gt: dict, merged:
         "region_tables": len(table_regions),
         "table_cells": len(cells),
     }
+    
     assert actual_counts == expected["counts"], "row counts differ from ground truth"
 
     # Constructs the mapping from region to the page it belongs to
@@ -107,18 +104,14 @@ def assert_matches_ground_truth(document_id: UUID, model_graph_gt: dict, merged:
                 "has_text": region.id in set(text_region_ids),
             }
         )
-        
+
     # Constructs the page structures for comparison
-    actual_pages = [
-        {"page_number": page.page_number, "regions": regions_by_page[page.id]}
-        for page in pages
-    ]
+    actual_pages = [{"page_number": page.page_number, "regions": regions_by_page[page.id]} for page in pages]
     expected_pages = [
         {
             "page_number": page_gt["page_number"],
             "regions": [
-                {key: region_gt[key] for key in ("reading_order", "region_type", "is_table", "has_text")}
-                for region_gt in page_gt["regions"]
+                {key: region_gt[key] for key in ("reading_order", "region_type", "is_table", "has_text")} for region_gt in page_gt["regions"]
             ],
         }
         for page_gt in model_graph_gt["pages"]
@@ -128,9 +121,7 @@ def assert_matches_ground_truth(document_id: UUID, model_graph_gt: dict, merged:
     # Constructs the mapping from table cell to table region it belongs to
     cells_by_table_region = defaultdict(list)
     for cell in cells:
-        cells_by_table_region[cell.region_table_id].append(
-            [cell.row_idx, cell.col_idx, cell.row_span, cell.col_span, cell.is_header]
-        )
+        cells_by_table_region[cell.region_table_id].append([cell.row_idx, cell.col_idx, cell.row_span, cell.col_span, cell.is_header])
 
     # Constructs the mapping from table region to table it belongs to
     parts_by_table = defaultdict(list)
@@ -161,11 +152,7 @@ def assert_matches_ground_truth(document_id: UUID, model_graph_gt: dict, merged:
     # Tables have no order column; the ground truth lists them in the order of
     # the first region each one hangs off.
     actual_tables.sort(
-        key=lambda table: (
-            (table["parts"][0]["page_number"], table["parts"][0]["region_reading_order"])
-            if table["parts"]
-            else (0, 0)
-        )
+        key=lambda table: ((table["parts"][0]["page_number"], table["parts"][0]["region_reading_order"]) if table["parts"] else (0, 0))
     )
     expected_tables = [
         {
@@ -177,12 +164,15 @@ def assert_matches_ground_truth(document_id: UUID, model_graph_gt: dict, merged:
         }
         for table in expected["tables"]
     ]
+    
     assert actual_tables == expected_tables, "tables differ from ground truth"
 
 
 class TestDocumentProcessing:
     """Integration tests for document processing."""
-    filenames = [
+
+    filenames: ClassVar[list[str]] = [
+        "sample_short.pdf",
         "sample.pdf",
         "one_page.pdf",
         "single_page.png",
@@ -191,16 +181,21 @@ class TestDocumentProcessing:
         "three_page.pdf",
         "unsupported.txt",
     ]
-    
+    merge_consecutive_tables: ClassVar[list[bool]] = [
+        True,
+        False,
+    ]
+
     HERE = os.path.dirname(os.path.abspath(__file__))
     TEST_DOCS_DIR = os.path.join(HERE, "test_docs")
     GROUND_TRUTH_DIR = os.path.join(HERE, "ground_truth")
 
     @pytest.mark.parametrize("filename", filenames)
-    def test_structure(self, test_initializer, filename):
+    @pytest.mark.parametrize("merge_consecutive_tables", merge_consecutive_tables)
+    def test_structure(self, test_initializer, filename, merge_consecutive_tables):
         filepath = os.path.join(TestDocumentProcessing.TEST_DOCS_DIR, filename)
         test_gts = []
-        
+
         with open(os.path.join(TestDocumentProcessing.GROUND_TRUTH_DIR, f"{filename}.json"), "r") as f:
             test_gts.append(json.load(f))
 
@@ -209,9 +204,9 @@ class TestDocumentProcessing:
         for gt, seeded_document in zip(test_gts, seeded_documents):
             if gt["kind"] == "unsupported":
                 with pytest.raises(ValueError, match=re.escape(gt["expected_error_message"])):
-                    process_document_task(job_id=str(seeded_document.job_id))
+                    process_document_task(job_id=str(seeded_document.job_id), merge_consecutive_tables=merge_consecutive_tables)
             else:
-                process_document_task(job_id=str(seeded_document.job_id))
+                process_document_task(job_id=str(seeded_document.job_id), merge_consecutive_tables=merge_consecutive_tables)
 
         for gt, seeded_document in zip(test_gts, seeded_documents):
             with session_scope() as session:
@@ -222,11 +217,9 @@ class TestDocumentProcessing:
                     assert job.status == "failed", gt["file"]
                     assert document.status == "failed", gt["file"]
                     assert job.error_message == gt["expected_error_message"], gt["file"]
-                    assert session.scalar(
-                        select(func.count())
-                        .select_from(Page)
-                        .where(Page.document_id == seeded_document.document_id)
-                    ) == 0, gt["file"]
+                    assert session.scalar(select(func.count()).select_from(Page).where(Page.document_id == seeded_document.document_id)) == 0, gt[
+                        "file"
+                    ]
                     continue
 
                 assert job.status == "completed", f"{gt['file']}: {job.error_message}"
@@ -236,4 +229,77 @@ class TestDocumentProcessing:
                 assert document.status == "completed", gt["file"]
                 assert document.page_count == gt["expected_pages"], gt["file"]
 
-            assert_matches_ground_truth(seeded_document.document_id, gt["model_graph"])
+            assert_matches_ground_truth(seeded_document.document_id, gt["model_graph"], merged=merge_consecutive_tables)
+
+    @pytest.mark.parametrize("filename", filenames)
+    @pytest.mark.parametrize("merge_consecutive_tables", merge_consecutive_tables)
+    def test_partial_processing(self, test_initializer, parser, filename, merge_consecutive_tables):
+        filepath = os.path.join(TestDocumentProcessing.TEST_DOCS_DIR, filename)
+        test_gts = []
+
+        with open(os.path.join(TestDocumentProcessing.GROUND_TRUTH_DIR, f"{filename}.json"), "r") as f:
+            test_gts.append(json.load(f))
+
+        seeded_documents = test_initializer.configure(filenames=[filename], filepaths=[filepath])
+
+        for gt, seeded_document in zip(test_gts, seeded_documents):
+            if gt["kind"] == "unsupported":
+                with pytest.raises(ValueError, match=re.escape(gt["expected_error_message"])):
+                    process_document_task(job_id=str(seeded_document.job_id))
+
+                with session_scope() as session:
+                    job = session.get(Job, seeded_document.job_id)
+                    document = session.get(Document, seeded_document.document_id)
+
+                    assert job.status == "failed", gt["file"]
+                    assert document.status == "failed", gt["file"]
+                    assert job.error_message == gt["expected_error_message"], gt["file"]
+                    assert session.scalar(select(func.count()).select_from(Page).where(Page.document_id == seeded_document.document_id)) == 0, gt[
+                        "file"
+                    ]
+                    
+            else:
+                expected_pages = gt["expected_pages"]
+                
+                # Configures pages for simulated failure (0-based page indices)
+                failed_pages_tuple = tuple(random.sample(range(expected_pages), min(5, expected_pages // 2)))
+                parser.configure(failed=failed_pages_tuple)
+
+                # Processes document
+                process_document_task(job_id=str(seeded_document.job_id), merge_consecutive_tables=merge_consecutive_tables)
+
+                expected_pages = gt["expected_pages"]
+                expected_failed_pages = sorted(index + 1 for index in failed_pages_tuple if index < expected_pages)
+                expected_succeeded = expected_pages - len(expected_failed_pages)
+                expected_summary = _describe_failed_pages(expected_failed_pages, expected_pages) if expected_failed_pages else None
+                expected_status = "completed" if expected_succeeded else "failed"
+
+                with session_scope() as session:
+                    job = session.get(Job, seeded_document.job_id)
+                    document = session.get(Document, seeded_document.document_id)
+
+                    assert job.status == expected_status, f"{gt['file']}: {job.error_message}"
+                    assert job.error_message == expected_summary, gt["file"]
+                    assert job.total_pages == expected_pages, gt["file"]
+                    assert job.pages_processed == expected_succeeded, gt["file"]
+                    assert document.status == expected_status, gt["file"]
+                    assert document.page_count == expected_pages, gt["file"]
+
+                # Attempts to reprocess only the failed pages
+                parser.configure(failed=())
+                process_document_task(
+                    job_id=str(seeded_document.job_id), page_to_process=expected_failed_pages, merge_consecutive_tables=merge_consecutive_tables
+                )
+
+                # Verifies that all the model objects are updated correctly after reprocessing
+                with session_scope() as session:
+                    job = session.get(Job, seeded_document.job_id)
+                    document = session.get(Document, seeded_document.document_id)
+
+                    assert job.status == "completed", f"{gt['file']}: {job.error_message}"
+                    assert job.pages_processed == expected_pages, gt["file"]
+                    assert document.status == "completed", gt["file"]
+                    assert document.page_count == expected_pages, gt["file"]
+
+                # Verifies all the model objects are updated correctly after reprocessing
+                assert_matches_ground_truth(seeded_document.document_id, gt["model_graph"], merged=merge_consecutive_tables)
