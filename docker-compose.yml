@@ -24,6 +24,10 @@ services:
   valkey:
     image: valkey/valkey:7-alpine
     container_name: yarrow_valkey
+    # Append-only log, synced every second, so logouts (revoked tokens,
+    # US-19) survive a crash. The default snapshots alone could lose minutes
+    # of revocations, letting logged-out tokens work again after a restart.
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     ports:
       - "${VALKEY_PORT:-6379}:6379"
     volumes:

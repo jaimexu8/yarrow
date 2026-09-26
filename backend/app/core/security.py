@@ -1,10 +1,11 @@
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from yarrow_db.models import User
@@ -13,6 +14,7 @@ from .config import settings
 
 # Assuming we have a get_db dependency in backend/app/core/database.py
 from .database import get_db
+from .token_denylist import is_token_revoked
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
@@ -49,7 +51,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
         expire = datetime.now(UTC) + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
-    to_encode.update({"exp": expire})
+    # jti ("JWT ID") is unique per token, so logging out can revoke exactly
+    # this one session without touching the user's other devices (US-19).
+    to_encode.update({"exp": expire, "jti": str(uuid4())})
     encoded_jwt = jwt.encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM
     )
@@ -79,6 +83,23 @@ async def get_current_user(
         raise credentials_exception
     user_id: str = payload.get("sub")
     if user_id is None:
+        raise credentials_exception
+
+    # A token without a jti predates US-19 and could never be revoked, so it
+    # is refused: the user signs in once more and gets a revocable one.
+    jti = payload.get("jti")
+    if not jti:
+        raise credentials_exception
+    try:
+        revoked = await is_token_revoked(jti)
+    except RedisError:
+        # Fail closed: if the denylist can't be read, a logged-out token
+        # can't be told apart from a live one, so no request is let through.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sign-in is temporarily unavailable. Please try again.",
+        ) from None
+    if revoked:
         raise credentials_exception
 
     try:

@@ -47,3 +47,11 @@ export async function fetchMe(): Promise<User> {
   const res = await api.get<User>('/api/v1/auth/me');
   return res.data;
 }
+
+/**
+ * Revoke the current token on the server (US-19). Capped at 5 seconds so a
+ * dead connection can never leave someone stuck unable to sign out.
+ */
+export async function logoutRequest(): Promise<void> {
+  await api.post('/api/v1/auth/logout', null, { timeout: 5000 });
+}

@@ -1,7 +1,15 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Response,
+    status,
+)
 from fastapi.security import OAuth2PasswordRequestForm
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from yarrow_db.models import User
@@ -11,10 +19,13 @@ from app.core.database import get_db
 from app.core.mailer import send_verification_code
 from app.core.security import (
     create_access_token,
+    decode_access_token,
     get_current_user,
     get_password_hash,
+    oauth2_scheme,
     verify_password,
 )
+from app.core.token_denylist import revoke_token
 from app.core.verification import (
     attempts_exhausted,
     can_send_code,
@@ -163,3 +174,34 @@ async def login(
 @router.get("/me", response_model=UserOut)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    token: str = Depends(oauth2_scheme),
+    _current_user: User = Depends(get_current_user),
+):
+    """End this session (US-19).
+
+    get_current_user has already refused a missing, invalid, expired or
+    already-revoked token. Only this token is revoked; the user's sessions on
+    other devices keep working.
+    """
+    payload = decode_access_token(token)
+    if payload is None:
+        # The token expired in the moment since get_current_user checked it.
+        # An expired token is already unusable, so the session has ended.
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    expires_at = datetime.fromtimestamp(payload["exp"], tz=UTC)
+    try:
+        await revoke_token(payload["jti"], expires_at)
+    except RedisError:
+        # Not a 204: telling the user they are logged out when the token still
+        # works would be the one outcome this story exists to prevent. The
+        # detail stays generic so no infrastructure names reach the client.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not log out right now. Please try again.",
+        ) from None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
