@@ -30,6 +30,7 @@ from app.schemas import (
     UserCreate,
     UserOut,
     VerifyEmailRequest,
+    normalize_email,
 )
 
 INVALID_CODE = "Invalid or expired verification code"
@@ -127,8 +128,10 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     # OAuth2PasswordRequestForm calls the field `username`; Yarrow logs in by
-    # email, so that is what is read out of it.
-    result = await db.execute(select(User).where(User.email == form_data.username))
+    # email, so that is what is read out of it, in the same canonical form
+    # registration stored it in.
+    email = normalize_email(form_data.username)
+    result = await db.execute(select(User).where(User.email == email))
     user = result.scalars().first()
 
     # Same response whether the email is unknown or the password is wrong, so

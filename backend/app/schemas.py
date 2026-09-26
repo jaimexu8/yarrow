@@ -1,13 +1,35 @@
 """Request and response models for the v1 API."""
 
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+)
+
+
+def normalize_email(value: str) -> str:
+    """The one canonical form an email is stored and looked up in.
+
+    EmailStr lowercases only the domain, so "Alice@Example.com" and
+    "alice@example.com" would otherwise be two accounts, and a user who
+    registered with one could not sign in with the other.
+    """
+    return value.strip().lower()
+
+
+# Use for every email that arrives in a request body.
+NormalizedEmail = Annotated[EmailStr, AfterValidator(normalize_email)]
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
     # 72 bytes, not characters: that is bcrypt's hard input limit, and it
     # raises on anything longer rather than truncating.
     password: str = Field(min_length=8)
@@ -37,12 +59,12 @@ class Token(BaseModel):
 
 
 class VerifyEmailRequest(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
     code: str = Field(min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
 
 
 class ResendVerificationRequest(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
 
 
 class MessageResponse(BaseModel):

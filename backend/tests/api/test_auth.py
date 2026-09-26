@@ -44,6 +44,32 @@ class TestRegister:
         assert second.status_code == 409
         assert "already exists" in second.json()["detail"]
 
+    async def test_email_is_stored_lowercase(self, register):
+        email = unique_email("Mixed").replace("example.com", "Example.COM")
+
+        _, response = await register(email=email)
+
+        assert response.status_code == 201
+        assert response.json()["email"] == email.lower()
+
+    async def test_duplicate_is_detected_regardless_of_case(self, register):
+        payload, _ = await register()
+
+        _, second = await register(email=payload["email"].upper())
+
+        assert second.status_code == 409
+
+    async def test_any_case_can_verify_and_sign_in(self, register, verify, login):
+        """A user who types their email with different capitalization than
+        at sign-up must still be able to verify and sign in."""
+        email = unique_email("Alice").replace("example.com", "EXAMPLE.COM")
+        payload, _ = await register(email=email)
+
+        assert (await verify(email.lower())).status_code == 200
+        response = await login(f"  {email.upper()} ", payload["password"])
+
+        assert response.status_code == 200, response.text
+
     async def test_invalid_email_is_rejected(self, register):
         _, response = await register(email="not-an-email")
         assert response.status_code == 422
