@@ -14,6 +14,7 @@ Local run (with ``docker compose up`` in another terminal)::
 
 import asyncio
 import os
+import re
 import uuid
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
@@ -132,6 +133,35 @@ def unique_email(prefix: str = "user") -> str:
 
 DEFAULT_PASSWORD = "correct-horse-battery"
 
+CODE_PATTERN = re.compile(r"verification code is (\d{6})")
+
+
+class Outbox:
+    """Captured emails: ``(to, subject, body)`` tuples."""
+
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, str, str]] = []
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        self.messages.append((to, subject, body))
+
+    def latest_code(self, to: str) -> str:
+        """The most recent verification code emailed to ``to``."""
+        for recipient, _subject, body in reversed(self.messages):
+            if recipient == to and (match := CODE_PATTERN.search(body)):
+                return match.group(1)
+        raise AssertionError(f"no verification code was emailed to {to}")
+
+
+@pytest.fixture(autouse=True)
+def outbox(monkeypatch: pytest.MonkeyPatch) -> Outbox:
+    """Every test captures mail instead of sending it, no opt-in needed."""
+    from app.core import mailer
+
+    box = Outbox()
+    monkeypatch.setattr(mailer, "send_email", box.send)
+    return box
+
 
 @pytest.fixture
 def register(client: AsyncClient) -> Callable:
@@ -164,10 +194,35 @@ def login(client: AsyncClient) -> Callable:
 
 
 @pytest.fixture
-async def auth_headers(register: Callable, login: Callable) -> dict[str, str]:
-    """Headers for a freshly registered, logged-in user."""
+def no_resend_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """For tests that resend back to back; the hourly cap still applies."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "VERIFICATION_RESEND_COOLDOWN_SECONDS", 0)
+
+
+@pytest.fixture
+def verify(client: AsyncClient, outbox: Outbox) -> Callable:
+    """Verify ``email`` with the code from the outbox (or an explicit one)."""
+
+    async def _verify(email: str, code: str | None = None):
+        return await client.post(
+            "/api/v1/auth/verify",
+            json={"email": email, "code": code or outbox.latest_code(email)},
+        )
+
+    return _verify
+
+
+@pytest.fixture
+async def auth_headers(
+    register: Callable, verify: Callable, login: Callable
+) -> dict[str, str]:
+    """Headers for a freshly registered, verified, logged-in user."""
     payload, response = await register()
     assert response.status_code == 201, response.text
+    verified = await verify(payload["email"])
+    assert verified.status_code == 200, verified.text
     token_response = await login(payload["email"], payload["password"])
     assert token_response.status_code == 200, token_response.text
     token = token_response.json()["access_token"]

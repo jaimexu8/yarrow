@@ -29,6 +29,20 @@ class Settings(DatabaseSettings):
     INFERENCE_SERVICE_URL: str = "http://gateway:8080/layout-parsing"
     INFERENCE_API_KEY: str = ""
 
+    # Outbound email (US-1 verification, US-67 reset). SMTP_HOST unset means
+    # "no mail server": messages are logged instead, which is what a developer
+    # running the backend outside compose gets. Compose points this at Mailpit.
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 1025
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_USE_TLS: bool = False
+    EMAIL_FROM: str = "Yarrow <no-reply@yarrow.local>"
+    VERIFICATION_CODE_TTL_MINUTES: int = 15
+    VERIFICATION_MAX_ATTEMPTS: int = 5
+    VERIFICATION_RESEND_COOLDOWN_SECONDS: int = 60
+    VERIFICATION_MAX_SENDS_PER_HOUR: int = 5
+
     NEXT_PUBLIC_API_URL: str = "http://localhost:8000"
     NEXT_PUBLIC_APP_URL: str = "http://localhost:3000"
 

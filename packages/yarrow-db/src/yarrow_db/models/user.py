@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, String
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from .base import Base
@@ -21,6 +21,12 @@ class User(Base):
     # valid until verification_expires_at.
     verification_token = Column(String)
     verification_expires_at = Column(DateTime)
+    # Abuse limits on verification (US-1): wrong guesses against the current
+    # code, and how many codes were sent in the current one-hour window.
+    verification_attempts = Column(Integer, default=0, nullable=False)
+    verification_sent_at = Column(DateTime)
+    verification_send_count = Column(Integer, default=0, nullable=False)
+    verification_window_started_at = Column(DateTime)
     # Password reset (US-67): single-use token, stored hashed, with an expiry.
     reset_token = Column(String)
     reset_token_expires_at = Column(DateTime)
