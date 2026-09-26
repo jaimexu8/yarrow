@@ -25,7 +25,11 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    email: EmailStr
+    # Plain str on the way out: the value comes from our own database and was
+    # validated when it came in. Re-validating it here rejected the seeded
+    # "@yarrow.local" accounts (".local" is a reserved domain), which made
+    # /auth/me crash with a 500 for them.
+    email: str
     name: str | None = None
     is_admin: bool
     storage_used_bytes: int
