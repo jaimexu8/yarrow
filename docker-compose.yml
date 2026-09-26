@@ -70,13 +70,14 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: yarrow_backend
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ./backend:/app/backend
+      - ./packages:/app/packages
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-yarrow}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yarrow_password}
@@ -106,12 +107,12 @@ services:
 
   worker:
     build:
-      context: ./worker
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: worker/Dockerfile
     container_name: yarrow_worker
     volumes:
-      - ./worker:/app
-      - ./backend/app/models:/app/app/models
+      - ./worker:/app/worker
+      - ./packages:/app/packages
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-yarrow}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yarrow_password}
@@ -125,6 +126,8 @@ services:
       - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
       - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-yarrow-documents}
+      - INFERENCE_SERVICE_URL=${INFERENCE_SERVICE_URL}
+      - INFERENCE_API_KEY=${INFERENCE_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

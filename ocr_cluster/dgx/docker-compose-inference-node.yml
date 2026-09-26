@@ -1,0 +1,102 @@
+# Built from paddlex.Dockerfile. The Paddle source build is the first stage and
+# stays cached; entrypoint.sh/paddlex_wrapper.py copy in the last layers, so a script edit
+# rebuilds in seconds. If the build cache is evicted, --build recompiles Paddle
+# from source (hours).
+x-pipeline-image: &pipeline-image
+  image: ${PIPELINE_IMAGE:-paddleocr-pipeline:gpu}
+  build:
+    context: .
+    dockerfile: paddlex.Dockerfile
+
+services:
+  paddlex-pipeline:
+    <<: *pipeline-image
+    environment:
+      DEVICE: gpu
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 300s
+    deploy:
+      replicas: 1
+      # replicas: 3
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    mem_limit: 6g
+    restart: unless-stopped
+
+  vlm-server:
+    image: nvcr.io/nvidia/vllm:25.12.post1-py3
+    command:
+      - vllm
+      - serve
+      - PaddlePaddle/PaddleOCR-VL
+      - --served-model-name=PaddleOCR-VL-0.9B
+      - --host=0.0.0.0
+      - --port=8000
+      - --trust-remote-code
+      - --mm-encoder-attn-backend=TORCH_SDPA
+      - --gpu-memory-utilization=0.10
+      - --kv-cache-memory-bytes=1073741824
+      - --max-model-len=8192
+      - --max-num-seqs=16
+      - --max-num-batched-tokens=8192
+      - --no-enable-prefix-caching
+      - --mm-processor-cache-gb=0
+    volumes:
+      - rec-server-cache:/root/.cache/huggingface
+    shm_size: "2gb"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 300s
+    deploy:
+      replicas: 1
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  paddleocr-vl-api:
+    <<: *pipeline-image
+    environment:
+      PIPELINE_NAME: PaddleOCR-VL
+      VLM_SERVER_URL: http://vlm-server:8000/v1
+    depends_on:
+      - vlm-server
+    deploy:
+      replicas: 1
+      # replicas: 8
+    mem_limit: 2g
+    restart: unless-stopped
+
+  hybrid-gateway:
+    build:
+      context: .
+      dockerfile: hybrid-gateway.Dockerfile
+    environment:
+      STRUCTURE_GATEWAY_URL: http://paddlex-pipeline:8080/layout-parsing
+      VL_GATEWAY_URL: http://paddleocr-vl-api:8080/layout-parsing
+    depends_on:
+      - paddleocr-vl-api
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  rec-server-cache:

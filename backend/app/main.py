@@ -14,6 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.exception_handler(Exception)
 async def standard_error_handler(request: Request, exc: Exception):
     return JSONResponse(
@@ -21,5 +22,5 @@ async def standard_error_handler(request: Request, exc: Exception):
         content={"detail": str(exc), "code": "INTERNAL_SERVER_ERROR"},
     )
 
-app.include_router(api_router, prefix="/api/v1")
 
+app.include_router(api_router, prefix="/api/v1")

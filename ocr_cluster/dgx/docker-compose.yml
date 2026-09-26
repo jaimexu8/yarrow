@@ -1,0 +1,5 @@
+name: paddleocr-vl
+
+include:
+  - docker-compose-inference-node.yml
+  - docker-compose-lb.yml

@@ -14,14 +14,18 @@ fastapi = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 pydantic = {extras = ["email"], version = ">=2.6"}
 pydantic-settings = "*"
-sqlalchemy = {extras = ["asyncio"], version = ">=2.0"}
-asyncpg = "*"
-psycopg2-binary = "*"
+yarrow-db = {path = "../packages/yarrow-db", develop = true}
+yarrow-storage = {path = "../packages/yarrow-storage", develop = true}
 alembic = "*"
-passlib = {extras = ["bcrypt"], version = "*"}
+# Used directly rather than through passlib, which last shipped in 2020 and
+# breaks against bcrypt >= 5 (it reads the removed bcrypt.__about__).
+bcrypt = "*"
 python-jose = {extras = ["cryptography"], version = "*"}
 python-multipart = "*"
-boto3 = "*"
+# documents.py -- sniffs the upload's type from its magic bytes rather than
+# trusting the filename or the browser's Content-Type. Same library the worker
+# uses, so both agree on what is accepted.
+filetype = "*"
 pypdf = "*"
 pdfplumber = "*"
 celery = {extras = ["redis"], version = "*"}
