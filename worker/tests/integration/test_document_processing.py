@@ -25,7 +25,6 @@ from app.tasks.ingestion import _describe_failed_pages, process_document_task
 pytestmark = pytest.mark.integration
 
 
-
 def assert_matches_ground_truth(document_id: UUID, model_graph_gt: dict, merged: bool = False):
     """Rebuild the persisted row graph in ground-truth shape and compare it"""
 
@@ -89,7 +88,7 @@ def assert_matches_ground_truth(document_id: UUID, model_graph_gt: dict, merged:
         "region_tables": len(table_regions),
         "table_cells": len(cells),
     }
-    
+
     assert actual_counts == expected["counts"], "row counts differ from ground truth"
 
     # Constructs the mapping from region to the page it belongs to
@@ -164,7 +163,7 @@ def assert_matches_ground_truth(document_id: UUID, model_graph_gt: dict, merged:
         }
         for table in expected["tables"]
     ]
-    
+
     assert actual_tables == expected_tables, "tables differ from ground truth"
 
 
@@ -193,6 +192,8 @@ class TestDocumentProcessing:
     @pytest.mark.parametrize("filename", filenames)
     @pytest.mark.parametrize("merge_consecutive_tables", merge_consecutive_tables)
     def test_structure(self, test_initializer, filename, merge_consecutive_tables):
+        """Runs document processing on all pages and check model graph structure against the ground truth"""
+
         filepath = os.path.join(TestDocumentProcessing.TEST_DOCS_DIR, filename)
         test_gts = []
 
@@ -234,6 +235,8 @@ class TestDocumentProcessing:
     @pytest.mark.parametrize("filename", filenames)
     @pytest.mark.parametrize("merge_consecutive_tables", merge_consecutive_tables)
     def test_partial_processing(self, test_initializer, parser, filename, merge_consecutive_tables):
+        """Runs document processing with simulated failure, reprocesses failed pages, and checks model graph structure against ground truth."""
+
         filepath = os.path.join(TestDocumentProcessing.TEST_DOCS_DIR, filename)
         test_gts = []
 
@@ -257,10 +260,10 @@ class TestDocumentProcessing:
                     assert session.scalar(select(func.count()).select_from(Page).where(Page.document_id == seeded_document.document_id)) == 0, gt[
                         "file"
                     ]
-                    
+
             else:
                 expected_pages = gt["expected_pages"]
-                
+
                 # Configures pages for simulated failure (0-based page indices)
                 failed_pages_tuple = tuple(random.sample(range(expected_pages), min(5, expected_pages // 2)))
                 parser.configure(failed=failed_pages_tuple)
