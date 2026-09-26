@@ -23,6 +23,7 @@ function LoginForm() {
   const { status, login } = useAuth();
   const next = safeNext(params.get('next'));
   const justVerified = params.get('verified') === '1';
+  const justReset = params.get('reset') === '1';
 
   const [view, setView] = useState<'login' | 'verify'>('login');
   const [email, setEmail] = useState(params.get('email') ?? '');
@@ -113,6 +114,11 @@ function LoginForm() {
           Your email is verified. Sign in to continue.
         </Alert>
       )}
+      {justReset && !error && (
+        <Alert tone="success">
+          Your password has been changed. Sign in with your new password.
+        </Alert>
+      )}
       {error && <Alert>{error}</Alert>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -137,6 +143,18 @@ function LoginForm() {
           onChange={(e) => setPassword(e.target.value)}
           invalidMessage="Enter your password."
         />
+        <div className="flex justify-end">
+          <Link
+            href={
+              email
+                ? `/forgot-password?email=${encodeURIComponent(email.trim())}`
+                : '/forgot-password'
+            }
+            className="rounded text-sm font-medium text-slate-900 underline underline-offset-4 hover:text-slate-600"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <Button type="submit" loading={submitting}>
           Sign in
         </Button>

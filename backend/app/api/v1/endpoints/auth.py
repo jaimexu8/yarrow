@@ -16,7 +16,13 @@ from yarrow_db.models import User
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.mailer import send_verification_code
+from app.core.mailer import send_password_reset_link, send_verification_code
+from app.core.password_reset import (
+    hash_reset_token,
+    issue_reset_token,
+    reserve_reset_email,
+    reset_token_is_live,
+)
 from app.core.security import (
     create_access_token,
     decode_access_token,
@@ -36,6 +42,8 @@ from app.core.verification import (
 )
 from app.schemas import (
     MessageResponse,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     ResendVerificationRequest,
     Token,
     UserCreate,
@@ -48,6 +56,9 @@ INVALID_CODE = "Invalid or expired verification code"
 # Same reply whether or not the address is registered, so resend cannot be
 # used to enumerate accounts.
 RESEND_REPLY = "If that address has an unverified account, a new code was sent"
+# Likewise for password resets.
+RESET_REPLY = "If that address has an account, a password reset link is on its way"
+INVALID_RESET = "This reset link is invalid or has expired. Please request a new one."
 
 router = APIRouter()
 
@@ -133,6 +144,75 @@ async def resend_verification(
     return MessageResponse(message=RESEND_REPLY)
 
 
+@router.post(
+    "/password-reset/request",
+    response_model=MessageResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_password_reset(
+    payload: PasswordResetRequest,
+    background: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Email a reset link (US-67). The reply never says whether the address
+    has an account, so this can't be used to find out who is registered."""
+    try:
+        # Counted for every address, registered or not, so both cases take
+        # the same path.
+        allowed = await reserve_reset_email(payload.email)
+    except RedisError:
+        # Without Valkey the limits can't be enforced, and sending anyway
+        # would let anyone flood an inbox.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset is temporarily unavailable. Please try again.",
+        ) from None
+
+    if allowed:
+        user = await lock_user_by_email(db, payload.email)
+        if user is not None and user.is_active:
+            token = issue_reset_token(user)
+            await db.commit()
+            background.add_task(send_password_reset_link, user.email, token)
+    return MessageResponse(message=RESET_REPLY)
+
+
+@router.post("/password-reset/confirm", response_model=MessageResponse)
+async def confirm_password_reset(
+    payload: PasswordResetConfirm, db: AsyncSession = Depends(get_db)
+):
+    """Set a new password from an emailed link (US-67)."""
+    # Looked up by the token's hash, with the row locked so two requests
+    # using the same link can't both succeed.
+    result = await db.execute(
+        select(User)
+        .where(User.reset_token == hash_reset_token(payload.token))
+        .with_for_update()
+    )
+    user = result.scalars().first()
+    if user is None or not user.is_active or not reset_token_is_live(user):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=INVALID_RESET
+        )
+
+    user.hashed_password = get_password_hash(payload.new_password)
+    # Every existing session stops working, so a reset after a compromise
+    # also signs the attacker out. The locked row makes this increment safe.
+    user.session_version = (user.session_version or 0) + 1
+    # Single use: the link stops working the moment it has been used.
+    user.reset_token = None
+    user.reset_token_expires_at = None
+    if not user.is_verified:
+        # The link was emailed to this address, so opening it proves the user
+        # owns the mailbox, which is all email verification checks.
+        user.is_verified = True
+        clear_verification_state(user)
+    await db.commit()
+    return MessageResponse(
+        message="Your password has been changed. Sign in with your new password."
+    )
+
+
 @router.post("/login", response_model=Token)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -165,7 +245,9 @@ async def login(
         )
 
     token = create_access_token(
-        {"sub": str(user.id)},
+        # sv: the session version, so a later password reset can end this
+        # session (see get_current_user).
+        {"sub": str(user.id), "sv": user.session_version},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     return Token(access_token=token)

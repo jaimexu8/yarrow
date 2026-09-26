@@ -112,6 +112,8 @@ services:
       - SECRET_KEY=${SECRET_KEY:-supersecretkey_please_change_in_production}
       - JWT_ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=1440
+      # Where the frontend is reachable, used to build links in emails.
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       - SMTP_HOST=${SMTP_HOST:-mailpit}
       - SMTP_PORT=${SMTP_PORT:-1025}
       - SMTP_USER=${SMTP_USER:-}
@@ -122,6 +124,9 @@ services:
       - VERIFICATION_MAX_ATTEMPTS=${VERIFICATION_MAX_ATTEMPTS:-5}
       - VERIFICATION_RESEND_COOLDOWN_SECONDS=${VERIFICATION_RESEND_COOLDOWN_SECONDS:-60}
       - VERIFICATION_MAX_SENDS_PER_HOUR=${VERIFICATION_MAX_SENDS_PER_HOUR:-5}
+      - PASSWORD_RESET_TTL_MINUTES=${PASSWORD_RESET_TTL_MINUTES:-30}
+      - PASSWORD_RESET_COOLDOWN_SECONDS=${PASSWORD_RESET_COOLDOWN_SECONDS:-60}
+      - PASSWORD_RESET_MAX_PER_HOUR=${PASSWORD_RESET_MAX_PER_HOUR:-3}
     depends_on:
       postgres:
         condition: service_healthy

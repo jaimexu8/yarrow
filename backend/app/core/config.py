@@ -43,6 +43,12 @@ class Settings(DatabaseSettings):
     VERIFICATION_RESEND_COOLDOWN_SECONDS: int = 60
     VERIFICATION_MAX_SENDS_PER_HOUR: int = 5
 
+    # Password reset (US-67): how long an emailed link works, and how often a
+    # reset email may be sent to one address.
+    PASSWORD_RESET_TTL_MINUTES: int = 30
+    PASSWORD_RESET_COOLDOWN_SECONDS: int = 60
+    PASSWORD_RESET_MAX_PER_HOUR: int = 3
+
     NEXT_PUBLIC_API_URL: str = "http://localhost:8000"
     NEXT_PUBLIC_APP_URL: str = "http://localhost:3000"
 

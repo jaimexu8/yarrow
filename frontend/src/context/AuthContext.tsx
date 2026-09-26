@@ -26,6 +26,11 @@ type AuthContextType = {
   login: (token: string) => Promise<User>;
   /** End the session on the server, then locally, then go to /login. */
   logout: () => Promise<void>;
+  /**
+   * Forget the local session without contacting the server, for when the
+   * server has already ended it (e.g. a password reset ends every session).
+   */
+  clearSession: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -96,6 +101,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     window.location.href = '/login';
   }, []);
 
+  const clearSession = useCallback(() => {
+    generation.current += 1;
+    localStorage.removeItem('token');
+    setUser(null);
+    setStatus('unauthenticated');
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -103,8 +115,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       isAuthenticated: status === 'authenticated',
       login,
       logout,
+      clearSession,
     }),
-    [user, status, login, logout]
+    [user, status, login, logout, clearSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

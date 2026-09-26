@@ -30,6 +30,9 @@ class User(Base):
     # Password reset (US-67): single-use token, stored hashed, with an expiry.
     reset_token = Column(String)
     reset_token_expires_at = Column(DateTime)
+    # Recorded in every access token at sign-in. A password reset increments
+    # it, so every existing session, including an attacker's, stops working.
+    session_version = Column(Integer, default=0, nullable=False)
     storage_used_bytes = Column(BigInteger, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -45,12 +45,10 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(UTC) + expires_delta
-    else:
-        expire = datetime.now(UTC) + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
+    now = datetime.now(UTC)
+    expire = now + (
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     # jti ("JWT ID") is unique per token, so logging out can revoke exactly
     # this one session without touching the user's other devices (US-19).
     to_encode.update({"exp": expire, "jti": str(uuid4())})
@@ -113,6 +111,11 @@ async def get_current_user(
     result = await db.execute(select(User).where(User.id == user_uuid))
     user = result.scalars().first()
     if user is None:
+        raise credentials_exception
+
+    # "sv" is the user's session_version when this token was issued. A
+    # password reset increments it, which ends every older session (US-67).
+    if payload.get("sv") != user.session_version:
         raise credentials_exception
     return user
 

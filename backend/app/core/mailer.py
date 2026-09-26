@@ -50,3 +50,21 @@ def send_verification_code(to: str, code: str) -> None:
             "If you did not create a Yarrow account, you can ignore this email.\n"
         ),
     )
+
+
+def send_password_reset_link(to: str, token: str) -> None:
+    # The token goes after "#": browsers never send that part of a URL to a
+    # server, so it can't end up in access logs or in the Referer header sent
+    # to other sites. The reset page reads it with JavaScript.
+    link = f"{settings.NEXT_PUBLIC_APP_URL}/reset-password#token={token}"
+    send_email(
+        to,
+        "Reset your Yarrow password",
+        (
+            "Someone asked to reset the password for your Yarrow account.\n\n"
+            f"To choose a new password, open this link:\n{link}\n\n"
+            f"It works once and expires in {settings.PASSWORD_RESET_TTL_MINUTES} "
+            "minutes. If you did not ask for this, ignore this email: your "
+            "password has not changed.\n"
+        ),
+    )

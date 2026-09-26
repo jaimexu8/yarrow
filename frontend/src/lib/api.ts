@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { isPublicAuthPath } from './redirect';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
@@ -31,8 +32,10 @@ api.interceptors.response.use(
     }
     localStorage.removeItem('token');
     const path = window.location.pathname;
-    // Already on a sign-in page: clearing the token is enough.
-    if (!path.startsWith('/login') && !path.startsWith('/register')) {
+    // On a sign-in or recovery page, clearing the token is enough.
+    // Redirecting from /reset-password would throw away the reset link the
+    // user just opened.
+    if (!isPublicAuthPath(path)) {
       window.location.href = `/login?next=${encodeURIComponent(path)}`;
     }
     return Promise.reject(error);

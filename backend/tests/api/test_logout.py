@@ -92,15 +92,15 @@ class TestDenylist:
         the entry must still exist then."""
         from app.core.token_denylist import (
             REVOCATION_GRACE_SECONDS,
-            _client,
             _key,
             revoke_token,
         )
+        from app.core.valkey import get_valkey
 
         expires_at = datetime.now(UTC) + timedelta(seconds=10)
         await revoke_token("boundary-jti", expires_at)
 
-        ttl = await _client().ttl(_key("boundary-jti"))
+        ttl = await get_valkey().ttl(_key("boundary-jti"))
         assert (
             10 + REVOCATION_GRACE_SECONDS - 2
             <= ttl

@@ -134,6 +134,7 @@ def unique_email(prefix: str = "user") -> str:
 DEFAULT_PASSWORD = "correct-horse-battery"
 
 CODE_PATTERN = re.compile(r"verification code is (\d{6})")
+RESET_LINK_PATTERN = re.compile(r"(\S+/reset-password)#token=([A-Za-z0-9_-]+)")
 
 
 class Outbox:
@@ -152,6 +153,21 @@ class Outbox:
                 return match.group(1)
         raise AssertionError(f"no verification code was emailed to {to}")
 
+    def reset_emails(self, to: str) -> list[str]:
+        """Bodies of every password reset email sent to ``to``, oldest first."""
+        return [
+            body
+            for recipient, _subject, body in self.messages
+            if recipient == to and RESET_LINK_PATTERN.search(body)
+        ]
+
+    def latest_reset_token(self, to: str) -> str:
+        """The token from the most recent password reset link sent to ``to``."""
+        bodies = self.reset_emails(to)
+        if not bodies:
+            raise AssertionError(f"no password reset link was emailed to {to}")
+        return RESET_LINK_PATTERN.search(bodies[-1]).group(2)
+
 
 @pytest.fixture(autouse=True)
 def outbox(monkeypatch: pytest.MonkeyPatch) -> Outbox:
@@ -161,6 +177,14 @@ def outbox(monkeypatch: pytest.MonkeyPatch) -> Outbox:
     box = Outbox()
     monkeypatch.setattr(mailer, "send_email", box.send)
     return box
+
+
+@pytest.fixture
+def no_reset_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """For tests that request resets back to back; the hourly cap still applies."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "PASSWORD_RESET_COOLDOWN_SECONDS", 0)
 
 
 @pytest.fixture
