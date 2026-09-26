@@ -18,6 +18,8 @@ class Job(Base):
     pages_processed = Column(Integer, default=0)
     total_pages = Column(Integer, default=0)
     error_message = Column(String)
+    # Celery task id returned by send_task, needed to revoke a queued job (US-42).
+    celery_task_id = Column(String, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
