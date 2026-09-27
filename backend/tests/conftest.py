@@ -265,12 +265,17 @@ class FakeStorage:
         self.objects[key] = file.read()
 
     def download_bytes(self, key: str) -> bytes:
+        # Raises what the real providers raise for a missing key
+        from yarrow_storage import ObjectNotFoundError
+
+        if key not in self.objects:
+            raise ObjectNotFoundError(key)
         return self.objects[key]
 
     def download_file(self, key: str):
         from io import BytesIO
 
-        return BytesIO(self.objects[key])
+        return BytesIO(self.download_bytes(key))
 
     def get_presigned_url(self, key: str, expires_in: int = 3600) -> str:
         return f"http://fake/{key}"
@@ -282,9 +287,11 @@ class FakeStorage:
 @pytest.fixture
 def fake_storage(monkeypatch: pytest.MonkeyPatch) -> FakeStorage:
     from app.api.v1.endpoints import documents
+    from app.services import cloud_storage
 
     storage = FakeStorage()
     monkeypatch.setattr(documents, "get_storage", lambda: storage)
+    monkeypatch.setattr(cloud_storage, "get_storage", lambda: storage)
     return storage
 
 
@@ -301,6 +308,7 @@ class EnqueuedJobs(list):
 def fake_queue(monkeypatch: pytest.MonkeyPatch) -> EnqueuedJobs:
     """Records enqueued job ids instead of talking to Celery."""
     from app.api.v1.endpoints import documents
+    from app.services import cloud_storage
 
     enqueued = EnqueuedJobs()
 
@@ -310,4 +318,5 @@ def fake_queue(monkeypatch: pytest.MonkeyPatch) -> EnqueuedJobs:
         return f"task-{len(enqueued)}"
 
     monkeypatch.setattr(documents, "enqueue_document_processing", _enqueue)
+    monkeypatch.setattr(cloud_storage, "enqueue_document_processing", _enqueue)
     return enqueued

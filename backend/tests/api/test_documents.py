@@ -41,6 +41,18 @@ class TestList:
         response = await client.get(f"{DOCUMENTS}{uuid.uuid4()}", headers=auth_headers)
         assert response.status_code == 404
 
+    async def test_only_own_documents(
+        self, client, auth_headers, register, verify, login, fake_storage, fake_queue
+    ):
+        await client.post(UPLOAD, headers=auth_headers, files=[_pdf()])
+        payload, _ = await register()
+        await verify(payload["email"])
+        token = (await login(payload["email"], payload["password"])).json()
+        other = {"Authorization": f"Bearer {token['access_token']}"}
+
+        library = (await client.get(DOCUMENTS, headers=other)).json()
+        assert library == []
+
 
 class TestUpload:
     async def test_valid_pdf_is_accepted_and_queued(
