@@ -6,7 +6,7 @@ import { Alert } from '@/components/ui/Alert';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
-import { parseApiDate, type DocumentSummary } from '@/lib/documents';
+import { canCancel, parseApiDate, type DocumentSummary } from '@/lib/documents';
 import { formatBytes } from '@/lib/uploads';
 import { useDocuments } from '@/lib/useDocuments';
 import {
@@ -128,8 +128,8 @@ function DocumentRow({
         )}
       </div>
       <div className="flex items-center gap-3">
-        {/* Only while queued: a started or finished job can't be canceled. */}
-        {doc.status === 'queued' && !editing && (
+        {/* Only until it finishes: a completed or failed job can't be canceled. */}
+        {canCancel(doc) && !editing && (
           <Button
             variant="link"
             onClick={cancel}
