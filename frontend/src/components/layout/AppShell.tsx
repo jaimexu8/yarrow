@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Menu, X } from 'lucide-react';
 import { AccountMenu } from './AccountMenu';
 import { SidebarNav } from './SidebarNav';
+import { cn } from '@/lib/cn';
 
 function Brand({ onNavigate }: { onNavigate?: () => void }) {
   return (
@@ -45,13 +46,18 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+// Routes that should take up the full width and height of the viewport, 
+const FULL_BLEED_PREFIXES = ['/documents/'];
+
 /**
- * Layout for every signed-in page: a fixed sidebar on desktop and, below the
- * md breakpoint, a top bar whose menu button opens the same sidebar as a
- * drawer (NFR-3).
+ * Layout for every signed-in page: a fixed sidebar on desktop and a top bar 
+ * on mobile whose menu button opens the same sidebar
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const fullBleed = FULL_BLEED_PREFIXES.some((prefix) =>
+    pathname.startsWith(prefix)
+  );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const openButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -88,7 +94,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [drawerOpen]);
 
   return (
-    <div className="min-h-screen bg-white md:flex">
+    <div
+      className={cn(
+        'bg-white',
+        // Full-bleed pages get exactly one screen of height, split between
+        // the mobile top bar and the page, so the page can scroll inside.
+        fullBleed ? 'flex h-dvh flex-col md:flex-row' : 'min-h-screen md:flex'
+      )}
+    >
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-slate-900 focus:shadow"
@@ -149,11 +162,18 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main
         id="main-content"
         tabIndex={-1}
-        className="min-w-0 flex-1 focus:outline-none"
+        className={cn(
+          'min-w-0 flex-1 focus:outline-none',
+          fullBleed && 'min-h-0 overflow-hidden'
+        )}
       >
-        <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
-          {children}
-        </div>
+        {fullBleed ? (
+          children
+        ) : (
+          <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
+            {children}
+          </div>
+        )}
       </main>
     </div>
   );
