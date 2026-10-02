@@ -2,7 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 import { Spinner } from './Spinner';
 
-type Variant = 'primary' | 'secondary' | 'link';
+type Variant = 'primary' | 'secondary' | 'link' | 'destructive';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant;
@@ -16,6 +16,8 @@ const VARIANTS: Record<Variant, string> = {
   secondary:
     'w-full justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-slate-900 hover:bg-slate-50 disabled:text-slate-400',
   link: 'rounded text-slate-900 underline underline-offset-4 hover:text-slate-600 disabled:text-slate-400 disabled:no-underline',
+  destructive:
+    'w-full justify-center rounded-lg bg-red-600 px-4 py-2.5 text-white hover:bg-red-500 disabled:bg-red-400',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

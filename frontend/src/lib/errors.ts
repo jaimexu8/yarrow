@@ -85,6 +85,15 @@ export function toApiError(error: unknown): ApiError {
     return { status, message: detail, fields: {} };
   }
 
+  if (
+    typeof detail === 'object' &&
+    detail !== null &&
+    'detail' in detail &&
+    typeof detail.detail === 'string'
+  ) {
+    return { status, message: detail.detail, fields: {} };
+  }
+
   if (status >= 500) {
     return {
       status,
