@@ -59,22 +59,24 @@ export function ReprocessBar({ onReprocessed }: { onReprocessed: () => void }) {
     if (pageCount) {
       text += ` ${finished.length} of ${pageCount} pages are ready.`;
     }
-
   } else if (info?.scope === 'incomplete') {
     // The run failed before it finished
 
     tone = 'warning';
     offerAction = true;
-    text = info.pages === null ? 'Processing failed before any page was read.'
-      : `${info.pages} ${info.pages === 1 ? 'page' : 'pages'} couldn't be read: ${listPages(info.page_numbers, info.pages)}.`;
-
+    text =
+      info.pages === null
+        ? 'Processing failed before any page was read.'
+        : `${info.pages} ${info.pages === 1 ? 'page' : 'pages'} couldn't be read: ${listPages(info.page_numbers, info.pages)}.`;
   } else if (working && finished.length > 0) {
     // A reprocess is running: finished pages stay on screen meanwhile.
 
     tone = 'progress';
-    const remaining = pageCount ? Array.from({ length: pageCount }, (_, i) => i + 1).filter(
-      (number) => !finished.includes(number)
-    ) : [];
+    const remaining = pageCount
+      ? Array.from({ length: pageCount }, (_, i) => i + 1).filter(
+          (number) => !finished.includes(number)
+        )
+      : [];
     text = remaining.length
       ? `Processing ${remaining.length === 1 ? 'page' : 'pages'} ${listPages(remaining)}… The rest of the document is shown below.`
       : 'Reprocessing the document… The current results are shown until it finishes.';

@@ -12,10 +12,10 @@ export type ReprocessInfo = {
 
   // Its job was lost mid-run (e.g. a worker crashed)
   interrupted: boolean;
-  
+
   // Pages that would be processed, or null for all of them
   pages: number | null;
-  
+
   // The first few unfinished page numbers, for display ("incomplete" only).
   page_numbers: number[];
 };

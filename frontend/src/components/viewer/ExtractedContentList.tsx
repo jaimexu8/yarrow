@@ -154,10 +154,15 @@ export function ExtractedContentList() {
   );
 
   // Determine if the document is currently in progress (queued or processing)
-  const inProgress = document.status === 'queued' || document.status === 'processing';
+  const inProgress =
+    document.status === 'queued' || document.status === 'processing';
 
   // Determine which pages have been finished
-  const finished = new Set((tree?.pages ?? []).filter((page) => page.status === 'completed').map((page) => page.page_number));
+  const finished = new Set(
+    (tree?.pages ?? [])
+      .filter((page) => page.status === 'completed')
+      .map((page) => page.page_number)
+  );
 
   let body: React.ReactNode;
   if (inProgress && finished.size === 0) {

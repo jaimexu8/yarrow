@@ -19,10 +19,10 @@ const RETRY_INTERVAL_MS = 8000;
 export function useDocuments(refreshKey = 0) {
   const [documents, setDocuments] = useState<DocumentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloads, setReloads] = useState(0);
   // Deleted this session. A poll that was already in flight when a document
   // was deleted must not bring its row back.
   const removedIds = useRef(new Set<string>());
-  const [reloads, setReloads] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -55,7 +55,10 @@ export function useDocuments(refreshKey = 0) {
     // If no documents are currently being worked on, don't set a poll timer
     if (!documents?.some(isWorkingOn)) return;
 
-    const timer = setTimeout(() => setReloads((count) => count + 1), POLL_INTERVAL_MS);
+    const timer = setTimeout(
+      () => setReloads((count) => count + 1),
+      POLL_INTERVAL_MS
+    );
     return () => clearTimeout(timer);
   }, [documents]);
 

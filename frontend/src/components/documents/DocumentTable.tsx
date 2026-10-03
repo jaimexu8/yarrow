@@ -5,8 +5,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import {
   FileText,
   Pencil,
-  RotateCw,
   Search,
+  RotateCw,
   SearchX,
   Upload,
   Trash,
@@ -17,7 +17,11 @@ import { ActionMenu, type ActionMenuItem } from '@/components/ui/ActionMenu';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
-import { isInterrupted, parseApiDate, type DocumentSummary } from '@/lib/documents';
+import {
+  isInterrupted,
+  parseApiDate,
+  type DocumentSummary,
+} from '@/lib/documents';
 import { cn } from '@/lib/cn';
 import { formatBytes } from '@/lib/uploads';
 import { useDocuments } from '@/lib/useDocuments';
@@ -104,9 +108,11 @@ export function DocumentLibrary() {
   }
 
   const needle = query.trim().toLocaleLowerCase();
-  const visible = needle ? documents.filter((doc) =>
-    doc.filename.toLocaleLowerCase().includes(needle)
-  ) : documents;
+  const visible = needle
+    ? documents.filter((doc) =>
+        doc.filename.toLocaleLowerCase().includes(needle)
+      )
+    : documents;
 
   return (
     <div className="space-y-4">
@@ -210,7 +216,10 @@ function DocumentTableRow({
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const nameLink = useRef<HTMLAnchorElement>(null);
-  const { cancel, canceling, cancelError } = useCancelProcessing(doc, onChanged);
+  const { cancel, canceling, cancelError } = useCancelProcessing(
+    doc,
+    onChanged
+  );
   const reprocess = useReprocessAction(doc, onChanged, onStale);
   const interrupted = isInterrupted(doc);
 
@@ -245,6 +254,13 @@ function DocumentTableRow({
           },
         ]
       : []),
+    {
+      label: 'Delete',
+      icon: Trash,
+      keepFocus: true,
+      destructive: true,
+      onSelect: () => {}, // TODO
+    },
   ];
   // Only while queued: a started or finished job can't be canceled.
   if (doc.status === 'queued') {
@@ -311,7 +327,9 @@ function DocumentTableRow({
         )}
         {(cancelError || reprocess.error) && (
           <p role="alert" className="mt-0.5 text-xs text-red-700">
-            {reprocess.error ? `Couldn't reprocess: ${reprocess.error}` : cancelError}
+            {reprocess.error
+              ? `Couldn't reprocess: ${reprocess.error}`
+              : cancelError}
           </p>
         )}
         {reprocess.dialog}

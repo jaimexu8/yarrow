@@ -46,11 +46,11 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-// Routes that should take up the full width and height of the viewport, 
+// Routes that should take up the full width and height of the viewport,
 const FULL_BLEED_PREFIXES = ['/documents/'];
 
 /**
- * Layout for every signed-in page: a fixed sidebar on desktop and a top bar 
+ * Layout for every signed-in page: a fixed sidebar on desktop and a top bar
  * on mobile whose menu button opens the same sidebar
  */
 export function AppShell({ children }: { children: ReactNode }) {

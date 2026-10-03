@@ -7,9 +7,9 @@ import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import {
   cancelProcessing,
-  deleteDocument,
   renameDocument,
   reprocessDocument,
+  deleteDocument,
   type DocumentSummary,
 } from '@/lib/documents';
 import { cn } from '@/lib/cn';
@@ -149,32 +149,6 @@ export function useCancelProcessing(
 }
 
 /**
- * Reprocess a finished, failed, or canceled document. The server refuses
- * (409) once a job is queued or running.
- */
-export function useReprocessDocument(
-  doc: DocumentSummary,
-  onChanged: (doc: DocumentSummary) => void
-) {
-  const [reprocessing, setReprocessing] = useState(false);
-  const [reprocessError, setReprocessError] = useState<string | null>(null);
-
-  async function reprocess() {
-    setReprocessing(true);
-    setReprocessError(null);
-    try {
-      onChanged(await reprocessDocument(doc.id));
-    } catch (err) {
-      setReprocessError(toApiError(err).message);
-    } finally {
-      setReprocessing(false);
-    }
-  }
-
-  return { reprocess, reprocessing, reprocessError };
-}
-
-/**
  * Why processing failed. The server only sends reasons written for
  * users. A completed document can also carry a note when some of its pages
  * failed. It stays "Completed" and the note is shown as a warning, not an
@@ -268,7 +242,7 @@ export function useReprocessAction(
     available: Boolean(doc.reprocess),
     request,
     reprocessing,
-    
+
     // A failure of an immediate (unconfirmed) reprocess
     error: confirming ? null : error,
     dialog,
