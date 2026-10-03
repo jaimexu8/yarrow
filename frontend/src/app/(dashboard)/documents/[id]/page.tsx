@@ -7,16 +7,14 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { ExtractedContentList } from '@/components/viewer/ExtractedContentList';
 import { OriginalPane } from '@/components/viewer/OriginalPane';
+import { ReprocessBar, ReprocessButton } from '@/components/viewer/ReprocessBar';
 import { SplitViewer } from '@/components/viewer/SplitViewer';
 import { ViewerHeader } from '@/components/viewer/ViewerHeader';
-import {
-  ViewerProvider,
-  type ViewMode,
-} from '@/components/viewer/ViewerContext';
+import { ViewerProvider, type ViewMode } from '@/components/viewer/ViewerContext';
+import { isWorkingOn } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
 import { getDocumentTree, type DocumentTree } from '@/lib/viewer';
 
-const IN_PROGRESS = new Set(['queued', 'processing']);
 const POLL_INTERVAL_MS = 5000;
 
 type Load =
@@ -31,8 +29,7 @@ function defaultMode(): ViewMode {
 }
 
 /**
- * View one document (US-12): the original on the left, the extracted text
- * on the right, with a toggle to show either alone. While the document is
+ * The page to display the document and its extracted content. While the document is
  * still processing, the extracted side fills in once it finishes.
  */
 export default function DocumentViewerPage({
@@ -52,9 +49,12 @@ export default function DocumentViewerPage({
         const tree = await getDocumentTree(params.id);
         if (!current) return;
         setLoad({ state: 'ready', tree });
-        if (tree.document.status && IN_PROGRESS.has(tree.document.status)) {
+
+        // Only refresh tree if the document is still being worked on
+        if (isWorkingOn(tree.document)) {
           timer = setTimeout(fetchTree, POLL_INTERVAL_MS);
         }
+
       } catch (err) {
         if (!current) return;
         const apiError = toApiError(err);
@@ -75,6 +75,9 @@ export default function DocumentViewerPage({
       clearTimeout(timer);
     };
   }, [params.id, attempt]);
+
+  // Fetch the document again, for instance, after starting a reprocess.
+  const refresh = () => setAttempt((count) => count + 1);
 
   if (load.state === 'loading') {
     return (
@@ -133,7 +136,8 @@ export default function DocumentViewerPage({
       initialMode={defaultMode()}
     >
       <div className="flex h-full flex-col">
-        <ViewerHeader />
+        <ViewerHeader actions={<ReprocessButton onReprocessed={refresh} />} />
+        <ReprocessBar onReprocessed={refresh} />
         <SplitViewer
           original={<OriginalPane />}
           extracted={<ExtractedContentList />}

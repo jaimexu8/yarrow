@@ -44,6 +44,9 @@ http {
     server {
         listen 8080;
 
+        # Set this to accept pages larger in file size (Eg. pages with images)
+        client_max_body_size 50m;
+
         # Deliberately unauthenticated: this is the container healthcheck and
         # any external load-balancer probe. It exposes no pipeline capability.
         location = /healthz {

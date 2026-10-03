@@ -288,15 +288,25 @@ def fake_storage(monkeypatch: pytest.MonkeyPatch) -> FakeStorage:
     return storage
 
 
+class EnqueuedJobs(list):
+    """Job ids in the order they were queued. pages maps each job id to
+    the page numbers it was limited to, or None for the whole document."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.pages: dict = {}
+
+
 @pytest.fixture
-def fake_queue(monkeypatch: pytest.MonkeyPatch) -> list:
+def fake_queue(monkeypatch: pytest.MonkeyPatch) -> EnqueuedJobs:
     """Records enqueued job ids instead of talking to Celery."""
     from app.api.v1.endpoints import documents
 
-    enqueued: list = []
+    enqueued = EnqueuedJobs()
 
-    def _enqueue(job_id):
+    def _enqueue(job_id, pages=None):
         enqueued.append(job_id)
+        enqueued.pages[job_id] = None if pages is None else list(pages)
         return f"task-{len(enqueued)}"
 
     monkeypatch.setattr(documents, "enqueue_document_processing", _enqueue)

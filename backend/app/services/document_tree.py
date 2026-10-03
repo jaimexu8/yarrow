@@ -20,7 +20,6 @@ from yarrow_db.models import (
 
 from app.deps import DocumentAccess
 from app.schemas.common import BBox
-from app.schemas.document import DocumentOut
 from app.schemas.parsed import (
     DocumentStats,
     DocumentTree,
@@ -34,6 +33,7 @@ from app.schemas.table import (
     TableNode,
     TablePart,
 )
+from app.services.reprocess import documents_out
 
 
 def _bbox(row: Region | TableCell) -> BBox:
@@ -204,7 +204,7 @@ async def load_document_tree(
     # Return the complete document tree together with summary statistics.
     return DocumentTree(
         generated_at=datetime.now(UTC),
-        document=DocumentOut.model_validate(document),
+        document=(await documents_out(db, [document]))[0],
         pages_included=[row.page_number for row in page_rows],
         pages=page_nodes,
         tables=table_nodes,
