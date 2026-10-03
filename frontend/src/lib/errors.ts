@@ -9,6 +9,8 @@ export type ApiError = {
   message: string;
   /** Per-field messages from a 422, keyed by field name (e.g. "password"). */
   fields: Record<string, string>;
+  /** Machine-readable reason, when the server sends one (e.g. "DOCUMENT_BUSY"). */
+  code?: string;
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -83,6 +85,22 @@ export function toApiError(error: unknown): ApiError {
 
   if (typeof detail === 'string') {
     return { status, message: detail, fields: {} };
+  }
+
+  // Endpoints that need to tell errors apart send {"detail": "...", "code": "..."}.
+  if (detail && typeof detail === 'object') {
+    const { detail: text, code } = detail as {
+      detail?: unknown;
+      code?: unknown;
+    };
+    if (typeof text === 'string') {
+      return {
+        status,
+        message: text,
+        fields: {},
+        ...(typeof code === 'string' && { code }),
+      };
+    }
   }
 
   if (status >= 500) {

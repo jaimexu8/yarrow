@@ -177,6 +177,16 @@ export async function uploadDocument(
 }
 
 /**
+ * Permanently delete a document and everything extracted from it.
+ * Throws the raw request error like the other calls here; pass it to
+ * toApiError for display. A 409 (code DOCUMENT_BUSY) means processing was
+ * saving results at that moment and the delete can be retried.
+ */
+export async function deleteDocument(id: string): Promise<void> {
+  await api.delete(`/api/v1/documents/${id}`);
+}
+
+/**
  * A server-side rejection. When the server marks it retryable (a problem on
  * its side, like storage being briefly down), it is reported as a failure so
  * the page offers Retry; otherwise the file itself is the problem.

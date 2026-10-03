@@ -9,6 +9,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Response,
     UploadFile,
     status,
 )
@@ -23,7 +24,12 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.queue import enqueue_document_processing, revoke_document_processing
 from app.core.security import get_current_user
-from app.deps import DocumentAccess, require_edit_access, require_read_access
+from app.deps import (
+    DocumentAccess,
+    require_edit_access,
+    require_owner_access,
+    require_read_access,
+)
 from app.schemas import (
     DocumentDetail,
     DocumentOut,
@@ -34,6 +40,7 @@ from app.schemas import (
     UploadRejected,
     UploadResponse,
 )
+from app.services.document_deletion import delete_document, delete_stored_objects
 from app.services.export import content_disposition, display_stem, safe_stem
 from app.services.failure_messages import (
     DOCUMENT_FAILED_MESSAGE,
@@ -468,6 +475,46 @@ async def cancel_document_processing(
 
     await db.refresh(document)
     return document
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document_endpoint(
+    access: DocumentAccess = Depends(require_owner_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a document, its extracted data and its jobs.
+
+    Allowed in any processing state. A worker that runs it anyway finds its 
+    job gone. If processing is saving results for this document at that moment,
+    the request answers 409 after a short wait instead of hanging, and can
+    simply be retried.
+    """
+
+    document_id = access.document.id
+    outcome = await delete_document(db, document_id)
+    if not outcome.ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+
+    for task_id in outcome.task_ids:
+        try:
+            await run_in_threadpool(revoke_document_processing, task_id)
+        except Exception:
+            logger.exception(f"Revoking task {task_id} failed")
+
+    if outcome.storage_keys:
+        orphaned = await run_in_threadpool(
+            delete_stored_objects, get_storage(), outcome.storage_keys
+        )
+        if orphaned:
+            logger.error(
+                f"Deleted document {document_id} left "
+                f"{len(orphaned)} stored object(s) behind: {orphaned}"
+            )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _iter_object(handle, chunk_size: int = READ_CHUNK):
