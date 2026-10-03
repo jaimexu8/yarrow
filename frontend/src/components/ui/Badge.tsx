@@ -47,9 +47,11 @@ export function StatusBadge({
   interrupted?: boolean;
   className?: string;
 }) {
-  const style = interrupted ? INTERRUPTED_STYLE : (
-    status ? STATUS_STYLES[status]: undefined
-  );
+  const style = interrupted
+    ? INTERRUPTED_STYLE
+    : status
+      ? STATUS_STYLES[status]
+      : undefined;
   return (
     <span
       className={cn(

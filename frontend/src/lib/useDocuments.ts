@@ -55,7 +55,10 @@ export function useDocuments(refreshKey = 0) {
     // If no documents are currently being worked on, don't set a poll timer
     if (!documents?.some(isWorkingOn)) return;
 
-    const timer = setTimeout(() => setReloads((count) => count + 1), POLL_INTERVAL_MS);
+    const timer = setTimeout(
+      () => setReloads((count) => count + 1),
+      POLL_INTERVAL_MS
+    );
     return () => clearTimeout(timer);
   }, [documents]);
 

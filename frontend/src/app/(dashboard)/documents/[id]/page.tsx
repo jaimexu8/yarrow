@@ -7,10 +7,16 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { ExtractedContentList } from '@/components/viewer/ExtractedContentList';
 import { OriginalPane } from '@/components/viewer/OriginalPane';
-import { ReprocessBar, ReprocessButton } from '@/components/viewer/ReprocessBar';
+import {
+  ReprocessBar,
+  ReprocessButton,
+} from '@/components/viewer/ReprocessBar';
 import { SplitViewer } from '@/components/viewer/SplitViewer';
 import { ViewerHeader } from '@/components/viewer/ViewerHeader';
-import { ViewerProvider, type ViewMode } from '@/components/viewer/ViewerContext';
+import {
+  ViewerProvider,
+  type ViewMode,
+} from '@/components/viewer/ViewerContext';
 import { isWorkingOn } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
 import { getDocumentTree, type DocumentTree } from '@/lib/viewer';
@@ -54,7 +60,6 @@ export default function DocumentViewerPage({
         if (isWorkingOn(tree.document)) {
           timer = setTimeout(fetchTree, POLL_INTERVAL_MS);
         }
-
       } catch (err) {
         if (!current) return;
         const apiError = toApiError(err);

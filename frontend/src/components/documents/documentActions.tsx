@@ -10,7 +10,7 @@ import {
   renameDocument,
   reprocessDocument,
   deleteDocument,
-  type DocumentSummary
+  type DocumentSummary,
 } from '@/lib/documents';
 import { cn } from '@/lib/cn';
 import { toApiError } from '@/lib/errors';
