@@ -1,10 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { listDocuments, type DocumentSummary } from './documents';
+import { isWorkingOn, listDocuments, type DocumentSummary } from './documents';
 import { toApiError } from './errors';
 
-const IN_PROGRESS = new Set(['queued', 'processing']);
 const POLL_INTERVAL_MS = 4000;
 const RETRY_INTERVAL_MS = 8000;
 
@@ -20,6 +19,7 @@ const RETRY_INTERVAL_MS = 8000;
 export function useDocuments(refreshKey = 0) {
   const [documents, setDocuments] = useState<DocumentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloads, setReloads] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -31,9 +31,6 @@ export function useDocuments(refreshKey = 0) {
         if (!current) return;
         setDocuments(docs);
         setError(null);
-        if (docs.some((doc) => doc.status && IN_PROGRESS.has(doc.status))) {
-          timer = setTimeout(load, POLL_INTERVAL_MS);
-        }
       } catch (err) {
         if (!current) return;
         setError(toApiError(err).message);
@@ -46,14 +43,26 @@ export function useDocuments(refreshKey = 0) {
       current = false;
       clearTimeout(timer);
     };
-  }, [refreshKey]);
+  }, [refreshKey, reloads]);
 
-  /** Swap in a document the server just returned, e.g. after a rename. */
+  // Poll while anything is queued or processing
+  useEffect(() => {
+    // If no documents are currently being worked on, don't set a poll timer
+    if (!documents?.some(isWorkingOn)) return;
+
+    const timer = setTimeout(() => setReloads((count) => count + 1), POLL_INTERVAL_MS);
+    return () => clearTimeout(timer);
+  }, [documents]);
+
+  // Swap in a document the server just returned
   const replace = useCallback((changed: DocumentSummary) => {
     setDocuments((current) =>
       (current ?? []).map((doc) => (doc.id === changed.id ? changed : doc))
     );
   }, []);
 
-  return { documents, error, replace };
+  // Callback to fetch the list again
+  const reload = useCallback(() => setReloads((count) => count + 1), []);
+
+  return { documents, error, replace, reload };
 }

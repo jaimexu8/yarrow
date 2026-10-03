@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { AlertTriangle, FileSearch } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
+import { isInterrupted } from '@/lib/documents';
 import type { DocumentTree, PageNode, TableNode } from '@/lib/viewer';
 import { RegionBlock, regionKind } from './regionRenderers';
 import { usePageTracking, useViewer } from './ViewerContext';
@@ -30,33 +31,69 @@ function tablePlacements(tree: DocumentTree): Map<string, TableNode> {
   return placements;
 }
 
+// A page whose content is not available yet
+type Pending = 'processing' | 'unfinished';
+
 function PageSection({
+  pageNumber,
   page,
   placements,
+  pending,
 }: {
-  page: PageNode;
+  pageNumber: number;
+  page: PageNode | undefined;
   placements: Map<string, TableNode>;
+  pending?: Pending;
 }) {
   const { registerPage } = useViewer();
-  const regions = [...page.regions].sort(
+  const regions = [...(page?.regions ?? [])].sort(
     (a, b) => a.reading_order - b.reading_order
   );
 
   return (
     <section
-      ref={(element) => registerPage('extracted', page.page_number, element)}
-      data-viewer-page={page.page_number}
+      ref={(element) => registerPage('extracted', pageNumber, element)}
+      data-viewer-page={pageNumber}
       data-pane="extracted"
-      aria-labelledby={`extracted-page-${page.page_number}`}
+      aria-labelledby={`extracted-page-${pageNumber}`}
     >
-      <h2 id={`extracted-page-${page.page_number}`} className="sr-only">
-        Page {page.page_number}
+      <h2 id={`extracted-page-${pageNumber}`} className="sr-only">
+        Page {pageNumber}
       </h2>
-      {page.page_number > 1 && (
+      {pageNumber > 1 && (
         <hr aria-hidden="true" className="not-prose my-8 border-slate-200" />
       )}
 
-      {page.error_message && (
+      {pending ? (
+        <p className="not-prose my-4 flex items-center gap-2 text-sm text-slate-500">
+          {pending === 'processing' ? (
+            <>
+              <Spinner label={null} className="text-slate-400" />
+              Processing this page…
+            </>
+          ) : (
+            "This page hasn't been processed yet."
+          )}
+        </p>
+      ) : (
+        <PageContent page={page} regions={regions} placements={placements} />
+      )}
+    </section>
+  );
+}
+
+function PageContent({
+  page,
+  regions,
+  placements,
+}: {
+  page: PageNode | undefined;
+  regions: PageNode['regions'];
+  placements: Map<string, TableNode>;
+}) {
+  return (
+    <>
+      {page?.error_message && (
         <p className="not-prose my-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <AlertTriangle
             aria-hidden="true"
@@ -81,7 +118,7 @@ function PageSection({
           />
         );
       })}
-    </section>
+    </>
   );
 }
 
@@ -109,20 +146,56 @@ function PaneMessage({
  * parsed tree so every block keeps its region id (see RegionBlock).
  */
 export function ExtractedContentList() {
-  const { document, tree } = useViewer();
+  const { document, tree, pageCount } = useViewer();
   const onScroll = usePageTracking('extracted');
   const placements = useMemo(
     () => (tree ? tablePlacements(tree) : new Map<string, TableNode>()),
     [tree]
   );
 
+  // Determine if the document is currently in progress (queued or processing)
+  const inProgress = document.status === 'queued' || document.status === 'processing';
+
+  // Determine which pages have been finished
+  const finished = new Set((tree?.pages ?? []).filter((page) => page.status === 'completed').map((page) => page.page_number));
+
   let body: React.ReactNode;
-  if (document.status === 'queued' || document.status === 'processing') {
-    body = (
+  if (inProgress && finished.size === 0) {
+    body = isInterrupted(document) ? (
+      <PaneMessage>
+        Processing stopped before any page was finished.
+      </PaneMessage>
+    ) : (
       <PaneMessage busy>
         Still processing. The extracted text will appear here when it&apos;s
         ready.
       </PaneMessage>
+    );
+  } else if (inProgress && tree) {
+    const pending: Pending = isInterrupted(document)
+      ? 'unfinished'
+      : 'processing';
+    const byNumber = new Map(
+      tree.pages.map((page) => [page.page_number, page])
+    );
+    const lastPage = Math.max(
+      pageCount ?? 0,
+      ...tree.pages.map((p) => p.page_number)
+    );
+    body = (
+      <article className="prose prose-slate prose-sm mx-auto max-w-2xl px-6 py-8 sm:px-10 2xl:prose-base">
+        {Array.from({ length: lastPage }, (_, index) => index + 1).map(
+          (number) => (
+            <PageSection
+              key={number}
+              pageNumber={number}
+              page={byNumber.get(number)}
+              placements={placements}
+              pending={finished.has(number) ? undefined : pending}
+            />
+          )
+        )}
+      </article>
     );
   } else if (!tree) {
     body = (
@@ -149,6 +222,7 @@ export function ExtractedContentList() {
         {pages.map((page) => (
           <PageSection
             key={page.page_number}
+            pageNumber={page.page_number}
             page={page}
             placements={placements}
           />
