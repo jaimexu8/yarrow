@@ -39,6 +39,8 @@ type ViewerState = {
   // Panes call these to make their pages reachable by scrollToPage.
   registerPage: (pane: Pane, page: number, element: HTMLElement | null) => void;
   reportVisiblePage: (page: number) => void;
+  /** Load the document again, e.g. after merging or splitting its tables. */
+  refresh: () => void;
 };
 
 /*
@@ -50,11 +52,13 @@ export function ViewerProvider({
   document,
   tree,
   initialMode = 'split',
+  refresh,
   children,
 }: {
   document: DocumentSummary;
   tree: DocumentTree | null;
   initialMode?: ViewMode;
+  refresh: () => void;
   children: ReactNode;
 }) {
   const [mode, setMode] = useState<ViewMode>(initialMode);
@@ -104,8 +108,18 @@ export function ViewerProvider({
       scrollToPage,
       registerPage,
       reportVisiblePage: setCurrentPage,
+      refresh,
     }),
-    [document, tree, pageCount, mode, currentPage, scrollToPage, registerPage]
+    [
+      document,
+      tree,
+      pageCount,
+      mode,
+      currentPage,
+      scrollToPage,
+      registerPage,
+      refresh,
+    ]
   );
 
   return (

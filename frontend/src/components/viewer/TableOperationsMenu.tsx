@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/Button';
 import { toApiError } from '@/lib/errors';
 import {
-  mergeTables,
-  splitTables,
+  mergeConsecutiveTables,
+  splitConsecutiveTables,
   type TableMutationResult,
 } from '@/lib/tableOperations';
 import { cn } from '@/lib/cn';
@@ -69,7 +69,7 @@ export function TableOperationsDropdown({
     if (running !== null) return;
 
     const run: (documentId: string) => Promise<TableMutationResult> =
-      operation === 'merge' ? mergeTables : splitTables;
+      operation === 'merge' ? mergeConsecutiveTables : splitConsecutiveTables;
 
     const nothingToDo: string =
       operation === 'merge' ? 'No tables to merge.' : 'No tables to split.';

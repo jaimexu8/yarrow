@@ -235,7 +235,9 @@ def _merge_candidates(
         page = first.region.page if first.region else None
         if page is None:
             continue
-        ordered.append((page.page_number or 0, first.reading_order or 0, table, parts))
+        ordered.append(
+            (page.page_number or 0, first.region.reading_order or 0, table, parts)
+        )
     ordered.sort(key=lambda item: (item[0], item[1]))
 
     candidates: list[tuple[UUID, UUID, int]] = []
