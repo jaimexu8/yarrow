@@ -6,6 +6,20 @@ import { toApiError } from './errors';
 export type DocumentStatus =
   'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
 
+export type ReprocessInfo = {
+  // some pages to be processed (incomplete) or all of them (all)
+  scope: 'incomplete' | 'all';
+
+  // Its job was lost mid-run (e.g. a worker crashed)
+  interrupted: boolean;
+
+  // Pages that would be processed, or null for all of them
+  pages: number | null;
+
+  // The first few unfinished page numbers, for display ("incomplete" only).
+  page_numbers: number[];
+};
+
 export type DocumentSummary = {
   id: string;
   filename: string;
@@ -15,7 +29,32 @@ export type DocumentSummary = {
   status: DocumentStatus | null;
   error_message: string | null;
   created_at: string | null;
+  reprocess?: ReprocessInfo | null;
 };
+
+export function isInterrupted(doc: DocumentSummary): boolean {
+  return doc.reprocess?.interrupted ?? false;
+}
+
+/** Checks if a document is queued or processing, and not interrupted */
+export function isWorkingOn(doc: DocumentSummary): boolean {
+  return (
+    (doc.status === 'queued' || doc.status === 'processing') &&
+    !isInterrupted(doc)
+  );
+}
+
+/**
+ * Send request to reprocess a document without uploading it again. Unfinished
+ * work (interrupted, failed or partly failed) reprocesses only the pages that
+ * are not completed; a finished document is processed again in full
+ */
+export async function reprocessDocument(id: string): Promise<DocumentSummary> {
+  const res = await api.post<DocumentSummary>(
+    `/api/v1/documents/${id}/reprocess`
+  );
+  return res.data;
+}
 
 export async function listDocuments(): Promise<DocumentSummary[]> {
   const res = await api.get<DocumentSummary[]>('/api/v1/documents/');
@@ -43,18 +82,6 @@ export async function renameDocument(
  */
 export async function cancelProcessing(id: string): Promise<DocumentSummary> {
   const res = await api.post<DocumentSummary>(`/api/v1/documents/${id}/cancel`);
-  return res.data;
-}
-
-/**
- * Reprocess an already-uploaded document (US-43): re-queues it for
- * processing without a new upload. The server refuses (409) once a job is
- * queued or running.
- */
-export async function reprocessDocument(id: string): Promise<DocumentSummary> {
-  const res = await api.post<DocumentSummary>(
-    `/api/v1/documents/${id}/reprocess`
-  );
   return res.data;
 }
 

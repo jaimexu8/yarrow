@@ -6,6 +6,7 @@ import {
   FileText,
   Pencil,
   Search,
+  RotateCw,
   SearchX,
   Upload,
   Trash,
@@ -16,14 +17,21 @@ import { ActionMenu, type ActionMenuItem } from '@/components/ui/ActionMenu';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
-import { parseApiDate, type DocumentSummary } from '@/lib/documents';
+import {
+  isInterrupted,
+  parseApiDate,
+  type DocumentSummary,
+} from '@/lib/documents';
 import { cn } from '@/lib/cn';
 import { formatBytes } from '@/lib/uploads';
 import { useDocuments } from '@/lib/useDocuments';
 import {
   DeleteDocumentDialog,
   FailureNote,
+  InterruptedNote,
   RenameForm,
+  ReprocessLink,
+  useReprocessAction,
   useCancelProcessing,
 } from './documentActions';
 
@@ -53,7 +61,7 @@ const HEAD = 'px-3 pb-1 text-left sm:px-4 text-xs font-medium text-slate-500';
  * is still processing.
  */
 export function DocumentLibrary() {
-  const { documents, error, replace, remove } = useDocuments();
+  const { documents, error, replace, remove, reload } = useDocuments();
   const [query, setQuery] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const filterId = useId();
@@ -166,6 +174,7 @@ export function DocumentLibrary() {
                 key={doc.id}
                 doc={doc}
                 onChanged={replace}
+                onStale={reload}
                 onDeleted={handleDeleted}
               />
             ))}
@@ -194,10 +203,14 @@ function UploadedAt({ value }: { value: string | null }) {
 function DocumentTableRow({
   doc,
   onChanged,
+  onStale,
   onDeleted,
 }: {
   doc: DocumentSummary;
   onChanged: (doc: DocumentSummary) => void;
+
+  // Callback when the server indicates that the row is out of date
+  onStale: () => void;
   onDeleted: (doc: DocumentSummary) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -206,6 +219,16 @@ function DocumentTableRow({
   const { cancel, canceling, cancelError } = useCancelProcessing(
     doc,
     onChanged
+  );
+  const reprocess = useReprocessAction(doc, onChanged, onStale);
+  const interrupted = isInterrupted(doc);
+
+  // Inline reprocess link, shown only for incomplete documents
+  const reprocessLink = doc.reprocess?.scope === 'incomplete' && (
+    <ReprocessLink
+      reprocessing={reprocess.reprocessing}
+      onClick={reprocess.request}
+    />
   );
 
   function stopEditing() {
@@ -219,6 +242,24 @@ function DocumentTableRow({
       icon: Pencil,
       keepFocus: true,
       onSelect: () => setEditing(true),
+    },
+    // Resumes unfinished work, or processes a finished document again
+    ...(reprocess.available && !reprocess.reprocessing
+      ? [
+          {
+            label: 'Reprocess',
+            icon: RotateCw,
+            keepFocus: doc.reprocess?.scope === 'all',
+            onSelect: reprocess.request,
+          },
+        ]
+      : []),
+    {
+      label: 'Delete',
+      icon: Trash,
+      keepFocus: true,
+      destructive: true,
+      onSelect: () => {}, // TODO
     },
   ];
   // Only while queued: a started or finished job can't be canceled.
@@ -279,12 +320,19 @@ function DocumentTableRow({
             </div>
           </div>
         )}
-        <FailureNote doc={doc} />
-        {cancelError && (
+        {interrupted ? (
+          <InterruptedNote>{reprocessLink}</InterruptedNote>
+        ) : (
+          <FailureNote doc={doc}>{reprocessLink}</FailureNote>
+        )}
+        {(cancelError || reprocess.error) && (
           <p role="alert" className="mt-0.5 text-xs text-red-700">
-            {cancelError}
+            {reprocess.error
+              ? `Couldn't reprocess: ${reprocess.error}`
+              : cancelError}
           </p>
         )}
+        {reprocess.dialog}
       </td>
       <td className={cn(CELL, 'hidden whitespace-nowrap md:table-cell')}>
         <UploadedAt value={doc.created_at} />
@@ -305,7 +353,7 @@ function DocumentTableRow({
         )}
       </td>
       <td className={cn(CELL, 'whitespace-nowrap')}>
-        <StatusBadge status={doc.status} />
+        <StatusBadge status={doc.status} interrupted={interrupted} />
       </td>
       <td className={cn(CELL, 'whitespace-nowrap')}>
         <div className="flex items-center justify-end gap-1">

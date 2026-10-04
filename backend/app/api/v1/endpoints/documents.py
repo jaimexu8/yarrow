@@ -47,6 +47,12 @@ from app.services.failure_messages import (
     QUEUE_FAILED_MESSAGE,
     public_error_message,
 )
+from app.services.reprocess import (
+    ReprocessError,
+    documents_out,
+    reprocess_document,
+    reprocess_info_for,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -349,7 +355,7 @@ async def list_documents(
         .where(Document.owner_id == current_user.id)
         .order_by(Document.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await documents_out(db, list(result.scalars().all()))
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)
@@ -369,6 +375,7 @@ async def get_document(
         select(Page).where(Page.document_id == document_id).order_by(Page.page_number)
     )
     detail = DocumentDetail.model_validate(document)
+    detail.reprocess = (await reprocess_info_for(db, [document]))[document.id]
     # Validated one by one so each gets the user-facing error filter (US-11).
     detail.jobs = [JobOut.model_validate(job) for job in jobs.scalars()]
     detail.pages = [PageOut.model_validate(page) for page in pages.scalars()]
@@ -391,7 +398,33 @@ async def rename_document(
     document.filename = body.filename
     await db.commit()
     await db.refresh(document)
-    return document
+    return (await documents_out(db, [document]))[0]
+
+
+@router.post("/{document_id}/reprocess", response_model=DocumentOut)
+async def reprocess_document_endpoint(
+    access: DocumentAccess = Depends(require_edit_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reprocess a document without uploading it again
+    
+    Interrupted, failed or partly failed documents reprocess only the pages
+    that are not completed, so the task resumes and finished pages are kept.
+    Fully processed (or canceled) documents are processed again in full.
+    """
+    document_id = access.document.id
+    outcome = await reprocess_document(db, document_id, enqueue_document_processing)
+    if not outcome.ok:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+                if outcome.error is ReprocessError.QUEUE_UNAVAILABLE
+                else status.HTTP_409_CONFLICT
+            ),
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+    document = await db.get(Document, document_id, populate_existing=True)
+    return (await documents_out(db, [document]))[0]
 
 
 @router.post("/{document_id}/cancel", response_model=DocumentOut)
@@ -482,71 +515,6 @@ async def delete_document_endpoint(
             )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post("/{document_id}/reprocess", response_model=DocumentOut)
-async def reprocess_document(
-    access: DocumentAccess = Depends(require_edit_access),
-    db: AsyncSession = Depends(get_db),
-):
-    """Reprocess a document whose job finished or was canceled (US-43).
-
-    Only a finished (completed, failed) or canceled job can be reprocessed;
-    a job still queued or processing is a 409 and nothing changes. A worker
-    never acts on a finished or canceled job, so the status check is stable.
-    A new job row is created and queued rather than reusing the old one, so
-    the finished job stays as history.
-    """
-    document = access.document
-    job = (
-        await db.execute(
-            select(Job)
-            .where(Job.document_id == document.id)
-            .order_by(Job.created_at.desc())
-            .limit(1)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-    ).scalar_one_or_none()
-    if job is None or job.status in {"queued", "processing"}:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Only finished or canceled documents can be reprocessed.",
-        )
-
-    new_job = Job(
-        id=uuid4(),
-        document_id=document.id,
-        status="queued",
-        current_stage="queued",
-    )
-    document.status = "queued"
-    document.error_message = None
-    db.add(new_job)
-    # Committed before anything is queued: a worker can pick the message up in
-    # milliseconds, and a task that starts before its rows are visible looks up
-    # a job that does not exist.
-    await db.commit()
-
-    try:
-        task_id = enqueue_document_processing(new_job.id)
-    except Exception:
-        # The job row already exists, so a broker hiccup must not lose it:
-        # mark it failed, like an upload whose enqueue fails.
-        logger.exception(f"Queueing job {new_job.id} failed")
-        new_job.status = "failed"
-        new_job.error_message = QUEUE_FAILED_MESSAGE
-        document.status = "failed"
-        document.error_message = QUEUE_FAILED_MESSAGE
-        await db.commit()
-        await db.refresh(document)
-        return document
-
-    new_job.celery_task_id = task_id
-    await db.commit()
-    await db.refresh(document)
-    return document
-
 
 def _iter_object(handle, chunk_size: int = READ_CHUNK):
     """Yield the object in chunks, always closing the handle"""
