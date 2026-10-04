@@ -130,6 +130,22 @@ export function DocumentLibrary() {
       )
     : documents;
 
+  const sorted = [...visible].sort((a, b) => {
+    let cmp = 0;
+    if (sortCol === 'name') {
+      cmp = a.filename.localeCompare(b.filename);
+    } else if (sortCol === 'date') {
+      const dateA = a.created_at ?? '';
+      const dateB = b.created_at ?? '';
+      cmp = dateA.localeCompare(dateB);
+    } else if (sortCol === 'status') {
+      const statA = a.status ?? '';
+      const statB = b.status ?? '';
+      cmp = statA.localeCompare(statB);
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
   return (
     <div className="space-y-4">
       {status}
@@ -173,9 +189,12 @@ export function DocumentLibrary() {
                   onClick={() => toggleSort('name')}
                 >
                   Document
-                  {sortCol === 'name' && (
-                    sortDir === 'asc' ? <ArrowUp className="size-4" /> : <ArrowDown className="size-4" />
-                  )}
+                  {sortCol === 'name' &&
+                    (sortDir === 'asc' ? (
+                      <ArrowUp className="size-4" />
+                    ) : (
+                      <ArrowDown className="size-4" />
+                    ))}
                 </button>
               </th>
               <th scope="col" className={cn(HEAD, 'hidden md:table-cell')}>
@@ -184,9 +203,12 @@ export function DocumentLibrary() {
                   onClick={() => toggleSort('date')}
                 >
                   Uploaded
-                  {sortCol === 'date' && (
-                    sortDir === 'asc' ? <ArrowUp className="size-4" /> : <ArrowDown className="size-4" />
-                  )}
+                  {sortCol === 'date' &&
+                    (sortDir === 'asc' ? (
+                      <ArrowUp className="size-4" />
+                    ) : (
+                      <ArrowDown className="size-4" />
+                    ))}
                 </button>
               </th>
               <th scope="col" className={cn(HEAD, 'hidden sm:table-cell')}>
@@ -198,9 +220,12 @@ export function DocumentLibrary() {
                   onClick={() => toggleSort('status')}
                 >
                   Status
-                  {sortCol === 'status' && (
-                    sortDir === 'asc' ? <ArrowUp className="size-4" /> : <ArrowDown className="size-4" />
-                  )}
+                  {sortCol === 'status' &&
+                    (sortDir === 'asc' ? (
+                      <ArrowUp className="size-4" />
+                    ) : (
+                      <ArrowDown className="size-4" />
+                    ))}
                 </button>
               </th>
               <th scope="col" className={cn(HEAD, 'text-right')}>
@@ -209,7 +234,7 @@ export function DocumentLibrary() {
             </tr>
           </thead>
           <tbody>
-            {visible.map((doc) => (
+            {sorted.map((doc) => (
               <DocumentTableRow
                 key={doc.id}
                 doc={doc}
