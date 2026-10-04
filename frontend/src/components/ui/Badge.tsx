@@ -1,20 +1,55 @@
-const STATUS_STYLES: Record<string, string> = {
-  queued: 'bg-gray-100 text-gray-700',
-  processing: 'bg-blue-100 text-blue-800',
-  completed: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  canceled: 'bg-yellow-100 text-yellow-800',
+import type { DocumentStatus } from '@/lib/documents';
+import { cn } from '@/lib/cn';
+
+/**
+ * A document's processing status. Each state has its own label and colour,
+ * and the label is always shown, so states are never told apart by colour
+ * alone (NFR-13: queued, processing, completed and failed must be clearly
+ * distinguishable).
+ */
+const STATUS_STYLES: Record<
+  DocumentStatus,
+  { label: string; className: string }
+> = {
+  queued: {
+    label: 'Queued',
+    className: 'border-slate-300 bg-slate-100 text-slate-700',
+  },
+  processing: {
+    label: 'Processing',
+    className: 'border-sky-200 bg-sky-50 text-sky-800',
+  },
+  completed: {
+    label: 'Completed',
+    className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  },
+  failed: {
+    label: 'Failed',
+    className: 'border-red-200 bg-red-50 text-red-800',
+  },
+  canceled: {
+    label: 'Canceled',
+    className: 'border-amber-200 bg-amber-50 text-amber-800',
+  },
 };
 
-export function Badge({ status }: { status: string | null }) {
-  const label = status ?? 'unknown';
-  const style = STATUS_STYLES[label] ?? STATUS_STYLES.queued;
-
+export function StatusBadge({
+  status,
+  className,
+}: {
+  status: DocumentStatus | null;
+  className?: string;
+}) {
+  const style = status ? STATUS_STYLES[status] : undefined;
   return (
     <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${style}`}
+      className={cn(
+        'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium',
+        style?.className ?? 'border-slate-300 bg-white text-slate-600',
+        className
+      )}
     >
-      {label}
+      {style?.label ?? 'Unknown'}
     </span>
   );
 }

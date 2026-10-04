@@ -2,6 +2,7 @@ import logging
 import os
 from dataclasses import dataclass
 from io import BytesIO
+from typing import ClassVar
 from uuid import UUID, uuid4
 
 import filetype
@@ -23,6 +24,9 @@ from yarrow_db.models import (
 )
 from yarrow_db.session import session_scope
 from yarrow_storage import get_storage
+
+from app.pipeline.document_parser import DocumentParser
+from app.tasks import ingestion
 
 logger = logging.getLogger(__name__)
 
@@ -58,16 +62,11 @@ class TestInitializer:
     def job_ids(self) -> list[UUID]:
         return [record.job_id for record in self.records]
 
-    def configure(
-        self, filenames: list[str], filepaths: list[str]
-    ) -> list[SeededDocument]:
+    def configure(self, filenames: list[str], filepaths: list[str]) -> list[SeededDocument]:
         """Upload each file and insert its document and job rows"""
 
         if len(filenames) != len(filepaths):
-            raise ValueError(
-                f"filenames and filepaths must be the same length, "
-                f"got {len(filenames)} and {len(filepaths)}"
-            )
+            raise ValueError(f"filenames and filepaths must be the same length, " f"got {len(filenames)} and {len(filepaths)}")
 
         owner: User | None = None
         if self.owner_id is None:
@@ -169,22 +168,20 @@ class TestInitializer:
     def _delete_rows(document_ids: list[UUID]) -> None:
         """Delete the documents and everything related to them from the database."""
 
-        pages = select(Page.id).where(Page.document_id.in_(document_ids))
-        regions = select(Region.id).where(Region.page_id.in_(pages))
-        tables = select(Table.id).where(Table.document_id.in_(document_ids))
-        region_tables = select(RegionTable.id).where(
-            RegionTable.region_id.in_(regions) | RegionTable.table_id.in_(tables)
-        )
+        page_ids = select(Page.id).where(Page.document_id.in_(document_ids))
+        region_ids = select(Region.id).where(Region.page_id.in_(page_ids))
+        table_ids = select(Table.id).where(Table.document_id.in_(document_ids))
+        region_table_ids = select(RegionTable.id).where(RegionTable.region_id.in_(region_ids) | RegionTable.table_id.in_(table_ids))
 
         statements = [
-            delete(TableCell).where(TableCell.region_table_id.in_(region_tables)),
-            delete(RegionTable).where(RegionTable.id.in_(region_tables)),
-            delete(RegionText).where(RegionText.region_id.in_(regions)),
-            delete(RegionImage).where(RegionImage.region_id.in_(regions)),
-            delete(Warning).where(Warning.page_id.in_(pages)),
-            delete(Region).where(Region.id.in_(regions)),
-            delete(Page).where(Page.id.in_(pages)),
-            delete(Table).where(Table.id.in_(tables)),
+            delete(TableCell).where(TableCell.region_table_id.in_(region_table_ids)),
+            delete(RegionTable).where(RegionTable.id.in_(region_table_ids)),
+            delete(RegionText).where(RegionText.region_id.in_(region_ids)),
+            delete(RegionImage).where(RegionImage.region_id.in_(region_ids)),
+            delete(Warning).where(Warning.page_id.in_(page_ids)),
+            delete(Region).where(Region.id.in_(region_ids)),
+            delete(Page).where(Page.id.in_(page_ids)),
+            delete(Table).where(Table.id.in_(table_ids)),
             delete(Job).where(Job.document_id.in_(document_ids)),
             delete(DocumentShare).where(DocumentShare.document_id.in_(document_ids)),
             delete(Document).where(Document.id.in_(document_ids)),
@@ -195,9 +192,33 @@ class TestInitializer:
             for statement in statements:
                 session.execute(statement.execution_options(synchronize_session=False))
 
+class FakeDocumentParser(DocumentParser):
+    failed: ClassVar[set[int]] = set()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failed = set(FakeDocumentParser.failed)
+
+    @classmethod
+    def configure(cls, failed=()):
+        cls.failed = set(failed)
+
+    def _process_page_isolated(self, page_index: int, page_data: str):
+        if page_index in self.failed:
+            self.page_errors[page_index] = "Exception: Simulated failure"
+            return {}
+
+        return super()._process_page_isolated(page_index, page_data)
+        
 
 @pytest.fixture
 def test_initializer():
     initializer = TestInitializer()
     yield initializer
     initializer.teardown()
+
+@pytest.fixture
+def parser(monkeypatch):
+    parser = FakeDocumentParser()
+    monkeypatch.setattr(ingestion, "DocumentParser", FakeDocumentParser)
+    return parser

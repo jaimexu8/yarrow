@@ -4446,7 +4446,7 @@
         "pages": 28,
         "regions": 355,
         "region_texts": 300,
-        "tables": 31,
+        "tables": 42,
         "region_tables": 55,
         "table_cells": 749
       },
@@ -4483,9 +4483,9 @@
           ]
         },
         {
-          "row_count": 9,
+          "row_count": 4,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -4506,13 +4506,21 @@
                 [3, 0, 1, 1, false],
                 [3, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 5,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 4,
               "region_reading_order": 0,
-              "row_start": 4,
-              "row_end": 8,
+              "row_start": 0,
+              "row_end": 4,
               "col_start": 0,
               "col_end": 1,
               "cells": [
@@ -4773,9 +4781,9 @@
           ]
         },
         {
-          "row_count": 8,
+          "row_count": 4,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -4796,13 +4804,21 @@
                 [3, 0, 1, 1, false],
                 [3, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 4,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 8,
               "region_reading_order": 7,
-              "row_start": 4,
-              "row_end": 7,
+              "row_start": 0,
+              "row_end": 3,
               "col_start": 0,
               "col_end": 1,
               "cells": [
@@ -4819,9 +4835,9 @@
           ]
         },
         {
-          "row_count": 9,
+          "row_count": 5,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -4844,13 +4860,21 @@
                 [4, 0, 1, 1, false],
                 [4, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 4,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 9,
               "region_reading_order": 0,
-              "row_start": 5,
-              "row_end": 8,
+              "row_start": 0,
+              "row_end": 3,
               "col_start": 0,
               "col_end": 1,
               "cells": [
@@ -4896,9 +4920,9 @@
           ]
         },
         {
-          "row_count": 9,
+          "row_count": 4,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -4919,13 +4943,21 @@
                 [3, 0, 1, 1, false],
                 [3, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 5,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 10,
               "region_reading_order": 5,
-              "row_start": 4,
-              "row_end": 8,
+              "row_start": 0,
+              "row_end": 4,
               "col_start": 0,
               "col_end": 1,
               "cells": [
@@ -4944,9 +4976,9 @@
           ]
         },
         {
-          "row_count": 8,
+          "row_count": 4,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -4967,13 +4999,21 @@
                 [3, 0, 1, 1, false],
                 [3, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 4,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 11,
               "region_reading_order": 3,
-              "row_start": 4,
-              "row_end": 7,
+              "row_start": 0,
+              "row_end": 3,
               "col_start": 0,
               "col_end": 1,
               "cells": [
@@ -5084,9 +5124,9 @@
           ]
         },
         {
-          "row_count": 8,
+          "row_count": 4,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -5107,13 +5147,21 @@
                 [3, 0, 1, 1, false],
                 [3, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 4,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 13,
               "region_reading_order": 3,
-              "row_start": 4,
-              "row_end": 7,
+              "row_start": 0,
+              "row_end": 3,
               "col_start": 0,
               "col_end": 1,
               "cells": [
@@ -5130,9 +5178,9 @@
           ]
         },
         {
-          "row_count": 9,
+          "row_count": 5,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -5155,13 +5203,21 @@
                 [4, 0, 1, 1, false],
                 [4, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 4,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 14,
               "region_reading_order": 0,
-              "row_start": 5,
-              "row_end": 8,
+              "row_start": 0,
+              "row_end": 3,
               "col_start": 0,
               "col_end": 1,
               "cells": [
@@ -5205,9 +5261,9 @@
           ]
         },
         {
-          "row_count": 8,
+          "row_count": 4,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -5228,13 +5284,21 @@
                 [3, 0, 1, 1, false],
                 [3, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 4,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 15,
               "region_reading_order": 4,
-              "row_start": 4,
-              "row_end": 7,
+              "row_start": 0,
+              "row_end": 3,
               "col_start": 0,
               "col_end": 1,
               "cells": [
@@ -5251,9 +5315,9 @@
           ]
         },
         {
-          "row_count": 8,
+          "row_count": 4,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -5274,13 +5338,21 @@
                 [3, 0, 1, 1, false],
                 [3, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 4,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 16,
               "region_reading_order": 0,
-              "row_start": 4,
-              "row_end": 7,
+              "row_start": 0,
+              "row_end": 3,
               "col_start": 0,
               "col_end": 1,
               "cells": [
@@ -5324,9 +5396,9 @@
           ]
         },
         {
-          "row_count": 7,
+          "row_count": 4,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -5347,13 +5419,21 @@
                 [3, 0, 1, 1, false],
                 [3, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 3,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 17,
               "region_reading_order": 4,
-              "row_start": 4,
-              "row_end": 6,
+              "row_start": 0,
+              "row_end": 2,
               "col_start": 0,
               "col_end": 1,
               "cells": [
@@ -5464,9 +5544,9 @@
           ]
         },
         {
-          "row_count": 9,
+          "row_count": 4,
           "col_count": 2,
-          "is_stitched": true,
+          "is_stitched": false,
           "title": null,
           "parts": [
             {
@@ -5487,13 +5567,21 @@
                 [3, 0, 1, 1, false],
                 [3, 1, 1, 1, false]
               ]
-            },
+            }
+          ]
+        },
+        {
+          "row_count": 5,
+          "col_count": 2,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
             {
-              "reading_order": 1,
+              "reading_order": 0,
               "page_number": 19,
               "region_reading_order": 7,
-              "row_start": 4,
-              "row_end": 8,
+              "row_start": 0,
+              "row_end": 4,
               "col_start": 0,
               "col_end": 1,
               "cells": [

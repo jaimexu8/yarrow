@@ -5,14 +5,13 @@ import re
 import sys
 from html.parser import HTMLParser
 
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 import filetype
 
 from app.core.config import settings
 from app.pipeline.document_parser import DocumentParser
+from app.pipeline.reading_order import order_blocks
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEST_DOCS_DIR = os.path.join(HERE, "..", "test_docs")
@@ -82,24 +81,18 @@ def grid_shape(cells):
 # --------------------------------------------------------------------------- #
 # Pruned result -> model graph
 # --------------------------------------------------------------------------- #
-def reading_order(blocks):
+def reading_order(blocks, page_width=None):
     """The page's blocks in the order their regions are written in.
 
-    block_order is the model's reading order but is usable only when every block
-    on the page has one. block_id indexes the layout areas in document order
-    and is the fallback. Array order is the last resort.
+    Delegates to the worker's shared reading-order sort, so the
+    ground-truth graphs and the stored regions can never disagree on order.
     """
-    if not blocks:
-        return []
-    for key in ("block_order", "block_id"):
-        if all(isinstance(block.get(key), int) for block in blocks):
-            return sorted(blocks, key=lambda block: block[key])
-    return list(blocks)
+    return order_blocks(blocks, page_width)
 
 
 def page_graph(page_number, pruned_page):
     """One page's expected regions and the table part each table region holds."""
-    blocks = reading_order(pruned_page.get("parsing_res_list") or [])
+    blocks = reading_order(pruned_page.get("parsing_res_list") or [], pruned_page.get("width"))
 
     regions = []
     parts = []
@@ -118,9 +111,7 @@ def page_graph(page_number, pruned_page):
                 "is_table": is_table,
                 # A table's content becomes cells, and an image's becomes
                 # nothing; everything else with content gets a RegionText.
-                "has_text": bool(content)
-                and not is_table
-                and label not in IMAGE_LABELS,
+                "has_text": bool(content) and not is_table and label not in IMAGE_LABELS,
             }
         )
 
@@ -143,6 +134,7 @@ def page_graph(page_number, pruned_page):
 
     for part in parts:
         part["table_count_on_page"] = len(parts)
+        part["page_total_reading_order"] = len(blocks) - 1
 
     return {"page_number": page_number, "regions": regions}, parts
 
@@ -155,8 +147,8 @@ def continues(part, previous):
     """
     return (
         part["page_number"] == previous["page_number"] + 1
-        and previous["position_on_page"] == previous["table_count_on_page"] - 1
-        and part["position_on_page"] == 0
+        and previous["region_reading_order"] == previous["page_total_reading_order"]
+        and part["region_reading_order"] == 0
         and part["col_count"] > 0
         and part["col_count"] == previous["col_count"]
     )
@@ -281,6 +273,7 @@ def record(name):
     return truth
 
 
+
 def dumps(truth):
     """Dump the ground truth as a JSON string with compact cell lines."""
 
@@ -304,8 +297,7 @@ def main(names):
     names = names or sorted(
         name
         for name in os.listdir(TEST_DOCS_DIR)
-        if os.path.isfile(os.path.join(TEST_DOCS_DIR, name))
-        and not name.startswith(".")
+        if os.path.isfile(os.path.join(TEST_DOCS_DIR, name)) and not name.startswith(".")
     )
 
     for name in names:

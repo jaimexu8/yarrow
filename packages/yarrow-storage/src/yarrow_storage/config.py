@@ -4,12 +4,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class StorageSettings(BaseSettings):
     """Object store settings shared by every service that reads or writes files.
 
-    The defaults describe the compose stack (MinIO). On AWS, leave S3_ENDPOINT
+    The defaults describe the compose stack (rustfs). On AWS, leave S3_ENDPOINT
     unset so boto3 resolves the regional endpoint, and leave the key pair unset
     so it picks up the task or instance role.
     """
 
-    S3_ENDPOINT: str | None = "http://minio:9000"  # None on real AWS
+    S3_ENDPOINT: str | None = "http://rustfs:9000"  # None on real AWS
     S3_ACCESS_KEY: str | None = None
     S3_SECRET_KEY: str | None = None
     S3_REGION: str = "us-east-1"

@@ -25,6 +25,7 @@ from app.pipeline.file_loaders.jpeg_loader import JPEGLoader
 from app.pipeline.file_loaders.jpg_loader import JPGLoader
 from app.pipeline.file_loaders.pdf_loader import PDFLoader
 from app.pipeline.file_loaders.png_loader import PNGLoader
+from app.pipeline.reading_order import order_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -148,9 +149,7 @@ class _TableHtmlParser(HTMLParser):
     def _close_cell(self) -> None:
         if self._current_cell_data is None:
             return
-        self._current_cell_data["text"] = " ".join(
-            self._current_cell_data["text"].split()
-        )
+        self._current_cell_data["text"] = " ".join(self._current_cell_data["text"].split())
         self.cells.append(self._current_cell_data)
         self._current_cell_data = None
         self._depth = 0
@@ -182,11 +181,7 @@ class DocumentParser:
     def load_file(self, file_data: bytes) -> None:
         file_extension = self.detect_extension(file_data)
 
-        loader = (
-            self.FILE_EXTENSION_TO_LOADER.get(file_extension)
-            if file_extension is not None
-            else None
-        )
+        loader = self.FILE_EXTENSION_TO_LOADER.get(file_extension) if file_extension is not None else None
         if loader is None:
             raise ValueError(f"No loader found for file extension: {file_extension}")
 
@@ -214,38 +209,49 @@ class DocumentParser:
             return self.process_page(page_data)
         except Exception as error:
             error_message = f"{type(error).__name__}: {error}"
-            logger.error(f"Page {page_index + 1} processing failed: ({error_message})")
+            logger.error(f"Page {page_index + 1} processing failed: " f"({error_message})")
 
         self.page_errors[page_index] = error_message
         return {}
 
-    async def process_async(self) -> None:
+    async def process_async(self, page_to_process: tuple | None = None) -> None:
         self.page_errors = {}
-        tasks = [
-            asyncio.to_thread(self._process_page_isolated, index, page)
-            for index, page in enumerate(self.pages)
-        ]
+        
+        # Creates processing tasks for each page that needs to be processed
+        tasks = [asyncio.to_thread(self._process_page_isolated, index, page) for index, page in enumerate(self.pages) if page_to_process is None or index + 1 in page_to_process]
+        results = list(await asyncio.gather(*tasks))
+        
+        if page_to_process is None:
+            # Assumed that all pages are being processed
+            self.parsed_result = results
+        else:
+            if len(self.parsed_result) != len(self.pages):
+                # Initialize the parsed_result list with empty dictionaries for all pages
+                self.parsed_result = [{} for _ in range(len(self.pages))]
+            
+            # Selectively updating the parsed results for the specified pages
+            for i, result in zip(page_to_process, results):
+                self.parsed_result[i - 1] = result
 
-        self.parsed_result = list(await asyncio.gather(*tasks))
-
-    def process_sync(self) -> None:
-        asyncio.run(self.process_async())
+    def process_sync(self, page_to_process: tuple | None = None) -> None:
+        asyncio.run(self.process_async(page_to_process))
 
     def get_pruned_result(self) -> list[JsonDict]:
-        return [
-            response.get("result")
-            .get("layoutParsingResults", {})[0]
-            .get("prunedResult")
-            for response in self.parsed_result
-        ]
+        pruned_results = []
+        for response in self.parsed_result:
+            if not response:
+                # Page processing failed, no result to prune.
+                pruned_results.append({})
+                continue
+            pruned_results.append(
+                response.get("result", {}).get("layoutParsingResults", {})[0].get("prunedResult")
+            )
+        return pruned_results
 
     def get_markdown(self) -> list[str]:
         markdown: list[str] = []
         for response in self.parsed_result:
-            markdown.extend(
-                (item.get("markdown") or {}).get("text", "")
-                for item in self._result_items(response)
-            )
+            markdown.extend((item.get("markdown") or {}).get("text", "") for item in self._result_items(response))
         return markdown
 
     def _consecutive_parts(self, part_prev, part_curr):
@@ -256,8 +262,8 @@ class DocumentParser:
         """
         return (
             part_curr["page_index"] == part_prev["page_index"] + 1
-            and part_prev["position"] == part_prev["page_table_count"] - 1
-            and part_curr["position"] == 0
+            and part_prev["region_reading_order"] == part_prev["page_total_reading_order"] - 1
+            and part_curr["region_reading_order"] == 0
             and part_curr["col_count"] > 0
             and part_curr["col_count"] == part_prev["col_count"]
         )
@@ -266,11 +272,7 @@ class DocumentParser:
         groups: list[list[JsonDict]] = []
 
         for part in region_table_data:
-            if (
-                merge_consecutive_tables
-                and groups
-                and self._consecutive_parts(groups[-1][-1], part)
-            ):
+            if merge_consecutive_tables and groups and self._consecutive_parts(groups[-1][-1], part):
                 groups[-1].append(part)
             else:
                 groups.append([part])
@@ -328,11 +330,11 @@ class DocumentParser:
         region_tables: list[RegionTable] = []
         table_cells: list[TableCell] = []
         title = None
-
+        
         for part in group:
             if part["title"]:
                 title = part["title"]
-
+        
         table = Table(
             id=uuid.uuid4(),
             document_id=document.id,
@@ -367,7 +369,6 @@ class DocumentParser:
                 row_count=part["row_count"],
                 col_count=part["col_count"],
             ):
-                print(cell)
                 table_cell = TableCell(
                     id=uuid.uuid4(),
                     region_table_id=region_table.id,
@@ -400,19 +401,12 @@ class DocumentParser:
         return [
             (
                 block,
-                next(table_results, None)
-                if block.get("block_label") in TABLE_LABELS
-                else None,
+                next(table_results, None) if block.get("block_label") in TABLE_LABELS else None,
             )
             for block in blocks
         ]
 
-    def _get_bbox_score(
-        self,
-        layout_det_res: JsonDict,
-        label: str | None,
-        bbox: list[float] | None,
-    ) -> float | None:
+    def _get_bbox_score(self, layout_det_res: JsonDict, label: str | None, bbox: list[float] | None) -> float | None:
         if not bbox:
             return None
 
@@ -422,12 +416,7 @@ class DocumentParser:
         for box_det_res in layout_det_res.get("boxes") or []:
             coordinate_det = box_det_res.get("coordinate")
             label_det, score_det = box_det_res.get("label"), box_det_res.get("score")
-            if (
-                not coordinate_det
-                or len(coordinate_det) != 4
-                or label is None
-                or score_det is None
-            ):
+            if not coordinate_det or len(coordinate_det) != 4 or label is None or score_det is None:
                 continue
 
             box = (
@@ -446,19 +435,22 @@ class DocumentParser:
         best_iou, score = max(candidates, key=lambda pair: pair[0])
         return score if best_iou >= LAYOUT_SCORE_IOU_THRESHOLD else None
 
-    def _sort_region_data(self, pairs: list[BlockWithTable]) -> list[BlockWithTable]:
+    def _sort_region_data(
+        self, pairs: list[BlockWithTable], page_width: float | None
+    ) -> list[BlockWithTable]:
         """The page's region data in the order their regions are written in.
 
-        block_order is the model's reading order but is usable only when every block
-        on the page has one. block_id indexes the layout areas in document order
-        and is the fallback. Array order is the last resort.
+        Multi-column pages are regrouped column by column from block geometry.
+        Where the geometry is not usable, block_order is the model's reading
+        order, usable only when every block on the page has one. block_id
+        indexes the layout areas in document order and is the fallback. Array
+        order is the last resort.
         """
         if not pairs:
             return []
-        for key in ("block_order", "block_id"):
-            if all(isinstance(block.get(key), int) for block, _ in pairs):
-                return sorted(pairs, key=lambda pair: pair[0][key])
-        return list(pairs)
+        ordered_blocks = order_blocks([block for block, _ in pairs], page_width)
+        pair_by_block = {id(pair[0]): pair for pair in pairs}
+        return [pair_by_block[id(block)] for block in ordered_blocks]
 
     def _construct_regions(self, page_index, page_id, page_data):
         regions = []  # Any region except table regions
@@ -466,20 +458,12 @@ class DocumentParser:
 
         previous_title: str | None = None
 
-        region_data_to_table_results: list[tuple[JsonDict, JsonDict | None]] = (
-            self._pair_tables(page_data)
-        )
+        region_data_to_table_results: list[tuple[JsonDict, JsonDict | None]] = self._pair_tables(page_data)
         region_data_to_table_results = self._sort_region_data(
-            region_data_to_table_results
-        )
-        page_table_count = sum(
-            int(region_data.get("block_label") in TABLE_LABELS)
-            for region_data, _ in region_data_to_table_results
+            region_data_to_table_results, page_data.get("width")
         )
 
-        for reading_order, (region_data, table_result) in enumerate(
-            region_data_to_table_results
-        ):
+        for reading_order, (region_data, table_result) in enumerate(region_data_to_table_results):
             label: str | None = region_data.get("block_label")
             content: str | None = region_data.get("block_content")
             bbox: list[float] | None = region_data.get("block_bbox")
@@ -498,9 +482,7 @@ class DocumentParser:
                 y0=bbox[1] if bbox else 0,
                 x1=bbox[2] if bbox else 0,
                 y1=bbox[3] if bbox else 0,
-                confidence=self._get_bbox_score(
-                    page_data.get("layout_det_res", {}), label, bbox
-                ),
+                confidence=self._get_bbox_score(page_data.get("layout_det_res", {}), label, bbox),
             )
             regions.append(region)
 
@@ -524,25 +506,18 @@ class DocumentParser:
                     {
                         "page_index": page_index,
                         "page_id": page_id,
-                        "position": len(region_tables_data),
-                        "page_table_count": page_table_count,
+                        "region_reading_order": reading_order,
+                        "page_total_reading_order": len(region_data_to_table_results) - 1,
                         "region": region,
-                        "result": table_result,
                         "bbox": bbox,
                         "cells": parser.cells,
                         "cell_boxes": cell_boxes,
                         "row_count": max(
-                            (
-                                cell["row_idx"] + cell["row_span"]
-                                for cell in parser.cells
-                            ),
+                            (cell["row_idx"] + cell["row_span"] for cell in parser.cells),
                             default=0,
                         ),
                         "col_count": max(
-                            (
-                                cell["col_idx"] + cell["col_span"]
-                                for cell in parser.cells
-                            ),
+                            (cell["col_idx"] + cell["col_span"] for cell in parser.cells),
                             default=0,
                         ),
                         "content": content,
@@ -556,9 +531,7 @@ class DocumentParser:
                         id=uuid.uuid4(),
                         region_id=region.id,
                         text_content=content,
-                        confidence=self._get_bbox_score(
-                            page_data.get("layout_det_res", {}), label, bbox
-                        ),
+                        confidence=self._get_bbox_score(page_data.get("layout_det_res", {}), label, bbox),
                     )
                 )
 
@@ -566,14 +539,13 @@ class DocumentParser:
 
         return regions, region_tables_data
 
-    def to_model_objects(
-        self, document: Document, merge_consecutive_tables: bool = False
-    ) -> list[Base]:
+    def to_model_objects(self, document: Document, target_pages: tuple | None = None, merge_consecutive_tables: bool = False) -> list[Base]:
         """
         Converts the parsed result into model objects.
 
         Args:
             document: The Document these pages belong to
+            target_pages (Optional[Tuple]): Specific pages to include in the model objects. Defaults to all pages.
             merge_consecutive_tables (bool): Whether to merge consecutive tables across pages that
             have the same number of columns
 
@@ -592,10 +564,10 @@ class DocumentParser:
 
         # Reconstruct each page sequentially, constructing regions
         for page_index, page_data in enumerate(pruned_result):
-            if page_data == {}:
-                # Page processing failed, continue
+            if target_pages is not None and page_index + 1 not in target_pages:
+                # Page is not in the target pages, skip it
                 continue
-
+            
             # Construct page object
             page_id = uuid.uuid4()
             error_message = self.page_errors.get(page_index)
@@ -609,11 +581,13 @@ class DocumentParser:
                 error_message=error_message,
             )
             pages.append(page)
+            
+            if page_data == {}:
+                # Page processing failed, continue
+                continue
 
             # Construct regions for each page
-            page_regions, region_tables_data_per_page = self._construct_regions(
-                page_index, page_id, page_data
-            )
+            page_regions, region_tables_data_per_page = self._construct_regions(page_index, page_id, page_data)
 
             regions.extend(page_regions)
             region_table_data.extend(region_tables_data_per_page)
@@ -623,9 +597,7 @@ class DocumentParser:
 
         # Construct tables and their respective objects
         for group in groups:
-            tables_per_group, region_tables_per_group, table_cells_per_group = (
-                self._build_table(document, group)
-            )
+            tables_per_group, region_tables_per_group, table_cells_per_group = self._build_table(document, group)
             tables.extend(tables_per_group)
             regions.extend(region_tables_per_group)
             regions.extend(table_cells_per_group)

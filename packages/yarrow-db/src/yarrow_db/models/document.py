@@ -22,6 +22,11 @@ class Document(Base):
         String, default="queued"
     )  # queued, processing, completed, failed, canceled
     error_message = Column(String)
+    # Chosen by the client for each file and resent on retries (US-7/US-8).
+    # If an upload's response is lost, retrying with the same id returns the
+    # document already stored instead of creating a duplicate. Unique per
+    # owner (index in migration 0006).
+    client_upload_id = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

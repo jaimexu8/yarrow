@@ -9,9 +9,9 @@ class Settings(DatabaseSettings):
     VALKEY_PORT: str = "6379"
     CELERY_BROKER_URL: str = "redis://valkey:6379/0"
 
-    S3_ENDPOINT: str = "http://minio:9000"
-    S3_ACCESS_KEY: str = "minioadmin"
-    S3_SECRET_KEY: str = "minioadmin"
+    S3_ENDPOINT: str = "http://rustfs:9000"
+    S3_ACCESS_KEY: str = "rustfsadmin"
+    S3_SECRET_KEY: str = "rustfsadmin"
     S3_BUCKET_NAME: str = "yarrow-documents"
     USE_LOCAL_STORAGE: bool = False
 
@@ -24,10 +24,39 @@ class Settings(DatabaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
+    # NFR-6. Turn on wherever the app is served over HTTPS: plain-HTTP
+    # requests are redirected and browsers are told to always use HTTPS. Off
+    # for local development on http://localhost.
+    ENFORCE_HTTPS: bool = False
+
     # Kept for an admin health view; the backend itself never calls inference.
     # Which endpoint the *worker* uses is set in its own Settings.
     INFERENCE_SERVICE_URL: str = "http://gateway:8080/layout-parsing"
     INFERENCE_API_KEY: str = ""
+
+    # Outbound email (US-1 verification, US-67 reset). SMTP_HOST unset means
+    # "no mail server": nothing is sent, which is what a developer running the
+    # backend outside compose gets. Compose points this at Mailpit.
+    SMTP_HOST: str | None = None
+    # Without a mail server, log the full email body (it contains codes and
+    # reset links). For local development only; never enable where logs are
+    # kept or shared (NFR-6).
+    LOG_EMAIL_BODIES: bool = False
+    SMTP_PORT: int = 1025
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_USE_TLS: bool = False
+    EMAIL_FROM: str = "Yarrow <no-reply@yarrow.local>"
+    VERIFICATION_CODE_TTL_MINUTES: int = 15
+    VERIFICATION_MAX_ATTEMPTS: int = 5
+    VERIFICATION_RESEND_COOLDOWN_SECONDS: int = 60
+    VERIFICATION_MAX_SENDS_PER_HOUR: int = 5
+
+    # Password reset (US-67): how long an emailed link works, and how often a
+    # reset email may be sent to one address.
+    PASSWORD_RESET_TTL_MINUTES: int = 30
+    PASSWORD_RESET_COOLDOWN_SECONDS: int = 60
+    PASSWORD_RESET_MAX_PER_HOUR: int = 3
 
     NEXT_PUBLIC_API_URL: str = "http://localhost:8000"
     NEXT_PUBLIC_APP_URL: str = "http://localhost:3000"

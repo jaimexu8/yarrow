@@ -31,3 +31,13 @@ def enqueue_document_processing(job_id: UUID) -> str:
         PROCESS_DOCUMENT_TASK, kwargs={"job_id": str(job_id)}
     )
     return result.id
+
+
+def revoke_document_processing(task_id: str) -> None:
+    """Ask workers to drop a queued task (US-42).
+
+    Best effort: Celery keeps revocations in worker memory only, so a worker
+    that restarts forgets them. The job row marked "canceled" is what really
+    stops processing; the worker checks it before starting.
+    """
+    get_celery().control.revoke(task_id)

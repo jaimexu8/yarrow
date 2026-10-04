@@ -1,0 +1,130 @@
+# Local x86 analog of the ocr_cluster/dgx stack (docker-compose-inference-node.yml
+# and docker-compose-lb.yml merged into one file):
+#
+#   gateway (nginx edge, API-key auth, publishes 8080)
+#     -> hybrid-gateway (fuses PP-StructureV3 layout + PaddleOCR-VL recognition)
+#       -> paddlex-pipeline (PP-StructureV3 on CPU)
+#       -> paddleocr-vl-api (PaddleOCR-VL on CPU, VLM via vlm-server)
+#         -> vlm-server (PaddlePaddle/PaddleOCR-VL on the host GPU)
+name: yarrow-ocr-x86
+
+services:
+  vlm-server:
+    image: vllm/vllm-openai:v0.30.0
+    command:
+      - PaddlePaddle/PaddleOCR-VL
+      - --served-model-name=PaddleOCR-VL-0.9B
+      - --host=0.0.0.0
+      - --port=8000
+      - --trust-remote-code
+      - --mm-encoder-attn-backend=TORCH_SDPA
+      - --gpu-memory-utilization=0.5
+      - --max-model-len=8192
+      - --max-num-seqs=16
+      - --max-num-batched-tokens=8192
+      - --no-enable-prefix-caching
+      - --mm-processor-cache-gb=0
+    volumes:
+      - vlm-hf-cache:/root/.cache/huggingface
+    shm_size: "2gb"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 60
+      start_period: 300s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  paddlex-pipeline:
+    image: yarrow-ocr-x86-paddlex:latest
+    environment:
+      DEVICE: cpu
+      PADDLEX_CPU_THREADS: "4"
+      # paddle 3.3.1's CPU oneDNN path crashes on the PP-StructureV3 layout
+      # model ("ConvertPirAttribute2RuntimeAttribute not support ...",
+      # onednn_instruction.cc). PaddleX's mkldnn blocklist covers only
+      # PP-DocLayoutV2/V3, so disable mkldnn by default on this box.
+      PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT: "False"
+    mem_limit: 6g
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      start_period: 600s
+      interval: 15s
+      timeout: 10s
+      retries: 60
+    restart: unless-stopped
+
+  paddleocr-vl-api:
+    image: yarrow-ocr-x86-paddlex:latest
+    build:
+      context: .
+      dockerfile: paddlex.Dockerfile
+    environment:
+      PIPELINE_NAME: PaddleOCR-VL
+      VLM_SERVER_URL: http://vlm-server:8000/v1
+      DEVICE: cpu
+      PADDLEX_CPU_THREADS: "4"
+      # Same oneDNN workaround as paddlex-pipeline (see there).
+      PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT: "False"
+    depends_on:
+      vlm-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 300s
+    restart: unless-stopped
+
+  hybrid-gateway:
+    build:
+      context: .
+      dockerfile: hybrid-gateway.Dockerfile
+    environment:
+      STRUCTURE_GATEWAY_URL: http://paddlex-pipeline:8080/layout-parsing
+      VL_GATEWAY_URL: http://paddleocr-vl-api:8080/layout-parsing
+    depends_on:
+      paddlex-pipeline:
+        condition: service_healthy
+      paddleocr-vl-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      start_period: 20s
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:1.27-alpine
+    configs:
+      - source: nginx-config
+        target: /etc/nginx/templates/nginx.conf.template
+    environment:
+      GATEWAY_API_KEY: "${GATEWAY_API_KEY:?set GATEWAY_API_KEY in ocr_cluster/x86/.env}"
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
+      NGINX_ENVSUBST_FILTER: "^GATEWAY_"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  vlm-hf-cache:
+
+configs:
+  nginx-config:
+    file: ./nginx.conf.template
