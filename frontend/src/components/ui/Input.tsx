@@ -20,6 +20,9 @@ type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   error?: string;
   /** Rendered inside the right edge of the input (e.g. a show-password toggle). */
   trailing?: ReactNode;
+  /** Keep the label for screen readers only, when a visible heading next to
+   * the field already names it (e.g. a settings row). */
+  hideLabel?: boolean;
 };
 
 /**
@@ -56,6 +59,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     invalidMessage,
     error,
     trailing,
+    hideLabel = false,
     className,
     onBlur,
     onInput,
@@ -80,7 +84,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 
   return (
     <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-sm font-medium text-slate-900">
+      <label
+        htmlFor={id}
+        className={cn(
+          'block text-sm font-medium text-slate-900',
+          hideLabel && 'sr-only'
+        )}
+      >
         {label}
       </label>
       {hint && (

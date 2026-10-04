@@ -1,0 +1,18 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "yarrow-ocr-paddlex"
+version = "0.1.0"
+description = "PaddleX PaddleOCR-VL API: CPU layout detection plus a remote vLLM backend"
+authors = ["Team 13"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+# Stock x86 CPU wheel from PyPI. paddlex does not pin paddlepaddle at all
+paddlepaddle = ">=3.3.0,<3.4"
+
+paddleocr = {extras = ["doc-parser"], version = ">=3.4.0,<3.5"}
+paddlex = {extras = ["serving"], version = ">=3.4.0,<3.5"}

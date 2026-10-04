@@ -31,6 +31,8 @@ type AuthContextType = {
    * server has already ended it (e.g. a password reset ends every session).
    */
   clearSession: () => void;
+  /** Load the signed-in user again, e.g. after their name or email changed. */
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -108,6 +110,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setStatus('unauthenticated');
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const gen = generation.current;
+    const me = await fetchMe();
+    // Ignore it if the session changed (logout, another sign-in) meanwhile.
+    if (gen === generation.current) setUser(me);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -116,8 +125,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       login,
       logout,
       clearSession,
+      refreshUser,
     }),
-    [user, status, login, logout, clearSession]
+    [user, status, login, logout, clearSession, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

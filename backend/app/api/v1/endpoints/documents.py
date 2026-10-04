@@ -484,7 +484,7 @@ async def delete_document_endpoint(
 ):
     """Permanently delete a document, its extracted data and its jobs.
 
-    Allowed in any processing state. A worker that runs it anyway finds its 
+    Allowed in any processing state. A worker that runs it anyway finds its
     job gone. If processing is saving results for this document at that moment,
     the request answers 409 after a short wait instead of hanging, and can
     simply be retried.
@@ -515,7 +515,6 @@ async def delete_document_endpoint(
             )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
 
 def _iter_object(handle, chunk_size: int = READ_CHUNK):
     """Yield the object in chunks, always closing the handle"""

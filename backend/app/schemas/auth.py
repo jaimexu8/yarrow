@@ -38,6 +38,18 @@ class UserCreate(BaseModel):
     name: str | None = None
 
 
+class UserDelete(BaseModel):
+    # Re-entered on deletion so that a stolen or left-open session alone cannot
+    # destroy the account.
+    password: str
+    
+class UserUpdate(BaseModel):
+    name: str | None = None
+    email: NormalizedEmail
+    current_password: str
+    password: NewPassword | None = None
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

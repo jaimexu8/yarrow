@@ -1,0 +1,77 @@
+events {}
+
+http {
+    # The key is a map key, and nginx sizes map hash buckets to the longest
+    # entry. The default 64 bytes is smaller than a 64-char hex key plus
+    # overhead, which aborts startup with "could not build map_hash".
+    # 256 leaves room to rotate to a longer key without touching this file.
+    map_hash_bucket_size 256;
+
+    # --- API key authentication ------------------------------------------
+    # Rendered from this template by the nginx image's envsubst entrypoint, so
+    # the key itself lives in the environment (GATEWAY_API_KEY) and never in a
+    # file under version control. NGINX_ENVSUBST_FILTER restricts substitution
+    # to GATEWAY_* so nginx's own $variables below are left untouched.
+    #
+    # The key may be sent either way:
+    #     X-API-Key: <key>
+    #     Authorization: Bearer <key>
+    map $http_authorization $bearer_token {
+        default                      "";
+        "~*^Bearer\s+(?<token>\S+)$" $token;
+    }
+
+    # Prefer X-API-Key; fall back to the bearer token when it is absent.
+    map $http_x_api_key $supplied_key {
+        default  $http_x_api_key;
+        ""       $bearer_token;
+    }
+
+    # Fails closed: anything that is not an exact match -- including an absent
+    # header, which arrives here as "" -- falls through to the 0 default.
+    # docker-compose-lb.yml refuses to start if GATEWAY_API_KEY is unset, so
+    # this can never degenerate into an empty key matching an empty header.
+    map $supplied_key $api_key_valid {
+        default              0;
+        "${GATEWAY_API_KEY}" 1;
+    }
+
+    upstream pipeline_backends {
+        server hybrid-gateway:8080;
+        # Optionally include more inference nodes here
+    }
+
+    server {
+        listen 8080;
+
+        # Deliberately unauthenticated: this is the container healthcheck and
+        # any external load-balancer probe. It exposes no pipeline capability.
+        location = /healthz {
+            access_log off;
+            return 200 "ok\n";
+        }
+
+        location / {
+            default_type application/json;
+
+            if ($api_key_valid = 0) {
+                return 401 '{"error":"unauthorized","detail":"supply a valid key in the X-API-Key or Authorization: Bearer header"}';
+            }
+
+            proxy_pass http://pipeline_backends;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            # Do not forward the caller's credential to the backend: the key
+            # authenticates the client to this edge, and hybrid-gateway has no
+            # use for it.
+            proxy_set_header X-API-Key "";
+            proxy_set_header Authorization "";
+            proxy_connect_timeout 2s;
+            proxy_read_timeout 10m;
+            proxy_send_timeout 10m;
+            proxy_next_upstream error timeout http_502 http_503 http_504;
+        }
+    }
+}

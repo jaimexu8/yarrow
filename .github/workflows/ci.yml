@@ -84,3 +84,14 @@ jobs:
         run: |
           cd frontend
           npm run build
+
+  compose-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Check dev compose is in sync with root compose
+        run: python3 scripts/sync-dev-compose.py --check

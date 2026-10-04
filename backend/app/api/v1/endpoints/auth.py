@@ -1,13 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import (
-    APIRouter,
-    BackgroundTasks,
-    Depends,
-    HTTPException,
-    Response,
-    status,
-)
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,10 +40,13 @@ from app.schemas import (
     ResendVerificationRequest,
     Token,
     UserCreate,
+    UserDelete,
     UserOut,
+    UserUpdate,
     VerifyEmailRequest,
     normalize_email,
 )
+from app.services.account import delete_account, update_account
 
 INVALID_CODE = "Invalid or expired verification code"
 # Same reply whether or not the address is registered, so resend cannot be
@@ -257,6 +253,46 @@ async def login(
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(
+    payload: UserDelete,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not verify_password(payload.password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"detail": "Incorrect password", "code": "INVALID_PASSWORD"},
+        )
+
+    outcome = await delete_account(db, current_user.id)
+    if not outcome.ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.put("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def update_me(
+    payload: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"detail": "Incorrect current password", "code": "INVALID_PASSWORD"},
+        )
+
+    outcome = await update_account(db, current_user.id, payload)
+    if not outcome.ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(

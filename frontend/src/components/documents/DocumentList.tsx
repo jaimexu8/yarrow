@@ -13,7 +13,11 @@ import {
   FailureNote,
   RenameForm,
   useCancelProcessing,
+  useReprocessDocument,
 } from './documentActions';
+
+// Mirrors the server's rules: only finished, failed, or canceled docs.
+const REPROCESSABLE = new Set(['failed', 'completed', 'canceled']);
 
 function formatDate(value: string | null): string {
   if (!value) return '';
@@ -83,6 +87,10 @@ function DocumentRow({
     doc,
     onChanged
   );
+  const { reprocess, reprocessing, reprocessError } = useReprocessDocument(
+    doc,
+    onChanged
+  );
 
   function stopEditing() {
     setEditing(false);
@@ -113,6 +121,11 @@ function DocumentRow({
             {cancelError}
           </p>
         )}
+        {reprocessError && (
+          <p role="alert" className="mt-0.5 text-xs text-red-700">
+            {reprocessError}
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-3">
         {/* Only while queued: a started or finished job can't be canceled. */}
@@ -124,6 +137,17 @@ function DocumentRow({
             aria-label={`Cancel processing of ${doc.filename}`}
           >
             Cancel
+          </Button>
+        )}
+        {/* Only once finished, failed, or canceled: the server re-queues a new job. */}
+        {!editing && doc.status && REPROCESSABLE.has(doc.status) && (
+          <Button
+            variant="link"
+            onClick={reprocess}
+            loading={reprocessing}
+            aria-label={`Reprocess ${doc.filename}`}
+          >
+            Reprocess
           </Button>
         )}
         {!editing && (
