@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
@@ -20,7 +20,7 @@ import {
 import { isWorkingOn } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
 import { getDocumentTree, type DocumentTree } from '@/lib/viewer';
-import { TableOperationsDropdown } from '@/components/viewer/TableOperationsButton';
+import { TableOperationsDropdown } from '@/components/viewer/TableOperationsMenu';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -83,7 +83,7 @@ export default function DocumentViewerPage({
   }, [params.id, attempt]);
 
   // Fetch the document again, for instance, after starting a reprocess.
-  const refresh = () => setAttempt((count) => count + 1);
+  const refresh = useCallback(() => setAttempt((count) => count + 1), []);
 
   if (load.state === 'loading') {
     return (
@@ -140,6 +140,7 @@ export default function DocumentViewerPage({
       document={load.tree.document}
       tree={load.tree}
       initialMode={defaultMode()}
+      refresh={refresh}
     >
       <div className="flex h-full flex-col">
         <ViewerHeader

@@ -110,12 +110,15 @@ def merge_consecutive_tables(session: Session, document_id: uuid.UUID) -> None:
                 "table": table,
                 "start_page": first_part.region.page.page_number,
                 "end_page": last_part.region.page.page_number,
+                "start_order": first_part.region.reading_order or 0,
                 "first_part_id": first_part.id,
                 "last_part_id": last_part.id,
             }
         )
 
-    table_page_intervals.sort(key=lambda item: (item["start_page"], item["end_page"]))
+    table_page_intervals.sort(
+        key=lambda item: (item["start_page"], item["start_order"])
+    )
 
     for index in range(len(table_page_intervals) - 2, -1, -1):
         table = table_page_intervals[index]["table"]
