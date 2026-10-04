@@ -20,6 +20,7 @@ import {
 import { isWorkingOn } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
 import { getDocumentTree, type DocumentTree } from '@/lib/viewer';
+import { TableOperationsDropdown } from '@/components/viewer/TableOperationsButton';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -141,7 +142,14 @@ export default function DocumentViewerPage({
       initialMode={defaultMode()}
     >
       <div className="flex h-full flex-col">
-        <ViewerHeader actions={<ReprocessButton onReprocessed={refresh} />} />
+        <ViewerHeader
+          actions={
+            <>
+              <ReprocessButton onReprocessed={refresh} />
+              <TableOperationsDropdown onDone={refresh} />
+            </>
+          }
+        />
         <ReprocessBar onReprocessed={refresh} />
         <SplitViewer
           original={<OriginalPane />}
