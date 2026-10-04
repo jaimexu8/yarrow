@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
   FileText,
   Pencil,
   Search,
@@ -54,6 +56,9 @@ const CELL =
   'border-y border-slate-200 bg-white px-3 py-3 sm:px-4 align-middle first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r';
 const HEAD = 'px-3 pb-1 text-left sm:px-4 text-xs font-medium text-slate-500';
 
+type SortColumn = 'name' | 'date' | 'status';
+type SortDirection = 'asc' | 'desc';
+
 /**
  * A table of the signed-in user's documents with upload time, page count
  * and processing status. Rows are links to the viewer and offer rename,
@@ -63,6 +68,8 @@ const HEAD = 'px-3 pb-1 text-left sm:px-4 text-xs font-medium text-slate-500';
 export function DocumentLibrary() {
   const { documents, error, replace, remove, reload } = useDocuments();
   const [query, setQuery] = useState('');
+  const [sortCol, setSortCol] = useState<SortColumn>('date');
+  const [sortDir, setSortDir] = useState<SortDirection>('desc');
   const [announcement, setAnnouncement] = useState('');
   const filterId = useId();
   const filterInput = useRef<HTMLInputElement>(null);
@@ -74,6 +81,15 @@ export function DocumentLibrary() {
   useEffect(() => {
     if (deletions > 0) filterInput.current?.focus();
   }, [deletions]);
+
+  function toggleSort(col: SortColumn) {
+    if (sortCol === col) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortCol(col);
+      setSortDir(col === 'date' ? 'desc' : 'asc');
+    }
+  }
 
   function handleDeleted(doc: DocumentSummary) {
     remove(doc.id);
@@ -152,16 +168,40 @@ export function DocumentLibrary() {
           <thead>
             <tr>
               <th scope="col" className={HEAD}>
-                Document
+                <button
+                  className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                  onClick={() => toggleSort('name')}
+                >
+                  Document
+                  {sortCol === 'name' && (
+                    sortDir === 'asc' ? <ArrowUp className="size-4" /> : <ArrowDown className="size-4" />
+                  )}
+                </button>
               </th>
               <th scope="col" className={cn(HEAD, 'hidden md:table-cell')}>
-                Uploaded
+                <button
+                  className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                  onClick={() => toggleSort('date')}
+                >
+                  Uploaded
+                  {sortCol === 'date' && (
+                    sortDir === 'asc' ? <ArrowUp className="size-4" /> : <ArrowDown className="size-4" />
+                  )}
+                </button>
               </th>
               <th scope="col" className={cn(HEAD, 'hidden sm:table-cell')}>
                 Pages
               </th>
               <th scope="col" className={HEAD}>
-                Status
+                <button
+                  className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                  onClick={() => toggleSort('status')}
+                >
+                  Status
+                  {sortCol === 'status' && (
+                    sortDir === 'asc' ? <ArrowUp className="size-4" /> : <ArrowDown className="size-4" />
+                  )}
+                </button>
               </th>
               <th scope="col" className={cn(HEAD, 'text-right')}>
                 <span className="sr-only">Actions</span>
