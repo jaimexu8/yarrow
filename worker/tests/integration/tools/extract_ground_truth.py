@@ -11,6 +11,7 @@ import filetype
 
 from app.core.config import settings
 from app.pipeline.document_parser import DocumentParser
+from app.pipeline.reading_order import order_blocks
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEST_DOCS_DIR = os.path.join(HERE, "..", "test_docs")
@@ -80,24 +81,18 @@ def grid_shape(cells):
 # --------------------------------------------------------------------------- #
 # Pruned result -> model graph
 # --------------------------------------------------------------------------- #
-def reading_order(blocks):
+def reading_order(blocks, page_width=None):
     """The page's blocks in the order their regions are written in.
 
-    block_order is the model's reading order but is usable only when every block
-    on the page has one. block_id indexes the layout areas in document order
-    and is the fallback. Array order is the last resort.
+    Delegates to the worker's shared reading-order sort, so the
+    ground-truth graphs and the stored regions can never disagree on order.
     """
-    if not blocks:
-        return []
-    for key in ("block_order", "block_id"):
-        if all(isinstance(block.get(key), int) for block in blocks):
-            return sorted(blocks, key=lambda block: block[key])
-    return list(blocks)
+    return order_blocks(blocks, page_width)
 
 
 def page_graph(page_number, pruned_page):
     """One page's expected regions and the table part each table region holds."""
-    blocks = reading_order(pruned_page.get("parsing_res_list") or [])
+    blocks = reading_order(pruned_page.get("parsing_res_list") or [], pruned_page.get("width"))
 
     regions = []
     parts = []
@@ -248,7 +243,7 @@ def pruned_for(parser):
 
 def record(name):
     """Record ground truth for a given document."""
-    
+
     path = os.path.join(TEST_DOCS_DIR, name)
     with open(path, "rb") as handle:
         data = handle.read()
@@ -281,12 +276,12 @@ def record(name):
 
 def dumps(truth):
     """Dump the ground truth as a JSON string with compact cell lines."""
-    
+
     # Identifies cell arrays
     cell_lines = re.compile(
         r"\[\s+(-?\d+),\s+(-?\d+),\s+(-?\d+),\s+(-?\d+),\s+(true|false)\s+\]"
     )
-    
+
     # Dump the JSON with compact cell lines
     return cell_lines.sub(r"[\1, \2, \3, \4, \5]", json.dumps(truth, indent=2)) + "\n"
 

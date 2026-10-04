@@ -85,6 +85,18 @@ export async function cancelProcessing(id: string): Promise<DocumentSummary> {
   return res.data;
 }
 
+/**
+ * Reprocess an already-uploaded document (US-43): re-queues it for
+ * processing without a new upload. The server refuses (409) once a job is
+ * queued or running.
+ */
+export async function reprocessDocument(id: string): Promise<DocumentSummary> {
+  const res = await api.post<DocumentSummary>(
+    `/api/v1/documents/${id}/reprocess`
+  );
+  return res.data;
+}
+
 /** The API sends naive UTC timestamps; mark them as UTC before parsing. */
 export function parseApiDate(value: string): Date {
   const utc = /[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value}Z`;

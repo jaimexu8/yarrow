@@ -25,6 +25,7 @@ from app.pipeline.file_loaders.jpeg_loader import JPEGLoader
 from app.pipeline.file_loaders.jpg_loader import JPGLoader
 from app.pipeline.file_loaders.pdf_loader import PDFLoader
 from app.pipeline.file_loaders.png_loader import PNGLoader
+from app.pipeline.reading_order import order_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -434,19 +435,22 @@ class DocumentParser:
         best_iou, score = max(candidates, key=lambda pair: pair[0])
         return score if best_iou >= LAYOUT_SCORE_IOU_THRESHOLD else None
 
-    def _sort_region_data(self, pairs: list[BlockWithTable]) -> list[BlockWithTable]:
+    def _sort_region_data(
+        self, pairs: list[BlockWithTable], page_width: float | None
+    ) -> list[BlockWithTable]:
         """The page's region data in the order their regions are written in.
 
-        block_order is the model's reading order but is usable only when every block
-        on the page has one. block_id indexes the layout areas in document order
-        and is the fallback. Array order is the last resort.
+        Multi-column pages are regrouped column by column from block geometry.
+        Where the geometry is not usable, block_order is the model's reading
+        order, usable only when every block on the page has one. block_id
+        indexes the layout areas in document order and is the fallback. Array
+        order is the last resort.
         """
         if not pairs:
             return []
-        for key in ("block_order", "block_id"):
-            if all(isinstance(block.get(key), int) for block, _ in pairs):
-                return sorted(pairs, key=lambda pair: pair[0][key])
-        return list(pairs)
+        ordered_blocks = order_blocks([block for block, _ in pairs], page_width)
+        pair_by_block = {id(pair[0]): pair for pair in pairs}
+        return [pair_by_block[id(block)] for block in ordered_blocks]
 
     def _construct_regions(self, page_index, page_id, page_data):
         regions = []  # Any region except table regions
@@ -455,7 +459,9 @@ class DocumentParser:
         previous_title: str | None = None
 
         region_data_to_table_results: list[tuple[JsonDict, JsonDict | None]] = self._pair_tables(page_data)
-        region_data_to_table_results = self._sort_region_data(region_data_to_table_results)
+        region_data_to_table_results = self._sort_region_data(
+            region_data_to_table_results, page_data.get("width")
+        )
 
         for reading_order, (region_data, table_result) in enumerate(region_data_to_table_results):
             label: str | None = region_data.get("block_label")

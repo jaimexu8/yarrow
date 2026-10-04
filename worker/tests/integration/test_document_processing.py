@@ -180,6 +180,7 @@ class TestDocumentProcessing:
         "three_page.pdf",
         "sample_multipage_table.pdf",
         "unsupported.txt",
+        "two_column.pdf",
     ]
     merge_consecutive_tables: ClassVar[list[bool]] = [
         True,

@@ -34,7 +34,8 @@ Thumbs.db
 /data/
 /pg_data/
 /valkey_data/
-/minio_data/
+/rustfs_data/
+/rustfs_logs/
 
 # Logs
 logs/

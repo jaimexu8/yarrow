@@ -484,7 +484,7 @@ async def delete_document_endpoint(
 ):
     """Permanently delete a document, its extracted data and its jobs.
 
-    Allowed in any processing state. A worker that runs it anyway finds its 
+    Allowed in any processing state. A worker that runs it anyway finds its
     job gone. If processing is saving results for this document at that moment,
     the request answers 409 after a short wait instead of hanging, and can
     simply be retried.
@@ -515,6 +515,70 @@ async def delete_document_endpoint(
             )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{document_id}/reprocess", response_model=DocumentOut)
+async def reprocess_document(
+    access: DocumentAccess = Depends(require_edit_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reprocess a document whose job finished or was canceled (US-43).
+
+    Only a finished (completed, failed) or canceled job can be reprocessed;
+    a job still queued or processing is a 409 and nothing changes. A worker
+    never acts on a finished or canceled job, so the status check is stable.
+    A new job row is created and queued rather than reusing the old one, so
+    the finished job stays as history.
+    """
+    document = access.document
+    job = (
+        await db.execute(
+            select(Job)
+            .where(Job.document_id == document.id)
+            .order_by(Job.created_at.desc())
+            .limit(1)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if job is None or job.status in {"queued", "processing"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only finished or canceled documents can be reprocessed.",
+        )
+
+    new_job = Job(
+        id=uuid4(),
+        document_id=document.id,
+        status="queued",
+        current_stage="queued",
+    )
+    document.status = "queued"
+    document.error_message = None
+    db.add(new_job)
+    # Committed before anything is queued: a worker can pick the message up in
+    # milliseconds, and a task that starts before its rows are visible looks up
+    # a job that does not exist.
+    await db.commit()
+
+    try:
+        task_id = enqueue_document_processing(new_job.id)
+    except Exception:
+        # The job row already exists, so a broker hiccup must not lose it:
+        # mark it failed, like an upload whose enqueue fails.
+        logger.exception(f"Queueing job {new_job.id} failed")
+        new_job.status = "failed"
+        new_job.error_message = QUEUE_FAILED_MESSAGE
+        document.status = "failed"
+        document.error_message = QUEUE_FAILED_MESSAGE
+        await db.commit()
+        await db.refresh(document)
+        return document
+
+    new_job.celery_task_id = task_id
+    await db.commit()
+    await db.refresh(document)
+    return document
 
 
 def _iter_object(handle, chunk_size: int = READ_CHUNK):

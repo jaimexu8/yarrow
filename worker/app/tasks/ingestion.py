@@ -36,6 +36,14 @@ class AllPagesFailedError(Exception):
     """
 
 
+class JobDeletedError(Exception):
+    """The job or its document was deleted while the task ran.
+
+    Account deletion removes documents without waiting for their jobs, so this
+    is expected rather than a fault.
+    """
+
+
 def _describe_failed_pages(failed: list[int], total: int) -> str:
     shown = ", ".join(str(number) for number in failed[:MAX_REPORTED_FAILED_PAGES])
     if len(failed) > MAX_REPORTED_FAILED_PAGES:
@@ -53,6 +61,16 @@ def _document_state(page_states: list[tuple[int, str | None]], total_pages: int)
         "completed" if any_completed else "failed",
         _describe_failed_pages(failed, total_pages) if failed else None,
     )
+
+
+def _job_deleted(job_id: str) -> bool:
+    """Whether the job row is gone, i.e. the error was caused by its deletion"""
+    try:
+        with session_scope() as session:
+            return session.get(Job, UUID(job_id)) is None
+    except Exception:
+        # Cannot tell, e.g. the database itself is down; report the original error.
+        return False
 
 
 def _mark_failed(job_id: str, message: str) -> None:
@@ -110,6 +128,8 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
 
         with session_scope() as session:
             job = session.get(Job, UUID(job_id))
+            if job is None:
+                raise JobDeletedError(job_id)
             job.current_stage = "parsing"
             job.total_pages = len(parser.pages)
 
@@ -126,6 +146,8 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
 
         with session_scope() as session:
             document = session.get(Document, document_id, with_for_update=True)
+            if document is None:
+                raise JobDeletedError(job_id)
 
             page_ids = select(Page.id).where(
                 Page.document_id == document_id, (Page.page_number.in_(page_to_process) if page_to_process is not None else True)
@@ -228,6 +250,9 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
             page_states = session.execute(select(Page.page_number, Page.status).where(Page.document_id == document_id)).all()
 
             job = session.get(Job, UUID(job_id))
+            if job is None:
+                raise JobDeletedError(job_id)
+            
             job.pages_processed = sum(status == "completed" for _, status in page_states)
             job.error_message = summary
             job.current_stage = "parsing" if run_failed else "finished"
@@ -243,16 +268,25 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
         else:
             logger.info(f"Successfully processed job {job_id}: {succeeded} page(s)")
 
+    except JobDeletedError:
+        logger.info(f"Job {job_id} was deleted while processing; discarding its results")
     except AllPagesFailedError:
         logger.error(f"All pages failed for job {job_id}")
         raise
     except ObjectNotFoundError:
+        if _job_deleted(job_id):
+            # Account deletion removes the file along with the job.
+            logger.info(f"Job {job_id} was deleted before its file was downloaded")
+            return
         # Permanent: a missing object never becomes present, so this is not
         # retried -- doing so would only delay the status the user is waiting
         # on. Not re-raised for the same reason.
         logger.error(f"Object missing for job {job_id}: {storage_key}")
         _mark_failed(job_id, f"Uploaded file not found in storage: {storage_key}")
     except Exception as e:
+        if _job_deleted(job_id):
+            logger.info(f"Job {job_id} was deleted while processing; discarding its results")
+            return
         logger.exception(f"Error processing job {job_id}")
         _mark_failed(job_id, str(e))
         # Re-raised so Celery records the task as FAILURE. Swallowing it marks

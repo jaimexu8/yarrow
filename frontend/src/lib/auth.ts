@@ -61,6 +61,21 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await api.post('/api/v1/auth/password-reset/request', { email });
 }
 
+export type AccountUpdate = {
+  name: string | null;
+  email: string;
+  current_password: string;
+  password?: string;
+};
+
+export async function updateAccount(update: AccountUpdate): Promise<void> {
+  await api.put('/api/v1/auth/me', update);
+}
+
+export async function deleteAccount(password: string): Promise<void> {
+  const res = await api.delete('/api/v1/auth/me', { data: { password } });
+  return res.data;
+}
 /** Set a new password using the token from an emailed reset link. */
 export async function confirmPasswordReset(
   token: string,
