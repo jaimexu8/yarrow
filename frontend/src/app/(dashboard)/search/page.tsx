@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { toApiError } from '@/lib/errors';
+import { documentHitHref, HighlightedText } from '@/lib/highlight';
 import { searchDocuments, type SearchHit } from '@/lib/search';
 
 export default function SearchPage() {
@@ -40,7 +41,10 @@ export default function SearchPage() {
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <form
+        onSubmit={onSubmit}
+        className="flex flex-col gap-3 sm:flex-row sm:items-end"
+      >
         <div className="min-w-0 flex-1">
           <Input
             id="search-q"
@@ -71,15 +75,48 @@ export default function SearchPage() {
       )}
 
       {!loading && results && results.length > 0 && (
-        <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
+        <ul className="space-y-4">
           {results.map((hit) => (
-            <li key={hit.id}>
-              <Link
-                href={`/documents/${hit.id}`}
-                className="block px-4 py-3 text-sm font-medium text-slate-900 underline-offset-4 hover:bg-slate-50 hover:underline"
-              >
+            <li
+              key={hit.id}
+              className="rounded-xl border border-slate-200 bg-white"
+            >
+              <p className="border-b border-slate-100 px-4 py-3 text-sm font-medium text-slate-900">
                 {hit.filename}
-              </Link>
+              </p>
+              {hit.snippets.length === 0 ? (
+                <Link
+                  href={`/documents/${hit.id}`}
+                  className="block px-4 py-3 text-sm text-slate-600 underline-offset-4 hover:bg-slate-50 hover:underline"
+                >
+                  Open document
+                </Link>
+              ) : (
+                <ul>
+                  {hit.snippets.map((snippet) => (
+                    <li
+                      key={snippet.region_id}
+                      className="border-t border-slate-100 first:border-t-0"
+                    >
+                      <Link
+                        href={documentHitHref(hit.id, snippet.region_id, query)}
+                        className="block px-4 py-3 hover:bg-slate-50"
+                      >
+                        <p className="text-xs font-medium text-slate-500">
+                          Page {snippet.page_number}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-800">
+                          <HighlightedText
+                            text={snippet.text}
+                            matchStart={snippet.match_start}
+                            matchEnd={snippet.match_end}
+                          />
+                        </p>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>

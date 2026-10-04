@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { ImageIcon } from 'lucide-react';
+import { HighlightedText } from '@/lib/highlight';
 import type { RegionNode, TableCellNode, TableNode } from '@/lib/viewer';
+import { useViewer } from './ViewerContext';
 
 /*
  * How each region of the parsed tree is shown in the extracted pane. The
@@ -56,6 +58,7 @@ export type RegionRenderContext = {
   /** The previous region was a table caption, so a table should not repeat
    * its stored title. */
   captioned: boolean;
+  query?: string;
 };
 
 type RegionRenderer = (
@@ -69,11 +72,15 @@ const HEADING_TAGS = { 1: 'h2', 2: 'h3', 3: 'h4' } as const;
 const BULLET = /^\s*[•▪◦·‣∙*\-–—]\s+/;
 const ORDERED = /^\s*(\d{1,3})[.)]\s+/;
 
+function mark(text: string, query?: string): ReactNode {
+  return query ? <HighlightedText text={text} query={query} /> : text;
+}
+
 /**
  * Paragraphs and lists. The OCR has no list label, so bullet and numbered
  * lines inside a text region become lists, as in the export.
  */
-function TextBlock({ text }: { text: string }) {
+function TextBlock({ text, query }: { text: string; query?: string }) {
   type Block =
     | { type: 'p'; lines: string[] }
     | { type: 'ul' | 'ol'; items: string[]; start?: number };
@@ -117,14 +124,14 @@ function TextBlock({ text }: { text: string }) {
       {blocks.map((block, index) => {
         if (block.type === 'p') {
           return block.lines.length ? (
-            <p key={index}>{block.lines.join(' ')}</p>
+            <p key={index}>{mark(block.lines.join(' '), query)}</p>
           ) : null;
         }
         const List = block.type;
         return (
           <List key={index} start={block.start}>
             {block.items.map((item, itemIndex) => (
-              <li key={itemIndex}>{item}</li>
+              <li key={itemIndex}>{mark(item, query)}</li>
             ))}
           </List>
         );
@@ -141,9 +148,11 @@ function TextBlock({ text }: { text: string }) {
 function TableBlock({
   table,
   captioned,
+  query,
 }: {
   table: TableNode;
   captioned: boolean;
+  query?: string;
 }) {
   const rows = new Map<number, TableCellNode[]>();
 
@@ -185,7 +194,7 @@ function TableBlock({
               colSpan={cell.col_span > 1 ? cell.col_span : undefined}
               scope={Cell === 'th' && header ? 'col' : undefined}
             >
-              {clean(cell.text)}
+              {mark(clean(cell.text), query)}
             </Cell>
           );
         })}
@@ -196,7 +205,7 @@ function TableBlock({
     <figure className="not-prose my-5">
       {table.title && !captioned && (
         <figcaption className="mb-2 text-sm font-semibold text-slate-900">
-          {clean(table.title)}
+          {mark(clean(table.title), query)}
         </figcaption>
       )}
       <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -216,27 +225,29 @@ function TableBlock({
 }
 
 const RENDERERS: Record<RegionKind, RegionRenderer> = {
-  heading: (region) => {
+  heading: (region, { query }) => {
     const text = clean(region.text);
     if (!text) return null;
     const Tag = HEADING_TAGS[HEADING_LEVELS[region.region_type ?? ''] ?? 2];
-    return <Tag>{text}</Tag>;
+    return <Tag>{mark(text, query)}</Tag>;
   },
-  paragraph: (region) => {
+  paragraph: (region, { query }) => {
     const text = clean(region.text);
-    return text ? <TextBlock text={text} /> : null;
+    return text ? <TextBlock text={text} query={query} /> : null;
   },
-  caption: (region) => {
+  caption: (region, { query }) => {
     const text = clean(region.text);
     return text ? (
       <p>
-        <strong>{text}</strong>
+        <strong>{mark(text, query)}</strong>
       </p>
     ) : null;
   },
-  table: (_region, { table, captioned }) =>
-    table ? <TableBlock table={table} captioned={captioned} /> : null,
-  figure: (region) => {
+  table: (_region, { table, captioned, query }) =>
+    table ? (
+      <TableBlock table={table} captioned={captioned} query={query} />
+    ) : null,
+  figure: (region, { query }) => {
     const label = (region.region_type ?? 'figure').replace(/_/g, ' ');
     return (
       <div className="not-prose my-5 flex items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -246,25 +257,27 @@ const RENDERERS: Record<RegionKind, RegionRenderer> = {
         />
         <span>
           <span className="capitalize">{label}</span>
-          {region.caption ? <> — {clean(region.caption)}</> : null}
+          {region.caption ? <> — {mark(clean(region.caption), query)}</> : null}
         </span>
       </div>
     );
   },
-  formula: (region) => {
+  formula: (region, { query }) => {
     const text = clean(region.text);
     return text ? (
       <pre className="whitespace-pre-wrap">
-        <code>{text}</code>
+        <code>{mark(text, query)}</code>
       </pre>
     ) : null;
   },
   // Running headers, footers and page numbers: kept, as in the viewer's
   // Markdown, but quiet so they do not read as content.
-  artifact: (region) => {
+  artifact: (region, { query }) => {
     const text = clean(region.text);
     return text ? (
-      <p className="not-prose my-2 text-xs text-slate-400">{text}</p>
+      <p className="not-prose my-2 text-xs text-slate-400">
+        {mark(text, query)}
+      </p>
     ) : null;
   },
 };
@@ -280,13 +293,24 @@ export function RegionBlock({
   region: RegionNode;
   context: RegionRenderContext;
 }) {
-  const content = RENDERERS[regionKind(region)](region, context);
+  const { highlightRegionId, highlightQuery } = useViewer();
+  const content = RENDERERS[regionKind(region)](region, {
+    ...context,
+    query: highlightQuery,
+  });
   if (!content) return null;
+  const focused = region.id === highlightRegionId;
   return (
     <div
+      id={`region-${region.id}`}
       data-region-id={region.id}
       data-region-type={region.region_type ?? undefined}
       data-page={region.page_number}
+      className={
+        focused
+          ? 'scroll-mt-8 rounded-md bg-amber-50 ring-2 ring-amber-400'
+          : undefined
+      }
     >
       {content}
     </div>

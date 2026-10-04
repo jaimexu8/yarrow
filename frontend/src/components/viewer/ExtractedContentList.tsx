@@ -12,6 +12,7 @@ import {
   type MergeCandidates,
 } from '@/lib/tableOperations';
 import type { DocumentTree, PageNode, TableNode } from '@/lib/viewer';
+import { RegionFilterPills } from './RegionFilter';
 import { RegionBlock, regionKind } from './regionRenderers';
 import { usePageTracking, useViewer } from './ViewerContext';
 
@@ -70,8 +71,8 @@ function PageBoundary({
         candidate.previous_table_id,
         candidate.next_table_id
       );
-      // The reload re-renders this boundary without a candidate, so the
-      // spinner is not reset here; that would only flicker.
+      // The reload replaces this boundary (it is keyed by its candidate), so
+      // the spinner is not reset here; that would only flicker.
       refresh();
     } catch (err) {
       setError(toApiError(err).message);
@@ -140,7 +141,17 @@ function PageSection({
         Page {pageNumber}
       </h2>
       {pageNumber > 1 && (
-        <PageBoundary pageNumber={pageNumber} candidate={mergeCandidate} />
+        <PageBoundary
+          // A new candidate gets a fresh boundary, so a finished merge's
+          // spinner does not carry over to it
+          key={
+            mergeCandidate
+              ? `${mergeCandidate.previous_table_id}:${mergeCandidate.next_table_id}`
+              : 'none'
+          }
+          pageNumber={pageNumber}
+          candidate={mergeCandidate}
+        />
       )}
 
       {pending ? (
@@ -225,7 +236,14 @@ function PaneMessage({
  * parsed tree so every block keeps its region id (see RegionBlock).
  */
 export function ExtractedContentList() {
-  const { document, tree, pageCount } = useViewer();
+  const {
+    document,
+    tree,
+    pageCount,
+    highlightRegionId,
+    highlightQuery,
+    scrollToPage,
+  } = useViewer();
   const onScroll = usePageTracking('extracted');
 
   // Which tables can be merged or split
@@ -267,6 +285,24 @@ export function ExtractedContentList() {
     () => (tree ? tablePlacements(tree) : new Map<string, TableNode>()),
     [tree]
   );
+
+  useEffect(() => {
+    if (!highlightRegionId || !tree) return;
+    const region = tree.pages
+      .flatMap((page) => page.regions)
+      .find((item) => item.id === highlightRegionId);
+    if (!region) return;
+    scrollToPage(region.page_number);
+    const timer = window.setTimeout(() => {
+      window.document
+        .getElementById(`region-${highlightRegionId}`)
+        ?.scrollIntoView({
+          block: 'center',
+          behavior: 'smooth',
+        });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [tree, highlightRegionId, highlightQuery, scrollToPage]);
 
   // Determine if the document is currently in progress (queued or processing)
   const inProgress =
@@ -360,6 +396,7 @@ export function ExtractedContentList() {
       className="h-full overflow-y-auto bg-white"
     >
       <h2 className="sr-only">Extracted text</h2>
+      {tree && tree.stats.region_count > 0 && <RegionFilterPills />}
       {body}
     </div>
   );
