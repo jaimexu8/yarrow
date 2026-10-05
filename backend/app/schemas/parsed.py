@@ -29,7 +29,7 @@ class RegionNode(StrictModel):
     id: UUID  # Region.id
     page_number: int  # Region.page.page_number
     reading_order: int  # Region.reading_order
-    region_type: str | None = None  # Region.region_type
+    region_type: Literal["header", "paragraph", "figure", "table"] | None = None  # Region.region_type
     bbox: BBox  # x0, y0, x1, y1
     confidence: float | None = None  # Region.confidence
     text: str | None = None  # RegionText.text_content. None for tables and figures
