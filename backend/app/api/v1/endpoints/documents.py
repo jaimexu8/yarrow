@@ -9,6 +9,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Response,
     UploadFile,
     status,
 )
@@ -23,7 +24,12 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.queue import enqueue_document_processing, revoke_document_processing
 from app.core.security import get_current_user
-from app.deps import DocumentAccess, require_edit_access, require_read_access
+from app.deps import (
+    DocumentAccess,
+    require_edit_access,
+    require_owner_access,
+    require_read_access,
+)
 from app.schemas import (
     DocumentDetail,
     DocumentOut,
@@ -34,11 +40,18 @@ from app.schemas import (
     UploadRejected,
     UploadResponse,
 )
+from app.services.document_deletion import delete_document, delete_stored_objects
 from app.services.export import content_disposition, display_stem, safe_stem
 from app.services.failure_messages import (
     DOCUMENT_FAILED_MESSAGE,
     QUEUE_FAILED_MESSAGE,
     public_error_message,
+)
+from app.services.reprocess import (
+    ReprocessError,
+    documents_out,
+    reprocess_document,
+    reprocess_info_for,
 )
 
 router = APIRouter()
@@ -342,7 +355,7 @@ async def list_documents(
         .where(Document.owner_id == current_user.id)
         .order_by(Document.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await documents_out(db, list(result.scalars().all()))
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)
@@ -362,6 +375,7 @@ async def get_document(
         select(Page).where(Page.document_id == document_id).order_by(Page.page_number)
     )
     detail = DocumentDetail.model_validate(document)
+    detail.reprocess = (await reprocess_info_for(db, [document]))[document.id]
     # Validated one by one so each gets the user-facing error filter (US-11).
     detail.jobs = [JobOut.model_validate(job) for job in jobs.scalars()]
     detail.pages = [PageOut.model_validate(page) for page in pages.scalars()]
@@ -384,7 +398,33 @@ async def rename_document(
     document.filename = body.filename
     await db.commit()
     await db.refresh(document)
-    return document
+    return (await documents_out(db, [document]))[0]
+
+
+@router.post("/{document_id}/reprocess", response_model=DocumentOut)
+async def reprocess_document_endpoint(
+    access: DocumentAccess = Depends(require_edit_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reprocess a document without uploading it again
+    
+    Interrupted, failed or partly failed documents reprocess only the pages
+    that are not completed, so the task resumes and finished pages are kept.
+    Fully processed (or canceled) documents are processed again in full.
+    """
+    document_id = access.document.id
+    outcome = await reprocess_document(db, document_id, enqueue_document_processing)
+    if not outcome.ok:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+                if outcome.error is ReprocessError.QUEUE_UNAVAILABLE
+                else status.HTTP_409_CONFLICT
+            ),
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+    document = await db.get(Document, document_id, populate_existing=True)
+    return (await documents_out(db, [document]))[0]
 
 
 @router.post("/{document_id}/cancel", response_model=DocumentOut)
@@ -436,6 +476,45 @@ async def cancel_document_processing(
     await db.refresh(document)
     return document
 
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document_endpoint(
+    access: DocumentAccess = Depends(require_owner_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a document, its extracted data and its jobs.
+
+    Allowed in any processing state. A worker that runs it anyway finds its
+    job gone. If processing is saving results for this document at that moment,
+    the request answers 409 after a short wait instead of hanging, and can
+    simply be retried.
+    """
+
+    document_id = access.document.id
+    outcome = await delete_document(db, document_id)
+    if not outcome.ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+
+    for task_id in outcome.task_ids:
+        try:
+            await run_in_threadpool(revoke_document_processing, task_id)
+        except Exception:
+            logger.exception(f"Revoking task {task_id} failed")
+
+    if outcome.storage_keys:
+        orphaned = await run_in_threadpool(
+            delete_stored_objects, get_storage(), outcome.storage_keys
+        )
+        if orphaned:
+            logger.error(
+                f"Deleted document {document_id} left "
+                f"{len(orphaned)} stored object(s) behind: {orphaned}"
+            )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 def _iter_object(handle, chunk_size: int = READ_CHUNK):
     """Yield the object in chunks, always closing the handle"""

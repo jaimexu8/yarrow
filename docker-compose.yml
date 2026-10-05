@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: paradedb/paradedb:pg18@sha256:a9cbdcfd8a1c349ab21590fd6d6dcbe7da489878df6502922d032dd64c1a7ae7
     container_name: yarrow_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-yarrow}
@@ -9,7 +9,7 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql
     healthcheck:
       test:
         [
@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
 
   valkey:
-    image: valkey/valkey:7-alpine
+    image: valkey/valkey:9.0-alpine@sha256:187679e3bd4036959631e3f03983ab2ba503ab21e6fd0454d508e909db2ee989
     container_name: yarrow_valkey
     # Append-only log, synced every second, so logouts (revoked tokens,
     # US-19) survive a crash. The default snapshots alone could lose minutes
@@ -39,41 +39,57 @@ services:
       retries: 5
     restart: unless-stopped
 
-  minio:
-    image: quay.io/minio/minio:latest
-    container_name: yarrow_minio
+  rustfs:
+    image: rustfs/rustfs:1.0.0
+    container_name: yarrow_rustfs
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
-    command: server /data --console-address ":9001"
+      RUSTFS_VOLUMES: /data/rustfs0
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      RUSTFS_OBS_LOG_DIRECTORY: /app/logs
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio_data:/data
+      - rustfs_data:/data/rustfs0
+      - rustfs_logs:/app/logs
+    depends_on:
+      rustfs-volumes:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
       interval: 5s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: "no"
+
+  rustfs-volumes:
+    image: alpine:3.22
+    container_name: yarrow_rustfs_volumes
+    command: sh -c "chown -R 10001:10001 /data /logs"
+    volumes:
+      - rustfs_data:/data
+      - rustfs_logs:/logs
+    restart: "no"
 
   create-bucket:
-    image: quay.io/minio/mc:latest
-    container_name: yarrow_minio_setup
+    image: rustfs/rc:v0.1.36
+    container_name: yarrow_s3_setup
     depends_on:
-      minio:
+      rustfs:
         condition: service_healthy
-    # "mc alias set", not "mc config host add": current mc images removed the
-    # latter, so the alias was never defined and "mc mb myminio/..." quietly
-    # made a local folder instead of the bucket, which broke every upload.
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
-      /usr/bin/mc mb myminio/yarrow-documents --ignore-existing;
-      /usr/bin/mc anonymous set public myminio/yarrow-documents;
-      exit 0;
-      "
+    # Anonymous access is public read-only (list/get, no put). To allow
+    # anonymous writes instead, change "download" to "public" below.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        rc alias set rustfs http://rustfs:9000 ${S3_ACCESS_KEY:-rustfsadmin} ${S3_SECRET_KEY:-rustfsadmin}
+        && rc mb rustfs/${S3_BUCKET_NAME:-yarrow-documents} --ignore-existing
+        && rc anonymous set download rustfs/${S3_BUCKET_NAME:-yarrow-documents}
 
   mailpit:
     image: axllent/mailpit:latest
@@ -107,9 +123,9 @@ services:
       - VALKEY_HOST=valkey
       - VALKEY_PORT=6379
       - CELERY_BROKER_URL=redis://valkey:6379/0
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
-      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-rustfsadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-rustfsadmin}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-yarrow-documents}
       - USE_LOCAL_STORAGE=false
       - SECRET_KEY=${SECRET_KEY:-supersecretkey_please_change_in_production}
@@ -141,7 +157,7 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
       mailpit:
         condition: service_healthy
@@ -153,6 +169,10 @@ services:
       context: .
       dockerfile: worker/Dockerfile
     container_name: yarrow_worker
+    # Lets the worker reach the host-local OCR stack (ocr_cluster/x86,
+    # published on host port 8080) via INFERENCE_SERVICE_URL.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./worker:/app/worker
       - ./packages:/app/packages
@@ -165,9 +185,9 @@ services:
       - VALKEY_HOST=valkey
       - VALKEY_PORT=6379
       - CELERY_BROKER_URL=redis://valkey:6379/0
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
-      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-rustfsadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-rustfsadmin}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-yarrow-documents}
       - INFERENCE_SERVICE_URL=${INFERENCE_SERVICE_URL}
       - INFERENCE_API_KEY=${INFERENCE_API_KEY:-}
@@ -176,7 +196,7 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
     command: celery -A app.celery_app worker --loglevel=info
     restart: unless-stopped
@@ -201,4 +221,5 @@ services:
 volumes:
   pg_data:
   valkey_data:
-  minio_data:
+  rustfs_data:
+  rustfs_logs:

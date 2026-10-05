@@ -9,6 +9,8 @@ export type ApiError = {
   message: string;
   /** Per-field messages from a 422, keyed by field name (e.g. "password"). */
   fields: Record<string, string>;
+  /** Machine-readable reason, when the server sends one (e.g. "EMAIL_TAKEN"). */
+  code?: string;
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -83,6 +85,21 @@ export function toApiError(error: unknown): ApiError {
 
   if (typeof detail === 'string') {
     return { status, message: detail, fields: {} };
+  }
+
+  if (
+    typeof detail === 'object' &&
+    detail !== null &&
+    'detail' in detail &&
+    typeof detail.detail === 'string'
+  ) {
+    const code = 'code' in detail ? detail.code : undefined;
+    return {
+      status,
+      message: detail.detail,
+      fields: {},
+      ...(typeof code === 'string' && { code }),
+    };
   }
 
   if (status >= 500) {

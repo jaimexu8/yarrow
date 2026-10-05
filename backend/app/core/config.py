@@ -9,15 +9,19 @@ class Settings(DatabaseSettings):
     VALKEY_PORT: str = "6379"
     CELERY_BROKER_URL: str = "redis://valkey:6379/0"
 
-    S3_ENDPOINT: str = "http://minio:9000"
-    S3_ACCESS_KEY: str = "minioadmin"
-    S3_SECRET_KEY: str = "minioadmin"
+    S3_ENDPOINT: str = "http://rustfs:9000"
+    S3_ACCESS_KEY: str = "rustfsadmin"
+    S3_SECRET_KEY: str = "rustfsadmin"
     S3_BUCKET_NAME: str = "yarrow-documents"
     USE_LOCAL_STORAGE: bool = False
 
     # The design document (3.1, option 4) bounds user uploads by total bytes,
     # because a file count says nothing about how many pages it holds.
     STORAGE_QUOTA_BYTES: int = 1024 * 1024 * 1024  # 1 GiB per user
+    
+    # A job still queued or processing with no update for this long was lost
+    # Just over the worker's Celery task_time_limit (3600s)
+    JOB_INTERRUPTED_AFTER_SECONDS: int = 65 * 60
     MAX_UPLOAD_BYTES: int = 256 * 1024 * 1024  # 256 MiB per file
 
     SECRET_KEY: str = "supersecretkey_please_change_in_production"

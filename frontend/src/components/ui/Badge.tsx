@@ -33,14 +33,25 @@ const STATUS_STYLES: Record<
   },
 };
 
+const INTERRUPTED_STYLE = {
+  label: 'Interrupted',
+  className: 'border-orange-200 bg-orange-50 text-orange-800',
+};
+
 export function StatusBadge({
   status,
+  interrupted = false,
   className,
 }: {
   status: DocumentStatus | null;
+  interrupted?: boolean;
   className?: string;
 }) {
-  const style = status ? STATUS_STYLES[status] : undefined;
+  const style = interrupted
+    ? INTERRUPTED_STYLE
+    : status
+      ? STATUS_STYLES[status]
+      : undefined;
   return (
     <span
       className={cn(

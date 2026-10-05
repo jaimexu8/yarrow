@@ -5,10 +5,11 @@ from enum import Enum
 from itertools import pairwise
 from uuid import UUID
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
+from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
 from yarrow_db.models import Document, Region, RegionTable, Table
 from yarrow_db.utils.table_utils import (
     is_consecutive,
@@ -20,13 +21,6 @@ from yarrow_db.utils.table_utils import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Long enough for a merge on a large document, short enough that a request stuck
-# behind a reprocess fails rather than hanging on the user.
-LOCK_TIMEOUT = "5s"
-
-# Postgres lock_not_available, i.e. the lock_timeout above expired.
-_LOCK_TIMEOUT_SQLSTATE = "55P03"
 
 
 class MutationError(str, Enum):
@@ -78,7 +72,7 @@ def _lock_document(session: Session, document_id: UUID) -> Document:
     """Retrieves and locks a document row for the current transaction,
     then verifies that the document is completed before allowing edits.
     """
-    session.execute(text(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'"))
+    session.execute(lock_timeout_statement())
     document = session.get(Document, document_id, with_for_update=True)
     if document is None:
         # The access dependency already resolved it, so this means it was deleted
@@ -256,19 +250,12 @@ def _merge_candidates(
 # --- async wrappers ---------------------------------------------------------
 
 
-def _is_lock_timeout(exc: DBAPIError) -> bool:
-    return (
-        getattr(exc.orig, "sqlstate", None) == _LOCK_TIMEOUT_SQLSTATE
-        or getattr(exc.orig, "pgcode", None) == _LOCK_TIMEOUT_SQLSTATE
-    )
-
-
 async def _apply(db: AsyncSession, operation) -> MutationOutcome:
     """Run one sync operation, commit it, and turn a lock timeout into an outcome."""
     try:
         outcome = await db.run_sync(operation)
     except DBAPIError as exc:
-        if _is_lock_timeout(exc):
+        if is_lock_timeout(exc):
             await db.rollback()
             return MutationOutcome(
                 error=MutationError.DOCUMENT_BUSY,

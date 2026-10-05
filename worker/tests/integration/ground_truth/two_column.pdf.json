@@ -1,0 +1,118 @@
+{
+  "file": "two_column.pdf",
+  "bytes": 2807,
+  "sha256": "3131a79eee58329713c5edaf8a4ace8b8f7dce91545dcd8e47c3a50f57467ad5",
+  "detected_extension": "pdf",
+  "kind": "processable",
+  "expected_pages": 1,
+  "model_graph": {
+    "pages": [
+      {
+        "page_number": 1,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "doc_title",
+            "block_label": "doc_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 1,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 2,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 3,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 4,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 5,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 6,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 7,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 8,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 9,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 10,
+            "region_type": "text",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          }
+        ]
+      }
+    ],
+    "unmerged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 11,
+        "region_texts": 11,
+        "tables": 0,
+        "region_tables": 0,
+        "table_cells": 0
+      },
+      "tables": []
+    },
+    "merged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 11,
+        "region_texts": 11,
+        "tables": 0,
+        "region_tables": 0,
+        "table_cells": 0
+      },
+      "tables": []
+    }
+  }
+}

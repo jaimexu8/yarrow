@@ -1,6 +1,7 @@
 """Document, job and upload models."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -25,9 +26,7 @@ class JobOut(BaseModel):
     @model_validator(mode="after")
     def _only_user_facing_errors(self):
         # The worker may store raw exception text here (US-11, NFR-6).
-        self.error_message = public_error_message(
-            self.error_message, self.status, DOCUMENT_FAILED_MESSAGE
-        )
+        self.error_message = public_error_message(self.error_message, self.status, DOCUMENT_FAILED_MESSAGE)
         return self
 
 
@@ -43,10 +42,22 @@ class PageOut(BaseModel):
     @model_validator(mode="after")
     def _only_user_facing_errors(self):
         # The worker may store raw exception text here (US-11, NFR-6).
-        self.error_message = public_error_message(
-            self.error_message, self.status, PAGE_FAILED_MESSAGE
-        )
+        self.error_message = public_error_message(self.error_message, self.status, PAGE_FAILED_MESSAGE)
         return self
+
+
+class ReprocessInfo(BaseModel):
+    # some pages to be processed (incomplete) or all of them (all)
+    scope: Literal["incomplete", "all"]
+
+    # Its job was lost mid-run (e.g. a worker crashed)
+    interrupted: bool = False
+
+    # Pages that would be processed, or None for all of them
+    pages: int | None = None
+
+    # The first few unfinished page numbers, for display ("incomplete" only).
+    page_numbers: list[int] = Field(default_factory=list)
 
 
 class DocumentOut(BaseModel):
@@ -60,13 +71,13 @@ class DocumentOut(BaseModel):
     status: str | None = None
     error_message: str | None = None
     created_at: datetime | None = None
+    # Filled in by the endpoint (see app.services.reprocess); not a column.
+    reprocess: ReprocessInfo | None = None
 
     @model_validator(mode="after")
     def _only_user_facing_errors(self):
         # The worker may store raw exception text here (US-11, NFR-6).
-        self.error_message = public_error_message(
-            self.error_message, self.status, DOCUMENT_FAILED_MESSAGE
-        )
+        self.error_message = public_error_message(self.error_message, self.status, DOCUMENT_FAILED_MESSAGE)
         return self
 
 
@@ -82,9 +93,7 @@ class DocumentRename(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError("Name cannot be empty")
-        if any(char in value for char in "/\\") or any(
-            ord(char) < 32 or ord(char) == 127 for char in value
-        ):
+        if any(char in value for char in "/\\") or any(ord(char) < 32 or ord(char) == 127 for char in value):
             raise ValueError("Name cannot contain slashes or control characters")
         return value
 

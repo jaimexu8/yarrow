@@ -55,6 +55,21 @@ async def require_edit_access(
     return access
 
 
+async def require_owner_access(
+    access: DocumentAccess = Depends(get_document_access),
+    current_user: User = Depends(get_current_user),
+) -> DocumentAccess:
+    if access.document.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "detail": "Only the owner can delete this document",
+                "code": "NOT_DOCUMENT_OWNER",
+            },
+        )
+    return access
+
+
 def require_completed(access: DocumentAccess) -> None:
     """Guard mutations and exports on a finished document"""
     if access.document.status != "completed":

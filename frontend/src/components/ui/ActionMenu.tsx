@@ -15,7 +15,7 @@ export type ActionMenuItem = {
   label: string;
   icon?: LucideIcon;
   onSelect: () => void;
-  destructive?: boolean;    // Red text for actions like cancel or delete
+  destructive?: boolean; // Red text for actions like cancel or delete
   keepFocus?: boolean;
 };
 
@@ -26,7 +26,7 @@ export function ActionMenu({
   label,
   items,
 }: {
-  label: string;            // Accessible name for the button
+  label: string; // Accessible name for the button
   items: ActionMenuItem[];
 }) {
   const [open, setOpen] = useState(false);

@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   FileText,
   Pencil,
   Search,
+  RotateCw,
   SearchX,
   Upload,
   Trash,
@@ -16,13 +17,21 @@ import { ActionMenu, type ActionMenuItem } from '@/components/ui/ActionMenu';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
-import { parseApiDate, type DocumentSummary } from '@/lib/documents';
+import {
+  isInterrupted,
+  parseApiDate,
+  type DocumentSummary,
+} from '@/lib/documents';
 import { cn } from '@/lib/cn';
 import { formatBytes } from '@/lib/uploads';
 import { useDocuments } from '@/lib/useDocuments';
 import {
+  DeleteDocumentDialog,
   FailureNote,
+  InterruptedNote,
   RenameForm,
+  ReprocessLink,
+  useReprocessAction,
   useCancelProcessing,
 } from './documentActions';
 
@@ -47,14 +56,37 @@ const HEAD = 'px-3 pb-1 text-left sm:px-4 text-xs font-medium text-slate-500';
 
 /**
  * A table of the signed-in user's documents with upload time, page count
- * and processing status. Rows are links to the viewer and offer rename 
- * and, while queued, cancel. The list refreshes itself while anything is
- * still processing.
+ * and processing status. Rows are links to the viewer and offer rename,
+ * delete and, while queued, cancel. The list refreshes itself while anything
+ * is still processing.
  */
 export function DocumentLibrary() {
-  const { documents, error, replace } = useDocuments();
+  const { documents, error, replace, remove, reload } = useDocuments();
   const [query, setQuery] = useState('');
+  const [announcement, setAnnouncement] = useState('');
   const filterId = useId();
+  const filterInput = useRef<HTMLInputElement>(null);
+  const [deletions, setDeletions] = useState(0);
+
+  // After a delete, the row and the menu button that had focus are gone;
+  // continue from the search box rather than dropping focus to the top of
+  // the page. Runs after React has removed the row.
+  useEffect(() => {
+    if (deletions > 0) filterInput.current?.focus();
+  }, [deletions]);
+
+  function handleDeleted(doc: DocumentSummary) {
+    remove(doc.id);
+    setAnnouncement(`Deleted ${doc.filename}.`);
+    setDeletions((count) => count + 1);
+  }
+
+  // Announced even when the library just became empty.
+  const status = (
+    <p role="status" className="sr-only">
+      {announcement}
+    </p>
+  );
 
   const warning = error && (
     <Alert tone="info">
@@ -68,6 +100,7 @@ export function DocumentLibrary() {
   if (documents.length === 0) {
     return (
       <div className="space-y-3">
+        {status}
         {warning}
         <EmptyLibrary />
       </div>
@@ -83,6 +116,7 @@ export function DocumentLibrary() {
 
   return (
     <div className="space-y-4">
+      {status}
       {warning}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-0 flex-1">
@@ -94,6 +128,7 @@ export function DocumentLibrary() {
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
           />
           <input
+            ref={filterInput}
             id={filterId}
             type="search"
             value={query}
@@ -135,7 +170,13 @@ export function DocumentLibrary() {
           </thead>
           <tbody>
             {visible.map((doc) => (
-              <DocumentTableRow key={doc.id} doc={doc} onChanged={replace} />
+              <DocumentTableRow
+                key={doc.id}
+                doc={doc}
+                onChanged={replace}
+                onStale={reload}
+                onDeleted={handleDeleted}
+              />
             ))}
           </tbody>
         </table>
@@ -162,15 +203,32 @@ function UploadedAt({ value }: { value: string | null }) {
 function DocumentTableRow({
   doc,
   onChanged,
+  onStale,
+  onDeleted,
 }: {
   doc: DocumentSummary;
   onChanged: (doc: DocumentSummary) => void;
+
+  // Callback when the server indicates that the row is out of date
+  onStale: () => void;
+  onDeleted: (doc: DocumentSummary) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const nameLink = useRef<HTMLAnchorElement>(null);
   const { cancel, canceling, cancelError } = useCancelProcessing(
     doc,
     onChanged
+  );
+  const reprocess = useReprocessAction(doc, onChanged, onStale);
+  const interrupted = isInterrupted(doc);
+
+  // Inline reprocess link, shown only for incomplete documents
+  const reprocessLink = doc.reprocess?.scope === 'incomplete' && (
+    <ReprocessLink
+      reprocessing={reprocess.reprocessing}
+      onClick={reprocess.request}
+    />
   );
 
   function stopEditing() {
@@ -185,6 +243,17 @@ function DocumentTableRow({
       keepFocus: true,
       onSelect: () => setEditing(true),
     },
+    // Resumes unfinished work, or processes a finished document again
+    ...(reprocess.available && !reprocess.reprocessing
+      ? [
+          {
+            label: 'Reprocess',
+            icon: RotateCw,
+            keepFocus: doc.reprocess?.scope === 'all',
+            onSelect: reprocess.request,
+          },
+        ]
+      : []),
     {
       label: 'Delete',
       icon: Trash,
@@ -202,6 +271,14 @@ function DocumentTableRow({
       onSelect: cancel,
     });
   }
+  // Last, as the most drastic. The dialog takes focus, and returns it to the
+  // menu button if the user backs out.
+  actions.push({
+    label: 'Delete',
+    icon: Trash,
+    destructive: true,
+    onSelect: () => setConfirmingDelete(true),
+  });
 
   return (
     <tr>
@@ -243,12 +320,19 @@ function DocumentTableRow({
             </div>
           </div>
         )}
-        <FailureNote doc={doc} />
-        {cancelError && (
+        {interrupted ? (
+          <InterruptedNote>{reprocessLink}</InterruptedNote>
+        ) : (
+          <FailureNote doc={doc}>{reprocessLink}</FailureNote>
+        )}
+        {(cancelError || reprocess.error) && (
           <p role="alert" className="mt-0.5 text-xs text-red-700">
-            {cancelError}
+            {reprocess.error
+              ? `Couldn't reprocess: ${reprocess.error}`
+              : cancelError}
           </p>
         )}
+        {reprocess.dialog}
       </td>
       <td className={cn(CELL, 'hidden whitespace-nowrap md:table-cell')}>
         <UploadedAt value={doc.created_at} />
@@ -269,7 +353,7 @@ function DocumentTableRow({
         )}
       </td>
       <td className={cn(CELL, 'whitespace-nowrap')}>
-        <StatusBadge status={doc.status} />
+        <StatusBadge status={doc.status} interrupted={interrupted} />
       </td>
       <td className={cn(CELL, 'whitespace-nowrap')}>
         <div className="flex items-center justify-end gap-1">
@@ -290,6 +374,15 @@ function DocumentTableRow({
             items={actions}
           />
         </div>
+        <DeleteDocumentDialog
+          doc={doc}
+          open={confirmingDelete}
+          onClose={() => setConfirmingDelete(false)}
+          onDeleted={(deleted) => {
+            setConfirmingDelete(false);
+            onDeleted(deleted);
+          }}
+        />
       </td>
     </tr>
   );
