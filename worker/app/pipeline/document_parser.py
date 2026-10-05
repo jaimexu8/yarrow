@@ -473,11 +473,22 @@ class DocumentParser:
             else:
                 bbox = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
 
+            # Map raw labels to RegionType enum
+            region_type_map = {
+                "title": "header",
+                "text": "paragraph",
+                "figure": "figure",
+                "table": "table",
+                "header": "header",
+            }
+            mapped_type = region_type_map.get(str(label).lower(), "paragraph") if label else "paragraph"
+
             region = Region(
                 id=uuid.uuid4(),
                 page_id=page_id,
+                page_number=page_index + 1,
                 reading_order=reading_order,
-                region_type=label,
+                region_type=mapped_type,
                 x0=bbox[0] if bbox else 0,
                 y0=bbox[1] if bbox else 0,
                 x1=bbox[2] if bbox else 0,
