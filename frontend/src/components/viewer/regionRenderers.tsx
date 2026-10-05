@@ -306,12 +306,22 @@ export function RegionBlock({
       data-region-id={region.id}
       data-region-type={region.region_type ?? undefined}
       data-page={region.page_number}
-      className={
+      className={`group relative rounded-md border border-transparent p-2 -mx-2 transition-colors ${
         focused
-          ? 'scroll-mt-8 rounded-md bg-amber-50 ring-2 ring-amber-400'
-          : undefined
-      }
+          ? 'scroll-mt-8 bg-amber-50 ring-2 ring-amber-400'
+          : 'hover:border-slate-200 hover:bg-slate-50/50'
+      }`}
     >
+      <div className="absolute right-2 top-2 hidden group-hover:flex items-center gap-2">
+        {region.region_type && (
+          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-700">
+            {region.region_type}
+          </span>
+        )}
+        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500 shadow-sm border border-slate-200">
+          p. {region.page_number}
+        </span>
+      </div>
       {content}
     </div>
   );
