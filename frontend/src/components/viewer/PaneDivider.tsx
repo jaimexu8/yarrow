@@ -8,12 +8,7 @@ import {
   type PointerEvent,
   type RefObject,
 } from 'react';
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useViewer, type ViewMode } from './ViewerContext';
 
@@ -33,19 +28,6 @@ function clampSplit(value: number): number {
   return Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, value));
 }
 
-// Whether the panes sit side by side (md and up) or stack
-function useSideBySide(): boolean {
-  const [sideBySide, setSideBySide] = useState(true);
-  useEffect(() => {
-    const query = window.matchMedia('(min-width: 768px)');
-    const update = () => setSideBySide(query.matches);
-    update();
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
-  }, []);
-  return sideBySide;
-}
-
 type Direction = 'toward-original' | 'toward-extracted';
 
 // Each arrow pushes the divider its way, always passing through split
@@ -61,8 +43,8 @@ const BUTTON =
   'relative z-10 flex size-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
 
 /**
- * The divider between the original and the extracted pane, with the arrows
- * that collapse either one. Vertical on desktop and horizontal on mobile.
+ * The vertical divider between the side-by-side original and extracted panes,
+ * with the arrows that collapse either one.
  */
 export function PaneDivider({
   split,
@@ -74,7 +56,6 @@ export function PaneDivider({
   container: RefObject<HTMLElement>;
 }) {
   const { mode, setMode } = useViewer();
-  const sideBySide = useSideBySide();
   const [dragging, setDragging] = useState(false);
   const towardOriginal = useRef<HTMLButtonElement>(null);
   const towardExtracted = useRef<HTMLButtonElement>(null);
@@ -96,9 +77,7 @@ export function PaneDivider({
     const rect = container.current?.getBoundingClientRect();
     if (!rect) return null;
 
-    return sideBySide
-      ? (event.clientX - rect.left) / rect.width
-      : (event.clientY - rect.top) / rect.height;
+    return (event.clientX - rect.left) / rect.width;
   }
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -132,22 +111,20 @@ export function PaneDivider({
     const { style } = window.document.body;
     const previous = { cursor: style.cursor, userSelect: style.userSelect };
 
-    style.cursor = sideBySide ? 'col-resize' : 'row-resize';
+    style.cursor = 'col-resize';
     style.userSelect = 'none';
 
     return () => {
       style.cursor = previous.cursor;
       style.userSelect = previous.userSelect;
     };
-  }, [dragging, sideBySide]);
+  }, [dragging]);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const smaller = sideBySide ? 'ArrowLeft' : 'ArrowUp';
-    const larger = sideBySide ? 'ArrowRight' : 'ArrowDown';
     let next: number | null = null;
 
-    if (event.key === smaller) next = split - KEY_STEP;
-    else if (event.key === larger) next = split + KEY_STEP;
+    if (event.key === 'ArrowLeft') next = split - KEY_STEP;
+    else if (event.key === 'ArrowRight') next = split + KEY_STEP;
     else if (event.key === 'Home') next = MIN_SPLIT;
     else if (event.key === 'End') next = MAX_SPLIT;
 
@@ -185,11 +162,9 @@ export function PaneDivider({
   return (
     <div
       className={cn(
-        'group relative flex shrink-0 items-center justify-center gap-2 bg-white',
-        // The rule: horizontal across stacked panes, vertical between
-        // side-by-side ones.
-        'h-8 w-full flex-row before:absolute before:inset-x-0 before:top-1/2 before:h-px before:bg-slate-200',
-        'md:h-full md:w-8 md:flex-col md:before:inset-x-auto md:before:inset-y-0 md:before:left-1/2 md:before:top-0 md:before:h-auto md:before:w-px'
+        'group relative flex h-full w-8 shrink-0 flex-col items-center justify-center gap-2 bg-white',
+        // The vertical rule between the panes
+        'before:absolute before:inset-y-0 before:left-1/2 before:w-px before:bg-slate-200'
       )}
     >
       {mode === 'split' && (
@@ -197,7 +172,7 @@ export function PaneDivider({
           role="separator"
           tabIndex={0}
           aria-label="Resize panes"
-          aria-orientation={sideBySide ? 'vertical' : 'horizontal'}
+          aria-orientation="vertical"
           aria-controls={ORIGINAL_PANE_ID}
           aria-valuemin={MIN_SPLIT * 100}
           aria-valuemax={MAX_SPLIT * 100}
@@ -211,12 +186,9 @@ export function PaneDivider({
           onDoubleClick={() => onSplitChange(DEFAULT_SPLIT)}
           onKeyDown={onKeyDown}
           className={cn(
-            'absolute inset-0 z-0 touch-none focus-visible:outline-none',
-            sideBySide ? 'cursor-col-resize' : 'cursor-row-resize',
+            'absolute inset-0 z-0 cursor-col-resize touch-none focus-visible:outline-none',
             // The rule darkens while hovering, dragging or focused.
-            "after:absolute after:bg-transparent after:transition-colors after:content-['']",
-            'after:inset-x-0 after:top-1/2 after:h-0.5 after:-translate-y-1/2',
-            'md:after:inset-x-auto md:after:inset-y-0 md:after:left-1/2 md:after:top-0 md:after:h-auto md:after:w-0.5 md:after:-translate-x-1/2 md:after:translate-y-0',
+            "after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:bg-transparent after:transition-colors after:content-['']",
             'hover:after:bg-slate-400 focus-visible:after:bg-slate-900',
             dragging && 'after:bg-slate-500'
           )}
@@ -233,8 +205,7 @@ export function PaneDivider({
           title={originalArrow.label}
           className={BUTTON}
         >
-          <ChevronUp aria-hidden="true" className="size-4 md:hidden" />
-          <ChevronLeft aria-hidden="true" className="hidden size-4 md:block" />
+          <ChevronLeft aria-hidden="true" className="size-4" />
         </button>
       )}
       {mode !== 'original' && (
@@ -248,8 +219,7 @@ export function PaneDivider({
           title={extractedArrow.label}
           className={BUTTON}
         >
-          <ChevronDown aria-hidden="true" className="size-4 md:hidden" />
-          <ChevronRight aria-hidden="true" className="hidden size-4 md:block" />
+          <ChevronRight aria-hidden="true" className="size-4" />
         </button>
       )}
     </div>

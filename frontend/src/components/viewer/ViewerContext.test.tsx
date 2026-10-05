@@ -36,11 +36,11 @@ beforeAll(() => {
     },
   });
 
-  // Every pane counts as visible
+  // A pane counts as visible unless it sits inside a hidden element
   Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
     configurable: true,
     get() {
-      return this.parentElement;
+      return this.closest('[hidden]') ? null : this.parentElement;
     },
   });
 
@@ -127,4 +127,15 @@ test('scrolling back to an earlier page syncs the other pane too', () => {
   scrollTo(extracted, 0);
 
   expect(original.scrollTop).toBe(0);
+});
+
+test('a pane being hidden does not move the other pane', () => {
+  const { original, extracted } = renderViewer();
+  scrollTo(original, PAGE_HEIGHT);
+
+  // Hiding a pane resets its scroll and fires a scroll event
+  extracted.hidden = true;
+  scrollTo(extracted, 0);
+
+  expect(original.scrollTop).toBe(PAGE_HEIGHT);
 });
