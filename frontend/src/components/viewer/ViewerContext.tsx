@@ -152,6 +152,11 @@ export function usePageTracking(pane: Pane) {
   return useCallback(
     (event: React.UIEvent<HTMLElement>) => {
       const container = event.currentTarget;
+
+      // Hiding a pane resets its scroll and fires this with every page at
+      // the top, which would read as the last page
+      if (!container.offsetParent) return;
+
       const line =
         container.getBoundingClientRect().top + container.clientHeight / 3;
       let page: number | null = null;
