@@ -56,7 +56,7 @@ const CELL =
   'border-y border-slate-200 bg-white px-3 py-3 sm:px-4 align-middle first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r';
 const HEAD = 'px-3 pb-1 text-left sm:px-4 text-xs font-medium text-slate-500';
 
-type SortColumn = 'name' | 'date' | 'status';
+type SortColumn = 'name' | 'date' | 'status' | 'pages';
 type SortDirection = 'asc' | 'desc';
 
 /**
@@ -142,6 +142,10 @@ export function DocumentLibrary() {
       const statA = a.status ?? '';
       const statB = b.status ?? '';
       cmp = statA.localeCompare(statB);
+    } else if (sortCol === 'pages') {
+      const pagesA = a.page_count ?? 0;
+      const pagesB = b.page_count ?? 0;
+      cmp = pagesA - pagesB;
     }
     return sortDir === 'asc' ? cmp : -cmp;
   });
@@ -212,7 +216,18 @@ export function DocumentLibrary() {
                 </button>
               </th>
               <th scope="col" className={cn(HEAD, 'hidden sm:table-cell')}>
-                Pages
+                <button
+                  className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                  onClick={() => toggleSort('pages')}
+                >
+                  Pages
+                  {sortCol === 'pages' &&
+                    (sortDir === 'asc' ? (
+                      <ArrowUp className="size-4" />
+                    ) : (
+                      <ArrowDown className="size-4" />
+                    ))}
+                </button>
               </th>
               <th scope="col" className={HEAD}>
                 <button
