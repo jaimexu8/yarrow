@@ -12,6 +12,7 @@ import {
   ReprocessBar,
   ReprocessButton,
 } from '@/components/viewer/ReprocessBar';
+import { BoundingBoxCanvas } from '@/components/viewer/BoundingBoxCanvas';
 import { SplitViewer } from '@/components/viewer/SplitViewer';
 import { ViewerHeader } from '@/components/viewer/ViewerHeader';
 import {
@@ -142,7 +143,7 @@ function DocumentViewer({ documentId }: { documentId: string }) {
         <ViewerHeader actions={<ReprocessButton onReprocessed={refresh} />} />
         <ReprocessBar onReprocessed={refresh} />
         <SplitViewer
-          original={<OriginalPane />}
+          original={<OriginalPane renderPageOverlay={BoundingBoxCanvas} />}
           extracted={<ExtractedContentList />}
         />
       </div>
