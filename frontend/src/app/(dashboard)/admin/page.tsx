@@ -49,7 +49,9 @@ function AccountTable({ accounts }: { accounts: AdminAccount[] }) {
               <td className={cn(CELL, 'text-slate-600')}>
                 {joinedOn(account.created_at)}
               </td>
-              <td className={cn(CELL, 'text-right tabular-nums text-slate-700')}>
+              <td
+                className={cn(CELL, 'text-right tabular-nums text-slate-700')}
+              >
                 {account.document_count}
               </td>
             </tr>
