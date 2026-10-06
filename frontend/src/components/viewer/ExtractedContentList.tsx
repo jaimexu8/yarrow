@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { AlertTriangle, FileSearch } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
 import { isInterrupted } from '@/lib/documents';
@@ -146,12 +146,31 @@ function PaneMessage({
  * parsed tree so every block keeps its region id (see RegionBlock).
  */
 export function ExtractedContentList() {
-  const { document, tree, pageCount } = useViewer();
+  const { document, tree, pageCount, highlightRegionId, scrollToPage } =
+    useViewer();
   const onScroll = usePageTracking('extracted');
   const placements = useMemo(
     () => (tree ? tablePlacements(tree) : new Map<string, TableNode>()),
     [tree]
   );
+
+  useEffect(() => {
+    if (!highlightRegionId || !tree) return;
+    const region = tree.pages
+      .flatMap((page) => page.regions)
+      .find((item) => item.id === highlightRegionId);
+    if (!region) return;
+    scrollToPage(region.page_number);
+    const timer = window.setTimeout(() => {
+      window.document
+        .getElementById(`region-${highlightRegionId}`)
+        ?.scrollIntoView({
+          block: 'center',
+          behavior: 'smooth',
+        });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [tree, highlightRegionId, scrollToPage]);
 
   // Determine if the document is currently in progress (queued or processing)
   const inProgress =
