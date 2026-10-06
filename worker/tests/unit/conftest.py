@@ -1,8 +1,10 @@
 from contextlib import contextmanager
+from typing import ClassVar
 from uuid import uuid4
 
 import pytest
 from yarrow_db.models import Document, Job, Page
+from yarrow_db.models.region import RegionImage
 
 from app.tasks import ingestion
 
@@ -56,6 +58,8 @@ class FakeSession:
     def __init__(self, store):
         self.store = store
         self.added = []
+        # Keys of the figure crops already stored for the pages being replaced
+        self.existing_image_keys: list[str] = []
     
     def get(self, model, key, with_for_update=False):
         # with_for_update is accepted and ignored: there is no concurrency to
@@ -80,6 +84,8 @@ class FakeSession:
                 [(page.page_number, page.status) for page in self.added
                  if isinstance(page, Page)]
             )
+        if RegionImage in entities:
+            return FakeResult(self.existing_image_keys)
         return FakeResult()
     
     def scalar(self, statement):
@@ -94,6 +100,12 @@ class FakeStorage:
     
     def download_bytes(self, storage_key) -> bytes:
         return b"fake"
+
+    def upload_file(self, file, key) -> None:
+        self.store[key] = file.read()
+
+    def delete_file(self, key) -> None:
+        self.store.pop(key, None)
         
 
 class FakeDocumentParser:
@@ -102,6 +114,7 @@ class FakeDocumentParser:
     failed = ()
     load_error = None
     inference_error = None
+    figures: ClassVar[dict[str, bytes]] = {}
     
     def __init__(self) -> None:
         self.pages: list[str] = []
@@ -109,13 +122,16 @@ class FakeDocumentParser:
         self.failed = ()
         self.load_error = None
         self.inference_error = None
+        self.figure_images: dict[str, bytes] = {}
             
     @classmethod
-    def configure(cls, page_count=1, failed=(), load_error=None, inference_error=None):
+    def configure(cls, page_count=1, failed=(), load_error=None, inference_error=None, figures=None):
         cls.page_count = page_count
         cls.failed = failed
         cls.load_error = load_error
         cls.inference_error = inference_error
+        # Figure crops by storage key, each given a RegionImage row
+        cls.figures = dict(figures or {})
         
     @property
     def failed_page_numbers(self) -> list[int]:
@@ -144,6 +160,12 @@ class FakeDocumentParser:
             ))
         
         document.page_count = len(self.pages)
+
+        self.figure_images = dict(FakeDocumentParser.figures)
+        output.extend(
+            RegionImage(id=uuid4(), region_id=uuid4(), image_key=key)
+            for key in self.figure_images
+        )
         
         return output
     
@@ -200,6 +222,8 @@ def storage(store, monkeypatch):
 
 @pytest.fixture
 def parser(monkeypatch):
+    # Configuration lives on the class, so reset what earlier tests set
+    FakeDocumentParser.configure()
     parser = FakeDocumentParser()
     monkeypatch.setattr(ingestion, "DocumentParser", FakeDocumentParser)
     return parser

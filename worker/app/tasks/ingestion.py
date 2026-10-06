@@ -1,3 +1,4 @@
+import io
 import logging
 from uuid import UUID
 
@@ -63,6 +64,15 @@ def _document_state(page_states: list[tuple[int, str | None]], total_pages: int)
     )
 
 
+def _delete_stored(keys: list[str]) -> None:
+    """Best effort: an object left behind only wastes space"""
+    for key in keys:
+        try:
+            get_storage().delete_file(key)
+        except Exception:
+            logger.exception(f"Could not delete stored object {key}")
+
+
 def _job_deleted(job_id: str) -> bool:
     """Whether the job row is gone, i.e. the error was caused by its deletion"""
     try:
@@ -99,6 +109,12 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
 
     logger.info(f"Starting processing for job {job_id}")
     storage_key = ""
+
+    # Figure crops uploaded for this run, removed again if its results are not
+    # committed. Replaced crops are removed only once the new ones are.
+    uploaded_image_keys: list[str] = []
+    replaced_image_keys: list[str] = []
+    committed = False
     try:
         with session_scope() as session:
             # Locked so that this and a cancel (US-42) cannot both win: the
@@ -164,6 +180,17 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
             # Region tables that are themselves on the targeted pages
             region_table_ids = select(RegionTable.id).where(RegionTable.region_id.in_(region_ids))
 
+            replaced_image_keys = list(
+                session.execute(
+                    select(RegionImage.image_key).where(
+                        RegionImage.region_id.in_(region_ids),
+                        RegionImage.image_key.is_not(None),
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
             # Delete all objects related to the targeted pages
             statements = [
                 delete(TableCell).where(TableCell.region_table_id.in_(region_table_ids)),
@@ -185,6 +212,20 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
                 split_at_gaps(session, table)
 
             all_objects = parser.to_model_objects(document, target_pages=page_to_process, merge_consecutive_tables=merge_consecutive_tables)
+
+            # A figure whose crop cannot be stored keeps its region, just not its picture
+            failed_image_keys: set[str] = set()
+            for image_key, image in parser.figure_images.items():
+                try:
+                    get_storage().upload_file(io.BytesIO(image), image_key)
+                    uploaded_image_keys.append(image_key)
+                except Exception:
+                    logger.exception(f"Could not store figure {image_key}")
+                    failed_image_keys.add(image_key)
+            all_objects = [
+                obj for obj in all_objects if not (isinstance(obj, RegionImage) and obj.image_key in failed_image_keys)
+            ]
+
             session.add_all(all_objects)
             session.flush()
 
@@ -260,6 +301,9 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
 
             document.status, document.error_message = _document_state(page_states, document.page_count or total_pages)
 
+        committed = True
+        _delete_stored(replaced_image_keys)
+
         if run_failed:
             raise AllPagesFailedError(summary or "no pages were produced")
 
@@ -270,6 +314,7 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
 
     except JobDeletedError:
         logger.info(f"Job {job_id} was deleted while processing; discarding its results")
+        _delete_stored(uploaded_image_keys)
     except AllPagesFailedError:
         logger.error(f"All pages failed for job {job_id}")
         raise
@@ -284,6 +329,8 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
         logger.error(f"Object missing for job {job_id}: {storage_key}")
         _mark_failed(job_id, f"Uploaded file not found in storage: {storage_key}")
     except Exception as e:
+        if not committed:
+            _delete_stored(uploaded_image_keys)
         if _job_deleted(job_id):
             logger.info(f"Job {job_id} was deleted while processing; discarding its results")
             return
