@@ -4,20 +4,79 @@ import { useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { RequireAdmin } from '@/components/auth/RequireAdmin';
 import { Spinner } from '@/components/ui/Spinner';
-import { listAccounts, type AdminAccount } from '@/lib/admin';
+import {
+  getAdminStats,
+  listAccounts,
+  type AdminAccount,
+  type AdminStats,
+  type JobStatusCounts,
+} from '@/lib/admin';
 import { parseApiDate } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
+import { formatBytes } from '@/lib/uploads';
 import { cn } from '@/lib/cn';
 
 const CELL =
   'border-y border-slate-200 bg-white px-3 py-3 sm:px-4 align-middle first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r';
 const HEAD = 'px-3 pb-1 text-left sm:px-4 text-xs font-medium text-slate-500';
+const CARD = 'rounded-xl border border-slate-200 bg-white px-4 py-3';
+
+const JOB_STATUS_ORDER: {
+  key: keyof JobStatusCounts;
+  label: string;
+}[] = [
+  { key: 'queued', label: 'Queued' },
+  { key: 'processing', label: 'Processing' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'failed', label: 'Failed' },
+  { key: 'canceled', label: 'Canceled' },
+];
 
 function joinedOn(value: string | null): string {
   if (!value) return 'Unknown';
   return parseApiDate(value).toLocaleDateString(undefined, {
     dateStyle: 'medium',
   });
+}
+
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className={CARD}>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function StatsSection({ stats }: { stats: AdminStats }) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-slate-900">Overview</h2>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatCard label="Users" value={stats.user_count} />
+        <StatCard label="Documents" value={stats.document_count} />
+        <StatCard
+          label="Storage"
+          value={formatBytes(stats.storage_used_bytes)}
+        />
+      </div>
+      <div className={CARD}>
+        <p className="text-xs font-medium text-slate-500">Jobs</p>
+        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {JOB_STATUS_ORDER.map((item) => (
+            <div key={item.key}>
+              <dt className="text-xs text-slate-500">{item.label}</dt>
+              <dd className="mt-0.5 text-lg font-semibold tabular-nums text-slate-900">
+                {stats.jobs_by_status[item.key]}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
+  );
 }
 
 function AccountTable({ accounts }: { accounts: AdminAccount[] }) {
@@ -62,15 +121,33 @@ function AccountTable({ accounts }: { accounts: AdminAccount[] }) {
   );
 }
 
-function AccountsBody() {
+function AccountsSection({ accounts }: { accounts: AdminAccount[] }) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-slate-900">Accounts</h2>
+      {accounts.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600">
+          No accounts yet.
+        </p>
+      ) : (
+        <AccountTable accounts={accounts} />
+      )}
+    </section>
+  );
+}
+
+function AdminBody() {
+  const [stats, setStats] = useState<AdminStats | null>(null);
   const [accounts, setAccounts] = useState<AdminAccount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let current = true;
-    listAccounts()
-      .then((rows) => {
-        if (current) setAccounts(rows);
+    Promise.all([getAdminStats(), listAccounts()])
+      .then(([nextStats, nextAccounts]) => {
+        if (!current) return;
+        setStats(nextStats);
+        setAccounts(nextAccounts);
       })
       .catch((err) => {
         if (!current) return;
@@ -87,23 +164,20 @@ function AccountsBody() {
   }, []);
 
   if (error) return <Alert>{error}</Alert>;
-  if (!accounts) {
+  if (!stats || !accounts) {
     return (
       <div className="flex justify-center py-12 text-slate-500">
-        <Spinner label="Loading accounts" />
+        <Spinner label="Loading admin dashboard" />
       </div>
     );
   }
 
-  if (accounts.length === 0) {
-    return (
-      <p className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600">
-        No accounts yet.
-      </p>
-    );
-  }
-
-  return <AccountTable accounts={accounts} />;
+  return (
+    <>
+      <StatsSection stats={stats} />
+      <AccountsSection accounts={accounts} />
+    </>
+  );
 }
 
 export default function AdminPage() {
@@ -112,13 +186,13 @@ export default function AdminPage() {
       <div className="space-y-8">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-            Accounts
+            Admin
           </h1>
           <p className="text-sm text-slate-600">
-            All user accounts on this system.
+            System totals and every user account.
           </p>
         </div>
-        <AccountsBody />
+        <AdminBody />
       </div>
     </RequireAdmin>
   );
