@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import io
 import logging
 import uuid
 from collections.abc import Iterator
@@ -7,6 +9,7 @@ from typing import Any, ClassVar
 
 import filetype
 import requests
+from PIL import Image
 from yarrow_db.models import (
     Base,
     Document,
@@ -17,6 +20,7 @@ from yarrow_db.models import (
     Table,
     TableCell,
 )
+from yarrow_db.models.region import RegionImage
 
 from app.core.config import settings
 from app.pipeline.file_loaders.file_loader import FileLoader
@@ -168,6 +172,10 @@ class DocumentParser:
         self.pages: list[str] = []
         self.parsed_result: list[JsonDict] = []
         self.page_errors: dict[int, str] = {}
+
+        # PNG crops of the figure regions built by to_model_objects, by the
+        # storage key their RegionImage points at. The caller uploads them.
+        self.figure_images: dict[str, bytes] = {}
 
     @property
     def failed_page_numbers(self) -> list[int]:
@@ -452,11 +460,34 @@ class DocumentParser:
         pair_by_block = {id(pair[0]): pair for pair in pairs}
         return [pair_by_block[id(block)] for block in ordered_blocks]
 
-    def _construct_regions(self, page_index, page_id, page_data):
+    def _crop_figure(self, page_image: Image.Image, page_data: JsonDict, bbox: Box) -> bytes | None:
+        """The bbox's area of the page image as PNG bytes, or None if it is empty.
+
+        The bbox is in the coordinates of the page the OCR reported, which is
+        scaled onto the page image in case the two sizes differ.
+        """
+        scale_x = page_image.width / (page_data.get("width") or page_image.width)
+        scale_y = page_image.height / (page_data.get("height") or page_image.height)
+
+        left = max(0, round(bbox[0] * scale_x))
+        top = max(0, round(bbox[1] * scale_y))
+        right = min(page_image.width, round(bbox[2] * scale_x))
+        bottom = min(page_image.height, round(bbox[3] * scale_y))
+        if right <= left or bottom <= top:
+            return None
+
+        buffer = io.BytesIO()
+        page_image.crop((left, top, right, bottom)).save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    def _construct_regions(self, page_index, page_id, page_data, document_id):
         regions = []  # Any region except table regions
         region_tables_data = []  # Partially initialized regions tables
 
         previous_title: str | None = None
+
+        # Decoded on the first figure, as most pages have none
+        page_image: Image.Image | None = None
 
         region_data_to_table_results: list[tuple[JsonDict, JsonDict | None]] = self._pair_tables(page_data)
         region_data_to_table_results = self._sort_region_data(
@@ -525,6 +556,23 @@ class DocumentParser:
                     }
                 )
 
+            elif label in IMAGE_LABELS and bbox:
+                try:
+                    if page_image is None:
+                        page_image = Image.open(io.BytesIO(base64.b64decode(self.pages[page_index])))
+                        page_image.load()
+                    crop = self._crop_figure(page_image, page_data, bbox)
+                except Exception:
+                    # A missing crop only costs the figure its picture, so it
+                    # must not fail the page.
+                    logger.exception(f"Could not crop figure on page {page_index + 1}")
+                    crop = None
+
+                if crop is not None:
+                    image_key = f"documents/{document_id}/figures/{region.id}.png"
+                    self.figure_images[image_key] = crop
+                    regions.append(RegionImage(id=uuid.uuid4(), region_id=region.id, image_key=image_key))
+
             elif label not in IMAGE_LABELS and content:
                 regions.append(
                     RegionText(
@@ -549,9 +597,12 @@ class DocumentParser:
             merge_consecutive_tables (bool): Whether to merge consecutive tables across pages that
             have the same number of columns
 
-        Returns: A flat list of all model objects created
+        Returns: A flat list of all model objects created. The PNG crops the
+        figures' RegionImage rows point at are left in figure_images for the
+        caller to upload.
         """
         pruned_result = self.get_pruned_result()
+        self.figure_images = {}
         document.page_count = len(pruned_result)
 
         pages = []
@@ -587,7 +638,7 @@ class DocumentParser:
                 continue
 
             # Construct regions for each page
-            page_regions, region_tables_data_per_page = self._construct_regions(page_index, page_id, page_data)
+            page_regions, region_tables_data_per_page = self._construct_regions(page_index, page_id, page_data, document.id)
 
             regions.extend(page_regions)
             region_table_data.extend(region_tables_data_per_page)
