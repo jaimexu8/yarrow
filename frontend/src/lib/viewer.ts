@@ -13,12 +13,12 @@ export type RegionNode = {
   id: string;
   page_number: number;
   reading_order: number;
-  
+
   // The OCR's block label as-is, e.g. "text", "paragraph_title", "table"
   region_type: string | null;
   bbox: BBox;
   confidence: number | null;
-  
+
   // Null for tables and figures
   text: string | null;
   table_id: string | null;
