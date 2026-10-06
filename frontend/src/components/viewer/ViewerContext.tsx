@@ -40,9 +40,10 @@ type ViewerState = {
   registerPage: (pane: Pane, page: number, element: HTMLElement | null) => void;
   reportVisiblePage: (page: number) => void;
 
-  // set when opening a search hit
+  // current find hit; starts from a /search link's ?region=&q=
   highlightRegionId: string | null;
   highlightQuery: string;
+  setHighlight: (regionId: string | null, query: string) => void;
 };
 
 /*
@@ -54,8 +55,8 @@ export function ViewerProvider({
   document,
   tree,
   initialMode = 'split',
-  highlightRegionId = null,
-  highlightQuery = '',
+  highlightRegionId: initialHighlightRegionId = null,
+  highlightQuery: initialHighlightQuery = '',
   children,
 }: {
   document: DocumentSummary;
@@ -70,6 +71,15 @@ export function ViewerProvider({
     document.page_count
   );
   const [currentPage, setCurrentPage] = useState(1);
+  const [highlightRegionId, setHighlightRegionId] = useState<string | null>(
+    initialHighlightRegionId
+  );
+  const [highlightQuery, setHighlightQuery] = useState(initialHighlightQuery);
+
+  const setHighlight = useCallback((regionId: string | null, query: string) => {
+    setHighlightRegionId(regionId);
+    setHighlightQuery(query);
+  }, []);
 
   const anchors = useRef<Record<Pane, Map<number, HTMLElement>>>({
     original: new Map(),
@@ -114,6 +124,7 @@ export function ViewerProvider({
       reportVisiblePage: setCurrentPage,
       highlightRegionId,
       highlightQuery,
+      setHighlight,
     }),
     [
       document,
@@ -125,6 +136,7 @@ export function ViewerProvider({
       registerPage,
       highlightRegionId,
       highlightQuery,
+      setHighlight,
     ]
   );
 
