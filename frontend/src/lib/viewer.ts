@@ -1,11 +1,6 @@
 import api from './api';
 import type { DocumentSummary } from './documents';
 
-/**
- * Types and calls for the document viewer (US-12). The types mirror
- * backend/app/schemas/parsed.py and table.py; keep them in step.
- */
-
 /** Page-pixel coordinates, origin top-left, in the page's width/height space. */
 export type BBox = { x0: number; y0: number; x1: number; y1: number };
 
@@ -18,11 +13,13 @@ export type RegionNode = {
   id: string;
   page_number: number;
   reading_order: number;
-  /** The OCR's block label as-is, e.g. "text", "paragraph_title", "table". */
+  
+  // The OCR's block label as-is, e.g. "text", "paragraph_title", "table"
   region_type: string | null;
   bbox: BBox;
   confidence: number | null;
-  /** Null for tables and figures. */
+  
+  // Null for tables and figures
   text: string | null;
   table_id: string | null;
   region_table_id: string | null;
@@ -47,15 +44,17 @@ export type TablePart = {
   page_number: number;
   reading_order: number;
   row_start: number;
-  /** Inclusive. */
+
+  // Inclusive
   row_end: number;
   col_start: number;
-  /** Inclusive. */
+
+  // Inclusive
   col_end: number;
 };
 
 export type TableCellNode = {
-  /** Global row within the logical table. */
+  // Global row within the logical table
   row: number;
   col: number;
   row_span: number;
@@ -87,7 +86,7 @@ export type DocumentTree = {
   document: DocumentSummary;
   pages_included: number[];
   pages: PageNode[];
-  /** Always document-scoped. */
+  // Always document-scoped
   tables: TableNode[];
   stats: {
     page_count: number;
@@ -119,4 +118,19 @@ export async function getOriginalFile(id: string): Promise<OriginalFile> {
     data: res.data,
     contentType: String(res.headers['content-type'] ?? ''),
   };
+}
+
+/**
+ * The cropped picture of a figure region, for regions with an image_key.
+ * Fetched through the API client for the same reason as the original file.
+ */
+export async function getRegionImage(
+  documentId: string,
+  regionId: string
+): Promise<Blob> {
+  const res = await api.get<Blob>(
+    `/api/v1/documents/${documentId}/regions/${regionId}/image`,
+    { responseType: 'blob' }
+  );
+  return res.data;
 }
