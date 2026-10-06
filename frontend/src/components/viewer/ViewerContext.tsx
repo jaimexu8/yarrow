@@ -40,6 +40,10 @@ type ViewerState = {
   registerPage: (pane: Pane, page: number, element: HTMLElement | null) => void;
   // Returns true only when the page differs from the one already current.
   reportVisiblePage: (page: number) => boolean;
+
+  // set when opening a search hit
+  highlightRegionId: string | null;
+  highlightQuery: string;
 };
 
 /*
@@ -51,11 +55,15 @@ export function ViewerProvider({
   document,
   tree,
   initialMode = 'split',
+  highlightRegionId = null,
+  highlightQuery = '',
   children,
 }: {
   document: DocumentSummary;
   tree: DocumentTree | null;
   initialMode?: ViewMode;
+  highlightRegionId?: string | null;
+  highlightQuery?: string;
   children: ReactNode;
 }) {
   const [mode, setMode] = useState<ViewMode>(initialMode);
@@ -117,16 +125,27 @@ export function ViewerProvider({
       scrollToPage,
       registerPage,
       reportVisiblePage,
+      highlightRegionId,
+      highlightQuery,
     }),
     [
       document,
+
       tree,
+
       pageCount,
+
       mode,
+
       currentPage,
+
       scrollToPage,
+
       registerPage,
       reportVisiblePage,
+      ,
+      highlightRegionId,
+      highlightQuery,
     ]
   );
 
