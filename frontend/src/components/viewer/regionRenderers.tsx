@@ -3,6 +3,7 @@ import { ImageIcon } from 'lucide-react';
 import { HighlightedText } from '@/lib/highlight';
 import type { RegionNode, TableCellNode, TableNode } from '@/lib/viewer';
 import { useViewer } from './ViewerContext';
+import { cn } from '@/lib/cn';
 
 /*
  * How each region of the parsed tree is shown in the extracted pane. The
@@ -293,24 +294,41 @@ export function RegionBlock({
   region: RegionNode;
   context: RegionRenderContext;
 }) {
-  const { highlightRegionId, highlightQuery } = useViewer();
+  const {
+    highlightRegionId,
+    highlightQuery,
+    activeRegionId,
+    setActiveRegionId,
+    scrollToPage,
+  } = useViewer();
   const content = RENDERERS[regionKind(region)](region, {
     ...context,
     query: highlightQuery,
   });
   if (!content) return null;
+
   const focused = region.id === highlightRegionId;
+  const isActive = activeRegionId === region.id;
+
   return (
     <div
       id={`region-${region.id}`}
       data-region-id={region.id}
       data-region-type={region.region_type ?? undefined}
       data-page={region.page_number}
-      className={`group relative rounded-md border border-transparent p-2 -mx-2 transition-colors ${
+      onClick={() => scrollToPage(region.page_number)}
+      onMouseEnter={() => setActiveRegionId(region.id)}
+      onMouseLeave={() => {
+        if (activeRegionId === region.id) setActiveRegionId(null);
+      }}
+      className={cn(
+        'group relative rounded-md border p-2 -mx-2 transition-colors cursor-pointer',
         focused
-          ? 'scroll-mt-8 bg-amber-50 ring-2 ring-amber-400'
-          : 'hover:border-slate-200 hover:bg-slate-50/50'
-      }`}
+          ? 'scroll-mt-8 border-transparent bg-amber-50 ring-2 ring-amber-400'
+          : isActive
+            ? 'border-blue-300 bg-blue-50'
+            : 'border-transparent hover:border-slate-200 hover:bg-slate-50/50'
+      )}
     >
       <div className="absolute right-2 top-2 hidden group-hover:flex items-center gap-2">
         {region.region_type && (

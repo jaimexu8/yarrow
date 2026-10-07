@@ -45,6 +45,13 @@ type ViewerState = {
   highlightRegionId: string | null;
   highlightQuery: string;
   setHighlight: (regionId: string | null, query: string) => void;
+
+  // Track which region is currently active (hovered or clicked)
+  activeRegionId: string | null;
+  setActiveRegionId: (id: string | null) => void;
+
+  showBoundingBoxes: boolean;
+  setShowBoundingBoxes: (show: boolean) => void;
 };
 
 /*
@@ -76,6 +83,8 @@ export function ViewerProvider({
     initialHighlightRegionId
   );
   const [highlightQuery, setHighlightQuery] = useState(initialHighlightQuery);
+  const [activeRegionId, setActiveRegionId] = useState<string | null>(null);
+  const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
 
   const setHighlight = useCallback((regionId: string | null, query: string) => {
     setHighlightRegionId(regionId);
@@ -138,26 +147,25 @@ export function ViewerProvider({
       highlightRegionId,
       highlightQuery,
       setHighlight,
+      activeRegionId,
+      setActiveRegionId,
+      showBoundingBoxes,
+      setShowBoundingBoxes,
     }),
     [
       document,
-
       tree,
-
       pageCount,
-
       mode,
-
       currentPage,
-
       scrollToPage,
-
       registerPage,
       reportVisiblePage,
-      ,
       highlightRegionId,
       highlightQuery,
       setHighlight,
+      activeRegionId,
+      showBoundingBoxes,
     ]
   );
 

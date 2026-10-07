@@ -12,10 +12,12 @@ import {
   ReprocessBar,
   ReprocessButton,
 } from '@/components/viewer/ReprocessBar';
+import { BoundingBoxCanvas } from '@/components/viewer/BoundingBoxCanvas';
 import { SplitViewer } from '@/components/viewer/SplitViewer';
 import { ViewerHeader } from '@/components/viewer/ViewerHeader';
 import {
   ViewerProvider,
+  useViewer,
   type ViewMode,
 } from '@/components/viewer/ViewerContext';
 import { isWorkingOn } from '@/lib/documents';
@@ -138,15 +140,28 @@ function DocumentViewer({ documentId }: { documentId: string }) {
       highlightRegionId={regionId}
       highlightQuery={query}
     >
-      <div className="flex h-full flex-col">
-        <ViewerHeader actions={<ReprocessButton onReprocessed={refresh} />} />
-        <ReprocessBar onReprocessed={refresh} />
-        <SplitViewer
-          original={<OriginalPane />}
-          extracted={<ExtractedContentList />}
-        />
-      </div>
+      <DocumentViewerLayout refresh={refresh} />
     </ViewerProvider>
+  );
+}
+
+function DocumentViewerLayout({ refresh }: { refresh: () => void }) {
+  const { showBoundingBoxes } = useViewer();
+  return (
+    <div className="flex h-full flex-col">
+      <ViewerHeader actions={<ReprocessButton onReprocessed={refresh} />} />
+      <ReprocessBar onReprocessed={refresh} />
+      <SplitViewer
+        original={
+          <OriginalPane
+            renderPageOverlay={
+              showBoundingBoxes ? BoundingBoxCanvas : undefined
+            }
+          />
+        }
+        extracted={<ExtractedContentList />}
+      />
+    </div>
   );
 }
 
