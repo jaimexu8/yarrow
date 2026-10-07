@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/Badge';
 import { cn } from '@/lib/cn';
+import { FindInDocument } from './FindInDocument';
 import { useViewer } from './ViewerContext';
 
 const ICON_BUTTON =
@@ -63,6 +64,7 @@ export function ViewerHeader({ actions }: { actions?: ReactNode }) {
         </h1>
         <StatusBadge status={document.status} className="shrink-0" />
       </div>
+      <FindInDocument />
       <PageIndicator />
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </header>

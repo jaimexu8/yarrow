@@ -41,9 +41,10 @@ type ViewerState = {
   // Returns true only when the page differs from the one already current.
   reportVisiblePage: (page: number) => boolean;
 
-  // set when opening a search hit
+  // current find hit; starts from a /search link's ?region=&q=
   highlightRegionId: string | null;
   highlightQuery: string;
+  setHighlight: (regionId: string | null, query: string) => void;
 };
 
 /*
@@ -55,8 +56,8 @@ export function ViewerProvider({
   document,
   tree,
   initialMode = 'split',
-  highlightRegionId = null,
-  highlightQuery = '',
+  highlightRegionId: initialHighlightRegionId = null,
+  highlightQuery: initialHighlightQuery = '',
   children,
 }: {
   document: DocumentSummary;
@@ -71,6 +72,15 @@ export function ViewerProvider({
     document.page_count
   );
   const [currentPage, setCurrentPage] = useState(1);
+  const [highlightRegionId, setHighlightRegionId] = useState<string | null>(
+    initialHighlightRegionId
+  );
+  const [highlightQuery, setHighlightQuery] = useState(initialHighlightQuery);
+
+  const setHighlight = useCallback((regionId: string | null, query: string) => {
+    setHighlightRegionId(regionId);
+    setHighlightQuery(query);
+  }, []);
 
   // Read synchronously by scroll handlers, which can fire before a re-render
   const currentPageRef = useRef(1);
@@ -127,6 +137,7 @@ export function ViewerProvider({
       reportVisiblePage,
       highlightRegionId,
       highlightQuery,
+      setHighlight,
     }),
     [
       document,
@@ -146,6 +157,7 @@ export function ViewerProvider({
       ,
       highlightRegionId,
       highlightQuery,
+      setHighlight,
     ]
   );
 

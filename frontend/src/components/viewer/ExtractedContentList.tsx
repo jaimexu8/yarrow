@@ -146,8 +146,14 @@ function PaneMessage({
  * parsed tree so every block keeps its region id (see RegionBlock).
  */
 export function ExtractedContentList() {
-  const { document, tree, pageCount, highlightRegionId, scrollToPage } =
-    useViewer();
+  const {
+    document,
+    tree,
+    pageCount,
+    highlightRegionId,
+    highlightQuery,
+    scrollToPage,
+  } = useViewer();
   const onScroll = usePageTracking('extracted');
   const placements = useMemo(
     () => (tree ? tablePlacements(tree) : new Map<string, TableNode>()),
@@ -170,7 +176,7 @@ export function ExtractedContentList() {
         });
     }, 50);
     return () => window.clearTimeout(timer);
-  }, [tree, highlightRegionId, scrollToPage]);
+  }, [tree, highlightRegionId, highlightQuery, scrollToPage]);
 
   // Determine if the document is currently in progress (queued or processing)
   const inProgress =
