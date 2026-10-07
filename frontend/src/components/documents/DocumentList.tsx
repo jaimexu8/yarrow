@@ -6,7 +6,7 @@ import { Alert } from '@/components/ui/Alert';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
-import { parseApiDate, type DocumentSummary } from '@/lib/documents';
+import { formatEasternDateTime, type DocumentSummary } from '@/lib/documents';
 import { formatBytes } from '@/lib/uploads';
 import { useDocuments } from '@/lib/useDocuments';
 import {
@@ -21,10 +21,7 @@ const REPROCESSABLE = new Set(['failed', 'completed', 'canceled']);
 
 function formatDate(value: string | null): string {
   if (!value) return '';
-  return parseApiDate(value).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+  return formatEasternDateTime(value);
 }
 
 /**
