@@ -16,7 +16,9 @@ from fastapi import (
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
+from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
 from yarrow_db.models import Document, Job, Page, Region, User
 from yarrow_db.models.region import RegionImage
 from yarrow_storage import ObjectNotFoundError, get_storage
@@ -57,6 +59,11 @@ from app.services.reprocess import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Jobs a user can still cancel (US-42): waiting in the queue, or being processed.
+CANCELABLE_JOB_STATES = {"queued", "processing"}
+# Postgres deadlock_detected
+DEADLOCK_DETECTED = "40P01"
 
 # Sniffed from the magic bytes, never from the filename or the browser's
 # Content-Type. These are exactly the types worker DocumentParser has a loader
@@ -408,7 +415,7 @@ async def reprocess_document_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     """Reprocess a document without uploading it again
-    
+
     Interrupted, failed or partly failed documents reprocess only the pages
     that are not completed, so the task resumes and finished pages are kept.
     Fully processed (or canceled) documents are processed again in full.
@@ -433,28 +440,55 @@ async def cancel_document_processing(
     access: DocumentAccess = Depends(require_edit_access),
     db: AsyncSession = Depends(get_db),
 ):
-    """Cancel a document's queued processing job (US-42).
+    """Cancel a document's processing while it is queued or processing (US-42).
 
-    Only a queued job can be canceled; once a worker has started it, or it has
-    finished, this is a 409 and nothing changes. The job row is locked, and the
-    worker locks the same row before starting, so a cancel and a worker
-    picking the job up at the same moment cannot both succeed.
+    A finished (completed, failed) or already canceled job is a 409 and nothing
+    changes. Rows are locked document first, then job, the same order as the
+    worker and document deletion. The worker re-checks the job under the
+    document lock before saving results, so a cancel and a finishing worker
+    cannot both win: either the results are dropped, or the cancel is refused.
     """
-    document = access.document
-    job = (
-        await db.execute(
-            select(Job)
-            .where(Job.document_id == document.id)
-            .order_by(Job.created_at.desc())
-            .limit(1)
-            .with_for_update()
-            .execution_options(populate_existing=True)
+    document_id = access.document.id
+    try:
+        # Fail fast rather than hang while the worker is saving results.
+        await db.execute(lock_timeout_statement())
+        document = (
+            await db.execute(
+                select(Document)
+                .where(Document.id == document_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
+        job = (
+            await db.execute(
+                select(Job)
+                .where(Job.document_id == document_id)
+                .order_by(Job.created_at.desc())
+                .limit(1)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+    except DBAPIError as exc:
+        await db.rollback()
+        # A lock timeout, or a deadlock Postgres broke by aborting this
+        # request: someone else is changing the document right now.
+        deadlock = DEADLOCK_DETECTED in (
+            getattr(exc.orig, "sqlstate", None),
+            getattr(exc.orig, "pgcode", None),
         )
-    ).scalar_one_or_none()
-    if job is None or job.status != "queued":
+        if is_lock_timeout(exc) or deadlock:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This document is being updated right now; try again.",
+            ) from None
+        raise
+
+    if job is None or job.status not in CANCELABLE_JOB_STATES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Only documents waiting in the queue can be canceled.",
+            detail="Only documents that haven't finished processing can be canceled.",
         )
 
     job.status = "canceled"
@@ -464,7 +498,8 @@ async def cancel_document_processing(
     await db.commit()
 
     # After the commit, so a worker that gets the message anyway sees the
-    # canceled row and skips it.
+    # canceled row and skips it. A job that is already processing keeps
+    # running until its next check, then discards its results.
     if task_id:
         try:
             # A blocking network call; kept off the event loop so a slow
@@ -474,8 +509,8 @@ async def cancel_document_processing(
             # The cancel already stands; the worker's check covers this.
             logger.exception(f"Revoking task {task_id} failed")
 
-    await db.refresh(document)
-    return document
+    document = await db.get(Document, document_id, populate_existing=True)
+    return (await documents_out(db, [document]))[0]
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -516,6 +551,7 @@ async def delete_document_endpoint(
             )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 
 def _iter_object(handle, chunk_size: int = READ_CHUNK):
     """Yield the object in chunks, always closing the handle"""

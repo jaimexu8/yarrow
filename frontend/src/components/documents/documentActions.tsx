@@ -123,8 +123,8 @@ export function RenameForm({
 }
 
 /**
- * Cancel a queued document's processing. Fails once a worker has
- * started it.
+ * Cancel a document's processing while it is queued or processing. Fails
+ * once it has finished.
  */
 export function useCancelProcessing(
   doc: DocumentSummary,

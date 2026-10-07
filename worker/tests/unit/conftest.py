@@ -66,7 +66,12 @@ class FakeSession:
         # serialize against in these tests, but ingestion locks the document
         # row so the signature has to match.
         return self.store.get((model.__name__, key))
-    
+
+    def refresh(self, obj, with_for_update=False):
+        # Objects live in the store, so they are always current; the lock is
+        # ignored for the same reason as in get().
+        return None
+
     def add_all(self, objects):
         self.added.extend(objects)
         

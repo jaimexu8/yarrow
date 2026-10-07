@@ -173,6 +173,11 @@ async def reprocess_document(
     """Queue a job that reprocesses the document; see the module docstring
     for which pages it covers
     """
+    # Document row first, then job: the same order as cancel, document
+    # deletion and the worker, so none of them can deadlock with this.
+    document = (
+        await db.execute(select(Document).where(Document.id == document_id).with_for_update().execution_options(populate_existing=True))
+    ).scalar_one()
     job = (
         await db.execute(
             select(Job)
@@ -195,9 +200,6 @@ async def reprocess_document(
             detail="This document is already being processed.",
         )
 
-    document = (
-        await db.execute(select(Document).where(Document.id == document_id).with_for_update().execution_options(populate_existing=True))
-    ).scalar_one()
     completed = list(await db.scalars(select(Page.page_number).where(Page.document_id == document_id, Page.status == "completed")))
     scope = reprocess_scope(document.status, document.page_count, len(completed), latest, now)
     pages = pages_to_process(document.page_count, completed) if scope == "incomplete" else None
