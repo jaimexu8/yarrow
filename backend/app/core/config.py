@@ -18,7 +18,7 @@ class Settings(DatabaseSettings):
     # The design document (3.1, option 4) bounds user uploads by total bytes,
     # because a file count says nothing about how many pages it holds.
     STORAGE_QUOTA_BYTES: int = 1024 * 1024 * 1024  # 1 GiB per user
-    
+
     # A job still queued or processing with no update for this long was lost
     # Just over the worker's Celery task_time_limit (3600s)
     JOB_INTERRUPTED_AFTER_SECONDS: int = 65 * 60
@@ -61,6 +61,12 @@ class Settings(DatabaseSettings):
     PASSWORD_RESET_TTL_MINUTES: int = 30
     PASSWORD_RESET_COOLDOWN_SECONDS: int = 60
     PASSWORD_RESET_MAX_PER_HOUR: int = 3
+
+    # Cloud Storage Integrations (US-17)
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    DROPBOX_CLIENT_ID: str = ""
+    DROPBOX_CLIENT_SECRET: str = ""
 
     NEXT_PUBLIC_API_URL: str = "http://localhost:8000"
     NEXT_PUBLIC_APP_URL: str = "http://localhost:3000"

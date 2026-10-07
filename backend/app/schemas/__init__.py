@@ -31,6 +31,13 @@ from .document import (
     UploadRejected,
     UploadResponse,
 )
+from .integrations import (
+    CloudConnectionOut,
+    OAuthAuthorizeResponse,
+    OAuthCallbackRequest,
+    SyncResponse,
+    SyncStatusOut,
+)
 from .parsed import (
     SCHEMA_VERSION,
     DocumentStats,
@@ -53,6 +60,7 @@ from .table import (
 __all__ = [
     "SCHEMA_VERSION",
     "BBox",
+    "CloudConnectionOut",
     "DocumentDetail",
     "DocumentOut",
     "DocumentRename",
@@ -65,6 +73,8 @@ __all__ = [
     "MessageResponse",
     "NewPassword",
     "NormalizedEmail",
+    "OAuthAuthorizeResponse",
+    "OAuthCallbackRequest",
     "PageNode",
     "PageOut",
     "PasswordResetConfirm",
@@ -74,6 +84,8 @@ __all__ = [
     "ResendVerificationRequest",
     "RowSource",
     "StrictModel",
+    "SyncResponse",
+    "SyncStatusOut",
     "TableCellNode",
     "TableMutationResult",
     "TableNode",

@@ -1,4 +1,5 @@
 from .base import Base
+from .cloud_credential import CloudCredential
 from .document import Document
 from .job import Job
 from .page import Page
@@ -10,6 +11,7 @@ from .warning import Warning
 
 __all__ = [
     "Base",
+    "CloudCredential",
     "Document",
     "DocumentShare",
     "Job",
