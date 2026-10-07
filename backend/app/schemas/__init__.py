@@ -46,6 +46,11 @@ from .parsed import (
     RegionNode,
     WarningNode,
 )
+from .sharing import (
+    DocumentShareOut,
+    ShareDocumentRequest,
+    UpdateShareRequest,
+)
 from .table import (
     MergeCandidate,
     MergeCandidatesOut,
@@ -64,6 +69,7 @@ __all__ = [
     "DocumentDetail",
     "DocumentOut",
     "DocumentRename",
+    "DocumentShareOut",
     "DocumentStats",
     "DocumentTree",
     "JobOut",
@@ -83,6 +89,7 @@ __all__ = [
     "ReprocessInfo",
     "ResendVerificationRequest",
     "RowSource",
+    "ShareDocumentRequest",
     "StrictModel",
     "SyncResponse",
     "SyncStatusOut",
@@ -91,6 +98,7 @@ __all__ = [
     "TableNode",
     "TablePart",
     "Token",
+    "UpdateShareRequest",
     "UploadAccepted",
     "UploadRejected",
     "UploadResponse",
