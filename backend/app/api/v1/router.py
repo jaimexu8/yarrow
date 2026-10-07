@@ -5,6 +5,7 @@ from app.api.v1.endpoints import (
     auth,
     documents,
     health,
+    integrations,
     parsed,
     search,
     tables,
@@ -18,3 +19,6 @@ api_router.include_router(parsed.router, prefix="/documents", tags=["parsed"])
 api_router.include_router(tables.router, prefix="/documents", tags=["tables"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(
+    integrations.router, prefix="/integrations", tags=["integrations"]
+)

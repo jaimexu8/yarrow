@@ -9,6 +9,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
 from yarrow_db.models import (
+    CloudCredential,
     Document,
     DocumentShare,
     Job,
@@ -54,6 +55,7 @@ class AccountDeletionOutcome:
     def ok(self) -> bool:
         return self.error is None
 
+
 @dataclass
 class AccountUpdateOutcome:
     """What happened during account update in terms the endpoint maps to HTTP"""
@@ -61,6 +63,7 @@ class AccountUpdateOutcome:
     error: AccountUpdateError | None = None
     detail: str | None = None
     ok: bool = False
+
 
 async def _delete_rows(db: AsyncSession, user_id: UUID) -> tuple[int, list[str]]:
     """Delete everything the user owns, children first.
@@ -123,6 +126,9 @@ async def _delete_rows(db: AsyncSession, user_id: UUID) -> tuple[int, list[str]]
         share_filter = or_(share_filter, DocumentShare.document_id.in_(document_ids))
     await db.execute(delete(DocumentShare).where(share_filter))
 
+    # Delete cloud credentials for the user
+    await db.execute(delete(CloudCredential).where(CloudCredential.user_id == user_id))
+
     # Finally, delete the user's documents and the user account itself.
     if document_ids:
         await db.execute(delete(Document).where(Document.id.in_(document_ids)))
@@ -164,12 +170,19 @@ async def delete_account(db: AsyncSession, user_id: UUID) -> AccountDeletionOutc
         orphaned_keys=orphaned,
     )
 
-async def update_account(db: AsyncSession, user_id: UUID, payload: UserUpdate) -> AccountUpdateOutcome:
+
+async def update_account(
+    db: AsyncSession, user_id: UUID, payload: UserUpdate
+) -> AccountUpdateOutcome:
     """Update a user's account information."""
     try:
-        user = (await db.execute(select(User).where(User.id == user_id))).scalars().first()
+        user = (
+            (await db.execute(select(User).where(User.id == user_id))).scalars().first()
+        )
         if not user:
-            return AccountUpdateOutcome(ok=False, error=AccountUpdateError.NOT_FOUND, detail="User not found")
+            return AccountUpdateOutcome(
+                ok=False, error=AccountUpdateError.NOT_FOUND, detail="User not found"
+            )
 
         if payload.name is not None:
             user.name = payload.name
