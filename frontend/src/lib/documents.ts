@@ -6,6 +6,15 @@ import { toApiError } from './errors';
 export type DocumentStatus =
   'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
 
+/** Human-readable label for each processing status (NFR-13). */
+export const STATUS_LABELS: Record<DocumentStatus, string> = {
+  queued: 'Queued',
+  processing: 'Processing',
+  completed: 'Completed',
+  failed: 'Failed',
+  canceled: 'Canceled',
+};
+
 export type ReprocessInfo = {
   // some pages to be processed (incomplete) or all of them (all)
   scope: 'incomplete' | 'all';

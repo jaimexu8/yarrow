@@ -1,4 +1,4 @@
-import type { DocumentStatus } from '@/lib/documents';
+import { STATUS_LABELS, type DocumentStatus } from '@/lib/documents';
 import { cn } from '@/lib/cn';
 
 /**
@@ -12,23 +12,23 @@ const STATUS_STYLES: Record<
   { label: string; className: string }
 > = {
   queued: {
-    label: 'Queued',
+    label: STATUS_LABELS.queued,
     className: 'border-slate-300 bg-slate-100 text-slate-700',
   },
   processing: {
-    label: 'Processing',
+    label: STATUS_LABELS.processing,
     className: 'border-sky-200 bg-sky-50 text-sky-800',
   },
   completed: {
-    label: 'Completed',
+    label: STATUS_LABELS.completed,
     className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
   },
   failed: {
-    label: 'Failed',
+    label: STATUS_LABELS.failed,
     className: 'border-red-200 bg-red-50 text-red-800',
   },
   canceled: {
-    label: 'Canceled',
+    label: STATUS_LABELS.canceled,
     className: 'border-amber-200 bg-amber-50 text-amber-800',
   },
 };
