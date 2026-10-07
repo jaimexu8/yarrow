@@ -95,9 +95,28 @@ class TestCancelQueued:
         assert response.json()["status"] == "canceled"
 
 
-class TestOnlyQueuedCanBeCanceled:
-    @pytest.mark.parametrize("status", ["processing", "completed", "failed"])
-    async def test_started_or_finished_job_cannot_be_canceled(
+class TestCancelWhileProcessing:
+    async def test_processing_job_is_canceled_and_revoked(
+        self, client, auth_headers, fake_storage, fake_queue, revoked, db_session
+    ):
+        """The worker drops the results of a job canceled mid-run (see the
+        worker's TestCanceled tests)."""
+        document_id, job_id = await _upload(client, auth_headers)
+        await _set_status(db_session, job_id, "processing")
+
+        response = await client.post(_cancel_url(document_id), headers=auth_headers)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "canceled"
+        job = await db_session.get(Job, job_id)
+        await db_session.refresh(job)
+        assert job.status == "canceled"
+        assert revoked == ["task-1"]
+
+
+class TestFinishedCannotBeCanceled:
+    @pytest.mark.parametrize("status", ["completed", "failed"])
+    async def test_finished_job_cannot_be_canceled(
         self,
         client,
         auth_headers,

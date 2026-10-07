@@ -20,6 +20,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import {
+  canCancel,
   isInterrupted,
   parseApiDate,
   type DocumentSummary,
@@ -342,8 +343,8 @@ function DocumentTableRow({
       onSelect: () => {}, // TODO
     },
   ];
-  // Only while queued: a started or finished job can't be canceled.
-  if (doc.status === 'queued') {
+  // Only until it finishes: a completed or failed job can't be canceled.
+  if (canCancel(doc)) {
     actions.push({
       label: 'Cancel processing',
       icon: XCircle,
