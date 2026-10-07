@@ -5,13 +5,24 @@ import { useState, type FormEvent } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
 import { toApiError } from '@/lib/errors';
 import { documentHitHref, HighlightedText } from '@/lib/highlight';
 import { searchDocuments, type SearchHit } from '@/lib/search';
 
+const DOCUMENT_TYPES = [
+  { value: 'application/pdf', label: 'PDF' },
+  { value: 'image/png', label: 'PNG' },
+  { value: 'image/jpeg', label: 'JPEG' },
+  { value: 'image/gif', label: 'GIF' },
+];
+
 export default function SearchPage() {
   const [query, setQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [fileType, setFileType] = useState('');
   const [results, setResults] = useState<SearchHit[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +32,13 @@ export default function SearchPage() {
     setLoading(true);
     setError(null);
     try {
-      setResults(await searchDocuments(query));
+      setResults(
+        await searchDocuments(query, {
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+          fileType: fileType || undefined,
+        })
+      );
     } catch (err) {
       setResults(null);
       setError(toApiError(err).message);
@@ -37,27 +54,60 @@ export default function SearchPage() {
           Search
         </h1>
         <p className="text-sm text-slate-600">
-          Find text in your processed documents.
+          Find text in your processed documents. Leave the search box empty to
+          browse by date or type.
         </p>
       </div>
 
-      <form
-        onSubmit={onSubmit}
-        className="flex flex-col gap-3 sm:flex-row sm:items-end"
-      >
-        <div className="min-w-0 flex-1">
-          <Input
-            id="search-q"
-            label="Search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="a word from your documents"
-            autoComplete="off"
-          />
+      <form onSubmit={onSubmit} className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1">
+            <Input
+              id="search-q"
+              label="Search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="a word from your documents"
+              autoComplete="off"
+            />
+          </div>
+          <Button type="submit" loading={loading} className="sm:w-auto">
+            Search
+          </Button>
         </div>
-        <Button type="submit" loading={loading} className="sm:w-auto">
-          Search
-        </Button>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Input
+            id="search-date-from"
+            label="From date"
+            type="date"
+            value={dateFrom}
+            onChange={(event) => setDateFrom(event.target.value)}
+            max={dateTo || undefined}
+            invalidMessage="Must be on or before the end date."
+          />
+          <Input
+            id="search-date-to"
+            label="To date"
+            type="date"
+            value={dateTo}
+            onChange={(event) => setDateTo(event.target.value)}
+            min={dateFrom || undefined}
+            invalidMessage="Must be on or after the start date."
+          />
+          <Select
+            id="search-type"
+            label="Document type"
+            value={fileType}
+            onChange={(event) => setFileType(event.target.value)}
+          >
+            <option value="">Any type</option>
+            {DOCUMENT_TYPES.map((type) => (
+              <option key={type.value} value={type.value}>
+                {type.label}
+              </option>
+            ))}
+          </Select>
+        </div>
       </form>
 
       {error && <Alert>{error}</Alert>}
