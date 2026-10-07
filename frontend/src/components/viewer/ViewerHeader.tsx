@@ -2,9 +2,16 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 import { StatusBadge } from '@/components/ui/Badge';
 import { cn } from '@/lib/cn';
+import { FindInDocument } from './FindInDocument';
 import { useViewer } from './ViewerContext';
 
 const ICON_BUTTON =
@@ -20,6 +27,7 @@ function PageIndicator() {
         className={ICON_BUTTON}
         disabled={currentPage <= 1}
         onClick={() => scrollToPage(currentPage - 1)}
+        title="Previous page"
       >
         <ChevronLeft aria-hidden="true" className="size-4" />
         <span className="sr-only">Previous page</span>
@@ -35,11 +43,34 @@ function PageIndicator() {
         className={ICON_BUTTON}
         disabled={currentPage >= pageCount}
         onClick={() => scrollToPage(currentPage + 1)}
+        title="Next page"
       >
         <ChevronRight aria-hidden="true" className="size-4" />
         <span className="sr-only">Next page</span>
       </button>
     </div>
+  );
+}
+
+function BoundingBoxToggle() {
+  const { showBoundingBoxes, setShowBoundingBoxes } = useViewer();
+  return (
+    <button
+      type="button"
+      className={ICON_BUTTON}
+      onClick={() => setShowBoundingBoxes(!showBoundingBoxes)}
+      title={showBoundingBoxes ? 'Hide bounding boxes' : 'Show bounding boxes'}
+      aria-pressed={showBoundingBoxes}
+    >
+      {showBoundingBoxes ? (
+        <Eye aria-hidden="true" className="size-4" />
+      ) : (
+        <EyeOff aria-hidden="true" className="size-4" />
+      )}
+      <span className="sr-only">
+        {showBoundingBoxes ? 'Hide bounding boxes' : 'Show bounding boxes'}
+      </span>
+    </button>
   );
 }
 
@@ -63,8 +94,12 @@ export function ViewerHeader({ actions }: { actions?: ReactNode }) {
         </h1>
         <StatusBadge status={document.status} className="shrink-0" />
       </div>
+      <FindInDocument />
       <PageIndicator />
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      <div className="flex items-center gap-1 border-l border-slate-200 pl-4">
+        <BoundingBoxToggle />
+        {actions && <div className="flex items-center gap-2">{actions}</div>}
+      </div>
     </header>
   );
 }

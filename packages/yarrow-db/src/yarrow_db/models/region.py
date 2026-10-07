@@ -1,10 +1,18 @@
+import enum
 import uuid
 
-from sqlalchemy import Column, Float, ForeignKey, Integer, String
+from sqlalchemy import Column, Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from .base import Base
+
+
+class RegionType(str, enum.Enum):
+    HEADER = "header"
+    PARAGRAPH = "paragraph"
+    FIGURE = "figure"
+    TABLE = "table"
 
 
 class Region(Base):
@@ -12,8 +20,9 @@ class Region(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     page_id = Column(UUID(as_uuid=True), ForeignKey("pages.id"), nullable=False)
+    page_number = Column(Integer)
     reading_order = Column(Integer)
-    region_type = Column(String)  # the OCR's block_label as-is, e.g. text, table, image
+    region_type = Column(Enum("header", "paragraph", "figure", "table", name="region_type_enum", create_constraint=False))
     x0 = Column(Float)
     y0 = Column(Float)
     x1 = Column(Float)

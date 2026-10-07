@@ -34,11 +34,24 @@ type ViewerState = {
   currentPage: number;
 
   // Bring a page to the top of every visible pane.
-  scrollToPage: (page: number) => void;
+  scrollToPage: (page: number, pane?: Pane) => void;
 
   // Panes call these to make their pages reachable by scrollToPage.
   registerPage: (pane: Pane, page: number, element: HTMLElement | null) => void;
-  reportVisiblePage: (page: number) => void;
+  // Returns true only when the page differs from the one already current.
+  reportVisiblePage: (page: number) => boolean;
+
+  // current find hit; starts from a /search link's ?region=&q=
+  highlightRegionId: string | null;
+  highlightQuery: string;
+  setHighlight: (regionId: string | null, query: string) => void;
+
+  // Track which region is currently active (hovered or clicked)
+  activeRegionId: string | null;
+  setActiveRegionId: (id: string | null) => void;
+
+  showBoundingBoxes: boolean;
+  setShowBoundingBoxes: (show: boolean) => void;
   /** Load the document again, e.g. after merging or splitting its tables. */
   refresh: () => void;
 };
@@ -53,12 +66,16 @@ export function ViewerProvider({
   tree,
   initialMode = 'split',
   refresh,
+  highlightRegionId: initialHighlightRegionId = null,
+  highlightQuery: initialHighlightQuery = '',
   children,
 }: {
   document: DocumentSummary;
   tree: DocumentTree | null;
   initialMode?: ViewMode;
   refresh: () => void;
+  highlightRegionId?: string | null;
+  highlightQuery?: string;
   children: ReactNode;
 }) {
   const [mode, setMode] = useState<ViewMode>(initialMode);
@@ -66,6 +83,20 @@ export function ViewerProvider({
     document.page_count
   );
   const [currentPage, setCurrentPage] = useState(1);
+  const [highlightRegionId, setHighlightRegionId] = useState<string | null>(
+    initialHighlightRegionId
+  );
+  const [highlightQuery, setHighlightQuery] = useState(initialHighlightQuery);
+  const [activeRegionId, setActiveRegionId] = useState<string | null>(null);
+  const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
+
+  const setHighlight = useCallback((regionId: string | null, query: string) => {
+    setHighlightRegionId(regionId);
+    setHighlightQuery(query);
+  }, []);
+
+  // Read synchronously by scroll handlers, which can fire before a re-render
+  const currentPageRef = useRef(1);
 
   const anchors = useRef<Record<Pane, Map<number, HTMLElement>>>({
     original: new Map(),
@@ -80,10 +111,12 @@ export function ViewerProvider({
     []
   );
 
-  const scrollToPage = useCallback((page: number) => {
+  const scrollToPage = useCallback((page: number, pane?: Pane) => {
+    currentPageRef.current = page;
     setCurrentPage(page);
-    for (const pane of ['original', 'extracted'] as const) {
-      const element = anchors.current[pane].get(page);
+    for (const p of ['original', 'extracted'] as const) {
+      if (pane && pane !== p) continue;
+      const element = anchors.current[p].get(page);
       const container = element?.closest<HTMLElement>('[data-viewer-scroll]');
 
       // If a pane is hidden, continue
@@ -94,6 +127,13 @@ export function ViewerProvider({
         container.getBoundingClientRect().top -
         PAGE_SCROLL_MARGIN;
     }
+  }, []);
+
+  const reportVisiblePage = useCallback((page: number) => {
+    if (page === currentPageRef.current) return false;
+    currentPageRef.current = page;
+    setCurrentPage(page);
+    return true;
   }, []);
 
   const value = useMemo<ViewerState>(
@@ -107,7 +147,14 @@ export function ViewerProvider({
       currentPage,
       scrollToPage,
       registerPage,
-      reportVisiblePage: setCurrentPage,
+      reportVisiblePage,
+      highlightRegionId,
+      highlightQuery,
+      setHighlight,
+      activeRegionId,
+      setActiveRegionId,
+      showBoundingBoxes,
+      setShowBoundingBoxes,
       refresh,
     }),
     [
@@ -119,6 +166,12 @@ export function ViewerProvider({
       scrollToPage,
       registerPage,
       refresh,
+      reportVisiblePage,
+      highlightRegionId,
+      highlightQuery,
+      setHighlight,
+      activeRegionId,
+      showBoundingBoxes,
     ]
   );
 
@@ -140,10 +193,15 @@ export function useViewer(): ViewerState {
  * Returns an onScroll handler for the pane's scroll container.
  */
 export function usePageTracking(pane: Pane) {
-  const { reportVisiblePage } = useViewer();
+  const { reportVisiblePage, scrollToPage } = useViewer();
   return useCallback(
     (event: React.UIEvent<HTMLElement>) => {
       const container = event.currentTarget;
+
+      // Hiding a pane resets its scroll and fires this with every page at
+      // the top, which would read as the last page
+      if (!container.offsetParent) return;
+
       const line =
         container.getBoundingClientRect().top + container.clientHeight / 3;
       let page: number | null = null;
@@ -158,8 +216,10 @@ export function usePageTracking(pane: Pane) {
           break;
         }
       }
-      if (page !== null) reportVisiblePage(page);
+      if (page !== null && reportVisiblePage(page)) {
+        scrollToPage(page, pane === 'original' ? 'extracted' : 'original');
+      }
     },
-    [pane, reportVisiblePage]
+    [pane, reportVisiblePage, scrollToPage]
   );
 }

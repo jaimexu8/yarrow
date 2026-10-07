@@ -17,7 +17,8 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from yarrow_db.models import Document, Job, Page, User
+from yarrow_db.models import Document, Job, Page, Region, User
+from yarrow_db.models.region import RegionImage
 from yarrow_storage import ObjectNotFoundError, get_storage
 
 from app.core.config import settings
@@ -561,4 +562,48 @@ async def get_document_content(
                 filename, disposition="inline", unicode_filename=unicode_filename
             )
         },
+    )
+
+
+@router.get("/{document_id}/regions/{region_id}/image")
+async def get_region_image(
+    region_id: UUID,
+    access: DocumentAccess = Depends(require_read_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Streams the cropped picture of a figure region for the viewer
+
+    Served through the backend for the same reason as the original file.
+    """
+    # Joined through the page so a region of another document is not found
+    image_key = await db.scalar(
+        select(RegionImage.image_key)
+        .join(Region, RegionImage.region_id == Region.id)
+        .join(Page, Region.page_id == Page.id)
+        .where(
+            Region.id == region_id,
+            Page.document_id == access.document.id,
+            RegionImage.image_key.is_not(None),
+        )
+    )
+    if image_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This region has no image",
+        )
+
+    try:
+        handle = await run_in_threadpool(get_storage().download_file, image_key)
+    except ObjectNotFoundError:
+        logger.error(f"Object missing for region {region_id}: {image_key}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The image is no longer in storage",
+        ) from None
+
+    return StreamingResponse(
+        _iter_object(handle),
+        media_type="image/png",
+        # Region ids are new on every reprocess, so a crop never changes
+        headers={"Cache-Control": "private, max-age=86400, immutable"},
     )

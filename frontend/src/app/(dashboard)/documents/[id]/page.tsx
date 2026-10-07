@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
@@ -11,10 +12,12 @@ import {
   ReprocessBar,
   ReprocessButton,
 } from '@/components/viewer/ReprocessBar';
+import { BoundingBoxCanvas } from '@/components/viewer/BoundingBoxCanvas';
 import { SplitViewer } from '@/components/viewer/SplitViewer';
 import { ViewerHeader } from '@/components/viewer/ViewerHeader';
 import {
   ViewerProvider,
+  useViewer,
   type ViewMode,
 } from '@/components/viewer/ViewerContext';
 import { isWorkingOn } from '@/lib/documents';
@@ -35,15 +38,10 @@ function defaultMode(): ViewMode {
   return window.matchMedia('(min-width: 768px)').matches ? 'split' : 'original';
 }
 
-/**
- * The page to display the document and its extracted content. While the document is
- * still processing, the extracted side fills in once it finishes.
- */
-export default function DocumentViewerPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+function DocumentViewer({ documentId }: { documentId: string }) {
+  const searchParams = useSearchParams();
+  const regionId = searchParams.get('region');
+  const query = searchParams.get('q') ?? '';
   const [load, setLoad] = useState<Load>({ state: 'loading' });
   const [attempt, setAttempt] = useState(0);
 
@@ -53,7 +51,7 @@ export default function DocumentViewerPage({
 
     async function fetchTree() {
       try {
-        const tree = await getDocumentTree(params.id);
+        const tree = await getDocumentTree(documentId);
         if (!current) return;
         setLoad({ state: 'ready', tree });
 
@@ -80,7 +78,7 @@ export default function DocumentViewerPage({
       current = false;
       clearTimeout(timer);
     };
-  }, [params.id, attempt]);
+  }, [documentId, attempt]);
 
   // Fetch the document again, for instance, after starting a reprocess.
   const refresh = useCallback(() => setAttempt((count) => count + 1), []);
@@ -141,22 +139,55 @@ export default function DocumentViewerPage({
       tree={load.tree}
       initialMode={defaultMode()}
       refresh={refresh}
+      highlightRegionId={regionId}
+      highlightQuery={query}
     >
-      <div className="flex h-full flex-col">
-        <ViewerHeader
-          actions={
-            <>
-              <ReprocessButton onReprocessed={refresh} />
-              <TableOperationsDropdown onDone={refresh} />
-            </>
-          }
-        />
-        <ReprocessBar onReprocessed={refresh} />
-        <SplitViewer
-          original={<OriginalPane />}
-          extracted={<ExtractedContentList />}
-        />
-      </div>
+      <DocumentViewerLayout refresh={refresh} />
     </ViewerProvider>
+  );
+}
+
+function DocumentViewerLayout({ refresh }: { refresh: () => void }) {
+  const { showBoundingBoxes } = useViewer();
+  return (
+    <div className="flex h-full flex-col">
+      <ViewerHeader
+        actions={
+          <>
+            <ReprocessButton onReprocessed={refresh} />
+            <TableOperationsDropdown onDone={refresh} />
+          </>
+        }
+      />
+      <ReprocessBar onReprocessed={refresh} />
+      <SplitViewer
+        original={
+          <OriginalPane
+            renderPageOverlay={
+              showBoundingBoxes ? BoundingBoxCanvas : undefined
+            }
+          />
+        }
+        extracted={<ExtractedContentList />}
+      />
+    </div>
+  );
+}
+
+export default function DocumentViewerPage({
+  params,
+}: {
+  params: { id: string };
+}) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-full items-center justify-center text-slate-500">
+          <Spinner label="Loading the document" />
+        </div>
+      }
+    >
+      <DocumentViewer documentId={params.id} />
+    </Suspense>
   );
 }
