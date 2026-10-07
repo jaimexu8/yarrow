@@ -11,7 +11,10 @@ authors = ["Team 13"]
 [tool.poetry.dependencies]
 python = "^3.11"
 
-# Stock x86 CPU wheel from PyPI. paddlex does not pin paddlepaddle at all
+# CPU dev environment only. The Docker image (../paddlex.Dockerfile) does not
+# use this file: it pip-installs the cu130 paddlepaddle_gpu wheel directly,
+# because poetry cannot resolve that wheel's CUDA 13 runtime, which ships on
+# NVIDIA's index.
 paddlepaddle = ">=3.3.0,<3.4"
 
 paddleocr = {extras = ["doc-parser"], version = ">=3.4.0,<3.5"}
