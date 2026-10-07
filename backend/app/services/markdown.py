@@ -8,18 +8,11 @@ from app.schemas.table import TableCellNode, TableNode
 
 # Region types come straight through from the OCR's block_label.
 HEADING_LEVELS: dict[str, int] = {
-    "doc_title": 1,
-    "title": 1,
-    "paragraph_title": 2,
-    "section_title": 2,
-    "sub_paragraph_title": 3,
+    "header": 1,
 }
 
 TABLE_LABELS = frozenset({"table"})
-TABLE_CAPTION_LABELS = frozenset({"table_title", "table_caption"})
-FIGURE_LABELS = frozenset({"image", "figure", "chart", "seal"})
-FORMULA_LABELS = frozenset({"formula", "equation"})
-ARTIFACT_LABELS = frozenset({"header", "footer", "number", "page_number"})
+FIGURE_LABELS = frozenset({"figure"})
 
 _BULLET = re.compile(r"^\s*[•▪◦·‣∙*\-–—]\s+")
 _ORDERED = re.compile(r"^\s*(\d{1,3})[.)]\s+")
@@ -65,10 +58,7 @@ class _Renderer:
     # --- shared traversal ---------------------------------------------------
 
     def _visible(self, page: PageNode) -> list[RegionNode]:
-        regions = sorted(page.regions, key=lambda r: r.reading_order)
-        if self.options.include_artifacts:
-            return regions
-        return [r for r in regions if (r.region_type or "") not in ARTIFACT_LABELS]
+        return sorted(page.regions, key=lambda r: r.reading_order)
 
     def _table_for(self, region: RegionNode) -> TableNode | None:
         """The table to emit here, or None if this region is a continuation"""
@@ -95,7 +85,6 @@ class _Renderer:
 
     def _markdown_page(self, page: PageNode) -> list[str]:
         blocks: list[str] = []
-        previous_was_caption = False
 
         for region in self._visible(page):
             label = region.region_type or ""
@@ -104,24 +93,14 @@ class _Renderer:
             if label in TABLE_LABELS:
                 table = self._table_for(region)
                 if table is not None:
-                    blocks.extend(self._markdown_table(table, captioned=previous_was_caption))
-                previous_was_caption = False
-                continue
-
-            previous_was_caption = label in TABLE_CAPTION_LABELS
-
-            if label in TABLE_CAPTION_LABELS:
-                if text:
-                    blocks.append(f"**{text}**")
+                    captioned = False
+                    if table.title and blocks and _clean(table.title) in blocks[-1]:
+                        captioned = True
+                    blocks.extend(self._markdown_table(table, captioned=captioned))
                 continue
 
             if label in FIGURE_LABELS:
                 blocks.append(self._markdown_figure(region))
-                continue
-
-            if label in FORMULA_LABELS:
-                if text:
-                    blocks.append(f"$$\n{text}\n$$")
                 continue
 
             if not text:
@@ -177,7 +156,6 @@ class _Renderer:
         pages: list[str] = []
         for page in sorted(self.tree.pages, key=lambda p: p.page_number):
             blocks: list[str] = []
-            previous_was_caption = False
 
             for region in self._visible(page):
                 label = region.region_type or ""
@@ -186,13 +164,13 @@ class _Renderer:
                 if label in TABLE_LABELS:
                     table = self._table_for(region)
                     if table is not None:
-                        if table.title and not previous_was_caption:
+                        captioned = False
+                        if table.title and blocks and _clean(table.title) in blocks[-1]:
+                            captioned = True
+                        if table.title and not captioned:
                             blocks.append(_clean(table.title))
                         blocks.append(_plain_table(table))
-                    previous_was_caption = False
                     continue
-
-                previous_was_caption = label in TABLE_CAPTION_LABELS
 
                 if label in FIGURE_LABELS:
                     blocks.append(f"[{label} on page {region.page_number}]")

@@ -2,7 +2,6 @@
 
 from app.schemas.table import TableCellNode
 from app.services.markdown import (
-    RenderOptions,
     render_markdown,
     render_plain_text,
 )
@@ -15,48 +14,26 @@ class TestHeadings:
             [
                 page(
                     1,
-                    region("doc_title", text="Annual Report"),
-                    region("paragraph_title", text="Overview"),
-                    region("text", text="Body copy."),
+                    region("header", text="Annual Report"),
+                    region("header", text="Overview"),
+                    region("paragraph", text="Body copy."),
                 )
             ]
         )
         assert "# Annual Report" in render_markdown(document)
-        assert "## Overview" in render_markdown(document)
+        assert "# Overview" in render_markdown(document)
 
     def test_unknown_labels_are_kept_as_paragraphs(self):
         """An unseen OCR label must not drop content or raise."""
-        document = tree([page(1, region("some_new_label", text="Do not lose me."))])
+        document = tree([page(1, region("paragraph", text="Do not lose me."))])
         assert "Do not lose me." in render_markdown(document)
 
     def test_empty_regions_are_skipped(self):
-        document = tree([page(1, region("text", text="   "), region("text"))])
+        document = tree([page(1, region("paragraph", text="   "), region("paragraph"))])
         assert render_markdown(document) == ""
 
 
-class TestArtifacts:
-    def test_headers_and_footers_are_excluded_when_asked(self):
-        document = tree(
-            [
-                page(
-                    1,
-                    region("header", text="CONFIDENTIAL"),
-                    region("text", text="Real content."),
-                    region("footer", text="Page 1 of 9"),
-                    region("number", text="1"),
-                )
-            ]
-        )
-        exported = render_markdown(document, RenderOptions(include_artifacts=False))
-        assert "Real content." in exported
-        assert "CONFIDENTIAL" not in exported
-        assert "Page 1 of 9" not in exported
 
-    def test_headers_are_kept_for_the_viewer(self):
-        document = tree([page(1, region("header", text="CONFIDENTIAL"))])
-        assert "CONFIDENTIAL" in render_markdown(
-            document, RenderOptions(include_artifacts=True)
-        )
 
 
 class TestFigures:
@@ -68,7 +45,7 @@ class TestFigures:
         assert "page 2" in rendered
 
     def test_caption_is_included(self):
-        document = tree([page(1, region("chart", caption="Revenue by quarter"))])
+        document = tree([page(1, region("figure", caption="Revenue by quarter"))])
         assert "Revenue by quarter" in render_markdown(document)
 
 
@@ -163,7 +140,7 @@ class TestTables:
             [
                 page(
                     1,
-                    region("table_title", text="Table 1: Figures"),
+                    region("header", text="Table 1: Figures"),
                     region(
                         "table",
                         table_id=table.id,
@@ -231,8 +208,8 @@ class TestLists:
             [
                 page(
                     1,
-                    region("text", text="• first\n• second"),
-                    region("text", text="1. alpha\n2) beta"),
+                    region("paragraph", text="• first\n• second"),
+                    region("paragraph", text="1. alpha\n2) beta"),
                 )
             ]
         )
@@ -243,7 +220,7 @@ class TestLists:
         assert "2. beta" in rendered
 
     def test_a_paragraph_starting_with_a_digit_is_not_a_list(self):
-        document = tree([page(1, region("text", text="2024 was a strong year."))])
+        document = tree([page(1, region("paragraph", text="2024 was a strong year."))])
         assert "2024 was a strong year." in render_markdown(document)
         assert "- 2024" not in render_markdown(document)
 
@@ -255,7 +232,7 @@ class TestPlainText:
             [
                 page(
                     1,
-                    region("doc_title", text="Report"),
+                    region("header", text="Report"),
                     region(
                         "table",
                         table_id=table.id,

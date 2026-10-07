@@ -22,7 +22,7 @@ class Region(Base):
     page_id = Column(UUID(as_uuid=True), ForeignKey("pages.id"), nullable=False)
     page_number = Column(Integer)
     reading_order = Column(Integer)
-    region_type = Column(Enum(RegionType, name="region_type_enum", create_constraint=False))
+    region_type = Column(Enum("header", "paragraph", "figure", "table", name="region_type_enum", create_constraint=False))
     x0 = Column(Float)
     y0 = Column(Float)
     x1 = Column(Float)
