@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: paradedb/paradedb:pg18@sha256:a9cbdcfd8a1c349ab21590fd6d6dcbe7da489878df6502922d032dd64c1a7ae7
         env:
           POSTGRES_USER: yarrow
           POSTGRES_PASSWORD: yarrow_password
@@ -24,14 +24,14 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       valkey:
-        image: valkey/valkey:7
+        image: valkey/valkey:9.0-alpine@sha256:187679e3bd4036959631e3f03983ab2ba503ab21e6fd0454d508e909db2ee989
         ports:
           - 6379
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -60,17 +60,17 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
-          cache-dependency-path: frontend/package.json
+          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         run: |
           cd frontend
-          npm install
+          npm ci
       - name: Lint and Format Check
         run: |
           cd frontend
@@ -88,9 +88,9 @@ jobs:
   compose-sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Check dev compose is in sync with root compose
