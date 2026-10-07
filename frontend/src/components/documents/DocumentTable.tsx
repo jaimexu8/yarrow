@@ -21,6 +21,8 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import {
   isInterrupted,
+  formatEasternDate,
+  formatEasternTime,
   parseApiDate,
   type DocumentSummary,
 } from '@/lib/documents';
@@ -267,14 +269,13 @@ export function DocumentLibrary() {
 
 function UploadedAt({ value }: { value: string | null }) {
   if (!value) return <span className="text-slate-400">—</span>;
-  const date = parseApiDate(value);
   return (
-    <time dateTime={date.toISOString()} className="block">
+    <time dateTime={parseApiDate(value).toISOString()} className="block">
       <span className="block text-sm text-slate-700">
-        {date.toLocaleDateString(undefined, { dateStyle: 'medium' })}
+        {formatEasternDate(value)}
       </span>
       <span className="block text-xs text-slate-500">
-        {date.toLocaleTimeString(undefined, { timeStyle: 'short' })}
+        {formatEasternTime(value)}
       </span>
     </time>
   );
@@ -388,12 +389,7 @@ function DocumentTableRow({
                 {doc.created_at && (
                   <span className="md:hidden">
                     {' · '}
-                    {parseApiDate(doc.created_at).toLocaleDateString(
-                      undefined,
-                      {
-                        dateStyle: 'medium',
-                      }
-                    )}
+                    {formatEasternDate(doc.created_at)}
                   </span>
                 )}
               </p>
