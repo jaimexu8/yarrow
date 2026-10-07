@@ -7,6 +7,7 @@ Create Date: 2026-10-05 19:45:00.000000
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0007"
@@ -19,6 +20,11 @@ def upgrade() -> None:
     # Add page_number column
     op.add_column("regions", sa.Column("page_number", sa.Integer(), nullable=True))
     
+    # Map existing data to valid enum values before converting
+    op.execute("UPDATE regions SET region_type = 'header' WHERE region_type IN ('title', 'doc_title')")
+    op.execute("UPDATE regions SET region_type = 'paragraph' WHERE region_type = 'text'")
+    op.execute("UPDATE regions SET region_type = 'paragraph' WHERE region_type IS NOT NULL AND region_type NOT IN ('header', 'paragraph', 'figure', 'table')")
+
     # Change region_type to enum (PostgreSQL)
     op.execute("CREATE TYPE region_type_enum AS ENUM ('header', 'paragraph', 'figure', 'table')")
     op.execute("ALTER TABLE regions ALTER COLUMN region_type TYPE region_type_enum USING region_type::region_type_enum")
