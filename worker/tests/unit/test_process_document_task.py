@@ -119,6 +119,67 @@ class TestCanceled:
         assert job.current_stage == "queued"
         assert session.added == []
 
+    def test_canceled_while_processing_saves_nothing(
+        self, job, session, storage, parser, monkeypatch
+    ):
+        """The user cancels during the OCR step: the run's results are
+        dropped and the document stays canceled."""
+        parser.configure(page_count=2)
+
+        def cancel_during_inference(self, page_to_process=None):
+            job.status = "canceled"
+            job.document.status = "canceled"
+
+        monkeypatch.setattr(type(parser), "process_sync", cancel_during_inference)
+
+        process_document_task(str(job.id))
+
+        assert job.status == "canceled"
+        assert job.document.status == "canceled"
+        assert session.added == []
+
+    def test_canceled_while_downloading_skips_ocr(
+        self, job, session, storage, parser, monkeypatch
+    ):
+        parser.configure(page_count=2)
+        ocr_ran = []
+        monkeypatch.setattr(
+            type(parser), "process_sync", lambda self, p=None: ocr_ran.append(True)
+        )
+        real_download = storage.download_bytes
+
+        def download_then_cancel(key):
+            job.status = "canceled"
+            return real_download(key)
+
+        monkeypatch.setattr(storage, "download_bytes", download_then_cancel)
+
+        process_document_task(str(job.id))
+
+        assert ocr_ran == []
+        assert job.status == "canceled"
+        assert session.added == []
+
+    def test_error_after_cancel_is_not_a_failure(
+        self, job, session, storage, parser, monkeypatch
+    ):
+        """An error in a run the user already canceled leaves it canceled
+        rather than failed, and the task does not raise."""
+        parser.configure(page_count=1)
+
+        def cancel_then_crash(self, page_to_process=None):
+            job.status = "canceled"
+            job.document.status = "canceled"
+            raise RuntimeError("inference server went away")
+
+        monkeypatch.setattr(type(parser), "process_sync", cancel_then_crash)
+
+        process_document_task(str(job.id))
+
+        assert job.status == "canceled"
+        assert job.document.status == "canceled"
+        assert job.error_message is None
+
 
 class TestFigureImages:
     KEY = "documents/abc/figures/region.png"
