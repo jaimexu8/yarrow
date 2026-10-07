@@ -1,17 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Eye,
   EyeOff,
+  Share2,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/Badge';
 import { cn } from '@/lib/cn';
 import { FindInDocument } from './FindInDocument';
+import { ShareModal } from './ShareModal';
 import { useViewer } from './ViewerContext';
 
 const ICON_BUTTON =
@@ -79,6 +81,8 @@ function BoundingBoxToggle() {
  */
 export function ViewerHeader({ actions }: { actions?: ReactNode }) {
   const { document } = useViewer();
+  const [shareOpen, setShareOpen] = useState(false);
+
   return (
     <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
       <Link href="/dashboard" className={cn(ICON_BUTTON, '-ml-1.5')}>
@@ -98,8 +102,24 @@ export function ViewerHeader({ actions }: { actions?: ReactNode }) {
       <PageIndicator />
       <div className="flex items-center gap-1 border-l border-slate-200 pl-4">
         <BoundingBoxToggle />
+        <button
+          type="button"
+          className={ICON_BUTTON}
+          onClick={() => setShareOpen(true)}
+          title="Share document"
+        >
+          <Share2 aria-hidden="true" className="size-4" />
+          <span className="sr-only">Share document</span>
+        </button>
         {actions && <div className="flex items-center gap-2">{actions}</div>}
       </div>
+
+      <ShareModal
+        documentId={document.id}
+        documentTitle={document.filename}
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+      />
     </header>
   );
 }
