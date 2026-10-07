@@ -24,6 +24,7 @@ import { isWorkingOn } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
 import { getDocumentTree, type DocumentTree } from '@/lib/viewer';
 import { TableOperationsDropdown } from '@/components/viewer/TableOperationsMenu';
+import { ExportMenu } from '@/components/viewer/ExportMenu';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -156,6 +157,7 @@ function DocumentViewerLayout({ refresh }: { refresh: () => void }) {
           <>
             <ReprocessButton onReprocessed={refresh} />
             <TableOperationsDropdown onDone={refresh} />
+            <ExportMenu />
           </>
         }
       />

@@ -3,9 +3,14 @@
 #
 #   gateway (nginx edge, API-key auth, publishes 8080)
 #     -> hybrid-gateway (fuses PP-StructureV3 layout + PaddleOCR-VL recognition)
-#       -> paddlex-pipeline (PP-StructureV3 on CPU)
-#       -> paddleocr-vl-api (PaddleOCR-VL on CPU, VLM via vlm-server)
+#       -> paddlex-pipeline (PP-StructureV3 on the host GPU)
+#       -> paddleocr-vl-api (PaddleOCR-VL layout on the host GPU, VLM via vlm-server)
 #         -> vlm-server (PaddlePaddle/PaddleOCR-VL on the host GPU)
+#
+# All three inference services share the single host GPU (16 GB): vLLM holds
+# ~4.9 GB at gpu-memory-utilization=0.3, the Paddle layout models (PP-OCRv5
+# mobile det/rec + PP-DocLayoutV2) hold ~2.5 GB combined, leaving the rest
+# for KV cache and activations.
 name: yarrow-ocr-x86
 
 services:
@@ -18,7 +23,7 @@ services:
       - --port=8000
       - --trust-remote-code
       - --mm-encoder-attn-backend=TORCH_SDPA
-      - --gpu-memory-utilization=0.5
+      - --gpu-memory-utilization=0.3
       - --max-model-len=8192
       - --max-num-seqs=16
       - --max-num-batched-tokens=8192
@@ -45,13 +50,7 @@ services:
   paddlex-pipeline:
     image: yarrow-ocr-x86-paddlex:latest
     environment:
-      DEVICE: cpu
-      PADDLEX_CPU_THREADS: "4"
-      # paddle 3.3.1's CPU oneDNN path crashes on the PP-StructureV3 layout
-      # model ("ConvertPirAttribute2RuntimeAttribute not support ...",
-      # onednn_instruction.cc). PaddleX's mkldnn blocklist covers only
-      # PP-DocLayoutV2/V3, so disable mkldnn by default on this box.
-      PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT: "False"
+      DEVICE: gpu
     mem_limit: 6g
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
@@ -59,6 +58,14 @@ services:
       interval: 15s
       timeout: 10s
       retries: 60
+    deploy:
+      replicas: 1
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: unless-stopped
 
   paddleocr-vl-api:
@@ -69,10 +76,7 @@ services:
     environment:
       PIPELINE_NAME: PaddleOCR-VL
       VLM_SERVER_URL: http://vlm-server:8000/v1
-      DEVICE: cpu
-      PADDLEX_CPU_THREADS: "4"
-      # Same oneDNN workaround as paddlex-pipeline (see there).
-      PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT: "False"
+      DEVICE: gpu
     depends_on:
       vlm-server:
         condition: service_healthy
@@ -82,6 +86,14 @@ services:
       timeout: 5s
       retries: 40
       start_period: 300s
+    deploy:
+      replicas: 1
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: unless-stopped
 
   hybrid-gateway:
@@ -113,6 +125,12 @@ services:
       GATEWAY_API_KEY: "${GATEWAY_API_KEY:?set GATEWAY_API_KEY in ocr_cluster/x86/.env}"
       NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
       NGINX_ENVSUBST_FILTER: "^GATEWAY_"
+    # nginx resolves the hybrid-gateway upstream hostname once at startup;
+    # starting before that container exists is a fatal boot error, so wait
+    # for it to be healthy first.
+    depends_on:
+      hybrid-gateway:
+        condition: service_healthy
     ports:
       - "8080:8080"
     healthcheck:
