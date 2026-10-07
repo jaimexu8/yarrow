@@ -52,6 +52,8 @@ type ViewerState = {
 
   showBoundingBoxes: boolean;
   setShowBoundingBoxes: (show: boolean) => void;
+  /** Load the document again, e.g. after merging or splitting its tables. */
+  refresh: () => void;
 };
 
 /*
@@ -63,6 +65,7 @@ export function ViewerProvider({
   document,
   tree,
   initialMode = 'split',
+  refresh,
   highlightRegionId: initialHighlightRegionId = null,
   highlightQuery: initialHighlightQuery = '',
   children,
@@ -70,6 +73,7 @@ export function ViewerProvider({
   document: DocumentSummary;
   tree: DocumentTree | null;
   initialMode?: ViewMode;
+  refresh: () => void;
   highlightRegionId?: string | null;
   highlightQuery?: string;
   children: ReactNode;
@@ -151,6 +155,7 @@ export function ViewerProvider({
       setActiveRegionId,
       showBoundingBoxes,
       setShowBoundingBoxes,
+      refresh,
     }),
     [
       document,
@@ -160,6 +165,7 @@ export function ViewerProvider({
       currentPage,
       scrollToPage,
       registerPage,
+      refresh,
       reportVisiblePage,
       highlightRegionId,
       highlightQuery,

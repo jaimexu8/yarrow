@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
@@ -23,6 +23,7 @@ import {
 import { isWorkingOn } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
 import { getDocumentTree, type DocumentTree } from '@/lib/viewer';
+import { TableOperationsDropdown } from '@/components/viewer/TableOperationsMenu';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -80,7 +81,7 @@ function DocumentViewer({ documentId }: { documentId: string }) {
   }, [documentId, attempt]);
 
   // Fetch the document again, for instance, after starting a reprocess.
-  const refresh = () => setAttempt((count) => count + 1);
+  const refresh = useCallback(() => setAttempt((count) => count + 1), []);
 
   if (load.state === 'loading') {
     return (
@@ -137,6 +138,7 @@ function DocumentViewer({ documentId }: { documentId: string }) {
       document={load.tree.document}
       tree={load.tree}
       initialMode={defaultMode()}
+      refresh={refresh}
       highlightRegionId={regionId}
       highlightQuery={query}
     >
@@ -149,7 +151,14 @@ function DocumentViewerLayout({ refresh }: { refresh: () => void }) {
   const { showBoundingBoxes } = useViewer();
   return (
     <div className="flex h-full flex-col">
-      <ViewerHeader actions={<ReprocessButton onReprocessed={refresh} />} />
+      <ViewerHeader
+        actions={
+          <>
+            <ReprocessButton onReprocessed={refresh} />
+            <TableOperationsDropdown onDone={refresh} />
+          </>
+        }
+      />
       <ReprocessBar onReprocessed={refresh} />
       <SplitViewer
         original={

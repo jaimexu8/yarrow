@@ -245,7 +245,6 @@ def _build_grid(cells: list[TableCellNode]) -> list[list[str]]:
 
 
 def _describe_row_pages(table: TableNode) -> str:
-    """ "rows 0-16 from page 1; 17-31 from page 2" -- US-24 traceability."""
     spans = [f"rows {part.row_start}-{part.row_end} from page {part.page_number}" for part in table.parts]
     return "; ".join(spans)
 
