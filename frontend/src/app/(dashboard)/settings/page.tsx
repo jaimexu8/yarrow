@@ -9,6 +9,7 @@ import { toApiError } from '@/lib/errors';
 import { Input } from '@/components/ui/Input';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { CloudStorageSection } from '@/components/settings/CloudStorageSection';
 
 export default function SettingsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -213,6 +214,10 @@ export default function SettingsPage() {
             </Button>
           </div>
         </form>
+      </SettingsCard>
+
+      <SettingsCard id="cloud-storage" title="Cloud storage">
+        <CloudStorageSection />
       </SettingsCard>
 
       <SettingsCard id="danger-zone" title="Danger zone" tone="danger">
