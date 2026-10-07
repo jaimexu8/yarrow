@@ -23,4 +23,8 @@ RUN poetry config virtualenvs.create false \
 # Copy application code
 COPY backend/ /app/backend/
 
+# Applies pending Alembic migrations, then runs the container command.
+# Compose passes `uvicorn ...` as the command; it becomes the entrypoint's args.
+RUN chmod +x /app/backend/entrypoint.sh
+ENTRYPOINT ["/app/backend/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
