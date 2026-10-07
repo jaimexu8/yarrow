@@ -18,17 +18,22 @@ export function BoundingBoxCanvas({
     <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none">
       {page.regions.map((region) => {
         if (!region.bbox) return null;
-        const [x0, y0, x1, y1] = [region.bbox.x0, region.bbox.y0, region.bbox.x1, region.bbox.y1];
+        const [x0, y0, x1, y1] = [
+          region.bbox.x0,
+          region.bbox.y0,
+          region.bbox.x1,
+          region.bbox.y1,
+        ];
         const isActive = activeRegionId === region.id;
-        
+
         return (
           <div
             key={region.id}
             className={cn(
-              "absolute border-2 pointer-events-auto transition-colors cursor-pointer",
-              isActive 
-                ? "border-blue-500 bg-blue-500/20 z-20" 
-                : "border-transparent hover:border-blue-300 hover:bg-blue-300/10 z-10"
+              'absolute border-2 pointer-events-auto transition-colors cursor-pointer',
+              isActive
+                ? 'border-blue-500 bg-blue-500/20 z-20'
+                : 'border-transparent hover:border-blue-300 hover:bg-blue-300/10 z-10'
             )}
             style={{
               left: Math.round(x0 * scaleX),
