@@ -91,32 +91,6 @@ export function parseApiDate(value: string): Date {
   return new Date(utc);
 }
 
-const EASTERN = 'America/New_York';
-
-export function formatEasternDate(value: string): string {
-  return parseApiDate(value).toLocaleDateString('en-US', {
-    dateStyle: 'medium',
-    timeZone: EASTERN,
-  });
-}
-
-export function formatEasternTime(value: string): string {
-  return parseApiDate(value).toLocaleTimeString('en-US', {
-    timeStyle: 'short',
-    timeZone: EASTERN,
-    timeZoneName: 'short',
-  });
-}
-
-export function formatEasternDateTime(value: string): string {
-  return parseApiDate(value).toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: EASTERN,
-    timeZoneName: 'short',
-  });
-}
-
 /**
  * A new id for one file's upload. The same id is sent with every attempt for
  * that file, so if a response is lost and the user retries, the server
