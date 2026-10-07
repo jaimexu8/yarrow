@@ -1,7 +1,12 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ImageIcon } from 'lucide-react';
 import { HighlightedText } from '@/lib/highlight';
-import type { RegionNode, TableCellNode, TableNode } from '@/lib/viewer';
+import {
+  getRegionImage,
+  type RegionNode,
+  type TableCellNode,
+  type TableNode,
+} from '@/lib/viewer';
 import { useViewer } from './ViewerContext';
 import { cn } from '@/lib/cn';
 
@@ -225,6 +230,98 @@ function TableBlock({
   );
 }
 
+/**
+ * A figure's cropped picture, or a placeholder naming it when there is no
+ * picture or it cannot be loaded.
+ */
+function FigureBlock({
+  region,
+  query,
+}: {
+  region: RegionNode;
+  query?: string;
+}) {
+  const { document } = useViewer();
+  const [image, setImage] = useState<
+    { state: 'loading' } | { state: 'ready'; url: string } | { state: 'failed' }
+  >({ state: 'loading' });
+
+  useEffect(() => {
+    if (!region.image_key) return;
+    let url: string | null = null;
+    let cancelled = false;
+
+    getRegionImage(document.id, region.id)
+      .then((blob) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
+        setImage({ state: 'ready', url });
+      })
+      .catch(() => {
+        if (!cancelled) setImage({ state: 'failed' });
+      });
+
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [document.id, region.id, region.image_key]);
+
+  const label = (region.region_type ?? 'figure').replace(/_/g, ' ');
+  const caption = region.caption ? mark(clean(region.caption), query) : null;
+
+  if (!region.image_key || image.state === 'failed') {
+    return (
+      <div className="not-prose my-5 flex items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <ImageIcon
+          aria-hidden="true"
+          className="size-4 shrink-0 text-slate-400"
+        />
+        <span>
+          <span className="capitalize">{label}</span>
+          {caption ? <> — {caption}</> : null}
+        </span>
+      </div>
+    );
+  }
+
+  const width = region.bbox.x1 - region.bbox.x0;
+  const height = region.bbox.y1 - region.bbox.y0;
+
+  return (
+    <figure className="not-prose my-5">
+      <div
+        // Sized from the bbox before the picture arrives, so loading it does
+        // not shift the pages below. Never scaled past its own size.
+        style={{
+          width: `min(100%, ${width}px)`,
+          aspectRatio: `${width} / ${height}`,
+        }}
+        className="mx-auto overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-900/5"
+      >
+        {image.state === 'ready' && (
+          // A blob URL, which next/image cannot optimize
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={image.url}
+            alt={
+              region.caption
+                ? clean(region.caption)
+                : `${label} on page ${region.page_number}`
+            }
+            className="size-full object-contain"
+          />
+        )}
+      </div>
+      {caption && (
+        <figcaption className="mt-2 text-center text-sm text-slate-600">
+          {caption}
+        </figcaption>
+      )}
+    </figure>
+  );
+}
+
 const RENDERERS: Record<RegionKind, RegionRenderer> = {
   heading: (region, { query }) => {
     const text = clean(region.text);
@@ -248,21 +345,7 @@ const RENDERERS: Record<RegionKind, RegionRenderer> = {
     table ? (
       <TableBlock table={table} captioned={captioned} query={query} />
     ) : null,
-  figure: (region, { query }) => {
-    const label = (region.region_type ?? 'figure').replace(/_/g, ' ');
-    return (
-      <div className="not-prose my-5 flex items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        <ImageIcon
-          aria-hidden="true"
-          className="size-4 shrink-0 text-slate-400"
-        />
-        <span>
-          <span className="capitalize">{label}</span>
-          {region.caption ? <> — {mark(clean(region.caption), query)}</> : null}
-        </span>
-      </div>
-    );
-  },
+  figure: (region, { query }) => <FigureBlock region={region} query={query} />,
   formula: (region, { query }) => {
     const text = clean(region.text);
     return text ? (

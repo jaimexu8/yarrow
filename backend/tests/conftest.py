@@ -265,12 +265,17 @@ class FakeStorage:
         self.objects[key] = file.read()
 
     def download_bytes(self, key: str) -> bytes:
+        # Raises what the real providers raise for a missing key
+        from yarrow_storage import ObjectNotFoundError
+
+        if key not in self.objects:
+            raise ObjectNotFoundError(key)
         return self.objects[key]
 
     def download_file(self, key: str):
         from io import BytesIO
 
-        return BytesIO(self.objects[key])
+        return BytesIO(self.download_bytes(key))
 
     def get_presigned_url(self, key: str, expires_in: int = 3600) -> str:
         return f"http://fake/{key}"
