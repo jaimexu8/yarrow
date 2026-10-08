@@ -12,6 +12,7 @@ import {
   type MergeCandidates,
 } from '@/lib/tableOperations';
 import type { DocumentTree, PageNode, TableNode } from '@/lib/viewer';
+import { RegionFilterPills } from './RegionFilter';
 import { RegionBlock, regionKind } from './regionRenderers';
 import { usePageTracking, useViewer } from './ViewerContext';
 
@@ -395,6 +396,7 @@ export function ExtractedContentList() {
       className="h-full overflow-y-auto bg-white"
     >
       <h2 className="sr-only">Extracted text</h2>
+      {tree && tree.stats.region_count > 0 && <RegionFilterPills />}
       {body}
     </div>
   );

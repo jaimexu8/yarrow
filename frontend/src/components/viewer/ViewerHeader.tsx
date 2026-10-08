@@ -13,6 +13,7 @@ import {
 import { StatusBadge } from '@/components/ui/Badge';
 import { cn } from '@/lib/cn';
 import { FindInDocument } from './FindInDocument';
+import { RegionFilterDropdown } from './RegionFilter';
 import { ShareModal } from './ShareModal';
 import { useViewer } from './ViewerContext';
 
@@ -99,6 +100,7 @@ export function ViewerHeader({ actions }: { actions?: ReactNode }) {
         <StatusBadge status={document.status} className="shrink-0" />
       </div>
       <FindInDocument />
+      <RegionFilterDropdown />
       <PageIndicator />
       <div className="flex items-center gap-1 border-l border-slate-200 pl-4">
         <BoundingBoxToggle />

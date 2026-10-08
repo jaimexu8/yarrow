@@ -11,6 +11,7 @@ import { useViewer } from './ViewerContext';
 const OPTIONS: { format: ExportFormat; label: string }[] = [
   { format: 'markdown', label: 'Markdown (.md)' },
   { format: 'text', label: 'Plain text (.txt)' },
+  { format: 'json', label: 'Structured JSON (.json)' },
 ];
 
 /**
