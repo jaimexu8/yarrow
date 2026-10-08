@@ -15,11 +15,11 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
-from yarrow_db.models import Document, Job, Page, Region, User
+from yarrow_db.models import Document, DocumentShare, Job, Page, Region, User
 from yarrow_db.models.region import RegionImage
 from yarrow_storage import ObjectNotFoundError, get_storage
 
@@ -358,9 +358,17 @@ async def list_documents(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    shared_subquery = select(DocumentShare.document_id).where(
+        DocumentShare.shared_with_user_id == current_user.id
+    )
     result = await db.execute(
         select(Document)
-        .where(Document.owner_id == current_user.id)
+        .where(
+            or_(
+                Document.owner_id == current_user.id,
+                Document.id.in_(shared_subquery),
+            )
+        )
         .order_by(Document.created_at.desc())
     )
     return await documents_out(db, list(result.scalars().all()))

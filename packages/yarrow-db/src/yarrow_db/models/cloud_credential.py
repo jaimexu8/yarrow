@@ -8,32 +8,27 @@ from sqlalchemy.orm import relationship
 from .base import Base
 
 
-class DocumentShare(Base):
-    __tablename__ = "document_shares"
+class CloudCredential(Base):
+    __tablename__ = "cloud_credentials"
     __table_args__ = (
-        UniqueConstraint(
-            "document_id",
-            "shared_with_user_id",
-            name="uq_document_share_user",
-        ),
+        UniqueConstraint("user_id", "provider", name="uq_user_cloud_provider"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    document_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("documents.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    shared_with_user_id = Column(
+    user_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    permission = Column(String, default="view", nullable=False)  # view, review
+    provider = Column(String, nullable=False)  # google, dropbox
+    access_token = Column(String, nullable=False)
+    refresh_token = Column(String, nullable=True)
+    token_expires_at = Column(DateTime, nullable=True)
+    account_email = Column(String, nullable=True)
+    account_name = Column(String, nullable=True)
+    last_synced_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    document = relationship("Document")
-    shared_with_user = relationship("User")
+    user = relationship("User")
