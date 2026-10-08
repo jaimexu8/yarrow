@@ -71,6 +71,13 @@ class TestCloudStorageIntegration:
         imported_filename = sync_data["files"][0]
         assert any(d["filename"] == imported_filename for d in docs)
 
+        # Repeat sync for Google - should skip already imported documents (idempotent)
+        repeat_sync_res = await client.post(
+            "/api/v1/integrations/google/sync", headers=auth_headers
+        )
+        assert repeat_sync_res.status_code == 200
+        assert repeat_sync_res.json()["imported_count"] == 0
+
         # Trigger bulk sync
         bulk_sync_res = await client.post(
             "/api/v1/integrations/sync", headers=auth_headers
