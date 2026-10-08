@@ -12,53 +12,38 @@ Yarrow is a multi-component distributed system for document parsing.
    ```bash
    docker compose up --build
    ```
+   > **Note**: Database migrations are automatically applied on container startup via `entrypoint.sh`.
 
-## Manual Setup
+3. Seed database (optional, creates default admin and user accounts):
+   ```bash
+   docker compose exec backend python -m app.db.seed
+   ```
 
-### Backend (FastAPI)
+## Development Container (VS Code)
 
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+This repository includes a VS Code Devcontainer configuration (`.devcontainer/`) with Python 3.11, Node.js 20, and all required tooling pre-configured:
 
-### Frontend (Next.js)
+1. Open the project in VS Code.
+2. Select **Reopen in Container** when prompted (or open the Command Palette and run `Dev Containers: Reopen in Container`).
+3. Services and dependencies will install and configure automatically via `.devcontainer/post-install.sh`.
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## Service URLs
 
-## Database Tasks
+Once services are running, the following endpoints are accessible:
 
-Apply migrations:
-
-```bash
-cd backend
-alembic upgrade head
-```
-
-Seed database:
-
-```bash
-cd backend
-python -m app.db.seed
-```
-
-Alternatively, in Docker: `docker compose exec backend python -m app.db.seed`
+- **Frontend Application**: [http://localhost:3000](http://localhost:3000)
+- **Backend API & Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Mailpit Web UI (Email Inbox)**: [http://localhost:8025](http://localhost:8025) (SMTP port `1025`)
+- **RustFS S3 Console**: [http://localhost:9001](http://localhost:9001) (S3 API port `9000`)
+- **PostgreSQL / ParadeDB**: `localhost:5432`
+- **Valkey (Redis)**: `localhost:6379`
 
 ## Default Accounts
 
+When seeded, the following default accounts are available:
+
 - Admin: `admin@yarrow.local` / `admin123`
 - User: `user@yarrow.local` / `user123`
-
-## API Documentation
-
-Once running, accessible at [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ## Contributing Workflow
 
