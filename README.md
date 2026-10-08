@@ -9,15 +9,80 @@ Yarrow is a multi-component distributed system for document parsing.
    cp .env.example .env
    ```
 2. Start services:
+
    ```bash
    docker compose up --build
    ```
+
    > **Note**: Database migrations are automatically applied on container startup via `entrypoint.sh`.
 
 3. Seed database (optional, creates default admin and user accounts):
    ```bash
    docker compose exec backend python -m app.db.seed
    ```
+
+## Common Operations
+
+### Starting & Stopping Services
+
+- **Start all services in background**:
+  ```bash
+  docker compose up -d
+  ```
+- **Rebuild and restart after pulling code or changing dependencies**:
+  ```bash
+  docker compose up --build -d
+  ```
+- **Stop services**:
+  ```bash
+  docker compose down
+  ```
+- **Restart a specific service** (e.g. `backend`, `worker`, or `frontend`):
+  ```bash
+  docker compose restart backend
+  ```
+
+### Logs & Diagnostics
+
+- **View logs for all services**:
+  ```bash
+  docker compose logs -f
+  ```
+- **View logs for a specific service**:
+  ```bash
+  docker compose logs -f backend
+  ```
+
+### Database Management
+
+- **Apply pending database migrations**:
+  ```bash
+  docker compose exec backend alembic upgrade head
+  ```
+- **Seed database with default accounts**:
+  ```bash
+  docker compose exec backend python -m app.db.seed
+  ```
+- **Clean slate with a fresh database** (removes volumes and resets data):
+  ```bash
+  docker compose down -v && docker compose up --build -d
+  docker compose exec backend python -m app.db.seed
+  ```
+
+### Running Tests
+
+- **Run backend tests**:
+  ```bash
+  docker compose exec backend pytest
+  ```
+- **Run worker unit tests**:
+  ```bash
+  docker compose exec worker pytest -m "not integration"
+  ```
+- **Run frontend tests**:
+  ```bash
+  docker compose exec frontend npm test
+  ```
 
 ## Development Container (VS Code)
 
@@ -47,5 +112,5 @@ When seeded, the following default accounts are available:
 
 ## Contributing Workflow
 
-- **Branch naming**: `feat/US-<number>-<short-description>` (e.g., `feat/US-1-create-account`)
-- **Commit messages**: `feat(auth): implement user registration API (US-1)`
+- **Branch naming**: `feat/us-<number>-<short-description>` (e.g., `feat/us-1-create-account`)
+- **Commit messages**: `feat(auth): implement user registration api (us-1)`
