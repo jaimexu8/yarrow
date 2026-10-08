@@ -16,6 +16,8 @@ COPY backend/pyproject.toml backend/poetry.lock* /app/backend/
 
 WORKDIR /app/backend
 
+ENV PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+
 # Install dependencies
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --no-root
