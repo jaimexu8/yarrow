@@ -200,65 +200,128 @@ async def save_or_update_credential(
 SAMPLE_PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000010 00000 n \n0000000060 00000 n \n0000000117 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n190\n%%EOF"
 
 
-async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, bytes]]:
-    """Fetch documents from the connected cloud account."""
-    files: list[tuple[str, bytes]] = []
+async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, str, bytes]]:
+    """Fetch documents from the connected cloud account.
+
+    Returns a list of (remote_file_id, filename, content_bytes).
+    """
+    files: list[tuple[str, str, bytes]] = []
 
     if credential.access_token and not credential.access_token.startswith("mock_"):
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 if credential.provider == "google":
-                    q = "mimeType = 'application/pdf' and trashed = false"
-                    resp = await client.get(
+                    # 1. Locate the folder(s) named "yarrow"
+                    folder_q = (
+                        "name = 'yarrow' and mimeType = 'application/vnd.google-apps.folder' "
+                        "and trashed = false"
+                    )
+                    folder_resp = await client.get(
                         "https://www.googleapis.com/drive/v3/files",
-                        params={"q": q, "fields": "files(id, name, size)"},
+                        params={"q": folder_q, "fields": "files(id, name)"},
                         headers={"Authorization": f"Bearer {credential.access_token}"},
                     )
-                    if resp.status_code == 200:
-                        items = resp.json().get("files", [])
-                        for item in items[:5]:
-                            file_id = item["id"]
-                            name = item["name"]
-                            down_resp = await client.get(
-                                f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media",
-                                headers={
-                                    "Authorization": f"Bearer {credential.access_token}"
-                                },
-                            )
-                            if down_resp.status_code == 200:
-                                files.append((name, down_resp.content))
-                elif credential.provider == "dropbox":
-                    resp = await client.post(
-                        "https://api.dropboxapi.com/2/files/list_folder",
-                        json={"path": "", "recursive": False},
-                        headers={"Authorization": f"Bearer {credential.access_token}"},
-                    )
-                    if resp.status_code == 200:
-                        entries = resp.json().get("entries", [])
-                        for entry in entries[:5]:
-                            if entry.get(".tag") == "file" and entry.get(
-                                "name", ""
-                            ).lower().endswith(
-                                tuple(f".{ext}" for ext in ALLOWED_EXTENSIONS)
-                            ):
-                                down_resp = await client.post(
-                                    "https://content.dropboxapi.com/2/files/download",
+                    folder_ids: list[str] = []
+                    if folder_resp.status_code == 200:
+                        folder_ids = [f["id"] for f in folder_resp.json().get("files", [])]
+
+                    # 2. Recursively gather all subfolder IDs under any "yarrow" folder
+                    all_folder_ids = list(folder_ids)
+                    queue = list(folder_ids)
+                    while queue:
+                        parent_id = queue.pop(0)
+                        sub_q = (
+                            f"'{parent_id}' in parents and "
+                            "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+                        )
+                        sub_resp = await client.get(
+                            "https://www.googleapis.com/drive/v3/files",
+                            params={"q": sub_q, "fields": "files(id)"},
+                            headers={"Authorization": f"Bearer {credential.access_token}"},
+                        )
+                        if sub_resp.status_code == 200:
+                            for sub in sub_resp.json().get("files", []):
+                                if sub["id"] not in all_folder_ids:
+                                    all_folder_ids.append(sub["id"])
+                                    queue.append(sub["id"])
+
+                    # 3. Query supported files only inside those folders
+                    if all_folder_ids:
+                        parents_clause = " or ".join(f"'{fid}' in parents" for fid in all_folder_ids[:25])
+                        file_q = f"({parents_clause}) and trashed = false"
+                        resp = await client.get(
+                            "https://www.googleapis.com/drive/v3/files",
+                            params={"q": file_q, "fields": "files(id, name, mimeType)"},
+                            headers={"Authorization": f"Bearer {credential.access_token}"},
+                        )
+                        if resp.status_code == 200:
+                            items = resp.json().get("files", [])
+                            for item in items[:25]:
+                                file_id = item["id"]
+                                name = item["name"]
+                                ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+                                if ext not in ALLOWED_EXTENSIONS:
+                                    continue
+                                down_resp = await client.get(
+                                    f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media",
                                     headers={
-                                        "Authorization": f"Bearer {credential.access_token}",
-                                        "Dropbox-API-Arg": f'{{"path": "{entry["path_lower"]}"}}',
+                                        "Authorization": f"Bearer {credential.access_token}"
                                     },
                                 )
                                 if down_resp.status_code == 200:
-                                    files.append((entry["name"], down_resp.content))
-        except Exception as exc:
-            logger.info(
-                "External cloud fetch failed, falling back to mock document: %s", exc
-            )
+                                    files.append((file_id, name, down_resp.content))
+                elif credential.provider == "dropbox":
+                    # Attempt to list files inside /yarrow recursively
+                    # If the app scope is already "App Folder", list recursively from root or /yarrow
+                    paths_to_try = ["/yarrow", ""]
+                    entries: list[dict] = []
+                    for try_path in paths_to_try:
+                        resp = await client.post(
+                            "https://api.dropboxapi.com/2/files/list_folder",
+                            json={"path": try_path, "recursive": True},
+                            headers={"Authorization": f"Bearer {credential.access_token}"},
+                        )
+                        if resp.status_code == 200:
+                            # If querying root, filter to entries that reside within a folder named "yarrow"
+                            raw_entries = resp.json().get("entries", [])
+                            if try_path == "/yarrow":
+                                entries = raw_entries
+                                break
+                            else:
+                                # When app folder is mounted at root, check if it's already the yarrow folder or has a /yarrow subfolder
+                                matched = [
+                                    e for e in raw_entries
+                                    if "/yarrow/" in e.get("path_lower", "") or e.get("path_lower", "").startswith("/yarrow/")
+                                ]
+                                if matched:
+                                    entries = matched
+                                    break
+                                # If app is scoped strictly to its own app folder, treat all files in that app folder as yarrow files
+                                entries = raw_entries
+                                break
 
-    if not files:
+                    for entry in entries[:25]:
+                        if entry.get(".tag") == "file" and entry.get("name", "").lower().endswith(
+                            tuple(f".{ext}" for ext in ALLOWED_EXTENSIONS)
+                        ):
+                            file_id = entry.get("id") or entry["path_lower"]
+                            down_resp = await client.post(
+                                "https://content.dropboxapi.com/2/files/download",
+                                headers={
+                                    "Authorization": f"Bearer {credential.access_token}",
+                                    "Dropbox-API-Arg": f'{{"path": "{entry["path_lower"]}"}}',
+                                },
+                            )
+                            if down_resp.status_code == 200:
+                                files.append((file_id, entry["name"], down_resp.content))
+        except Exception as exc:
+            logger.info("External cloud fetch failed: %s", exc)
+
+    elif credential.access_token and credential.access_token.startswith("mock_"):
+        # Explicit mock token for integration tests or sandbox mode
         prefix = credential.provider
         ts = _utcnow().strftime("%Y%m%d_%H%M%S")
-        files.append((f"{prefix}_import_{ts}.pdf", SAMPLE_PDF_BYTES))
+        files.append((f"mock_id_{prefix}", f"{prefix}_import_{ts}.pdf", SAMPLE_PDF_BYTES))
 
     return files
 
@@ -284,7 +347,19 @@ async def sync_credential_documents(
     imported_names: list[str] = []
     jobs_to_enqueue: list[UUID] = []
 
-    for filename, content in files:
+    for remote_file_id, filename, content in files:
+        # Use remote file identifier to ensure idempotent syncing (no duplicate imports)
+        client_upload_id = f"cloud_{credential.provider}_{remote_file_id}"
+        existing = await db.scalar(
+            select(Document.id).where(
+                Document.owner_id == user.id,
+                Document.client_upload_id == client_upload_id,
+            )
+        )
+        if existing is not None:
+            logger.info("Skipping already imported cloud document: %s", filename)
+            continue
+
         size = len(content)
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "pdf"
         if ext not in ALLOWED_EXTENSIONS:
@@ -306,7 +381,7 @@ async def sync_credential_documents(
             file_type=content_type,
             storage_key=storage_key,
             status="queued",
-            client_upload_id=f"cloud_{credential.provider}_{doc_id}",
+            client_upload_id=client_upload_id,
         )
         job = Job(
             id=uuid4(),

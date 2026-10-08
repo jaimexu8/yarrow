@@ -192,11 +192,15 @@ async def sync_provider(
         )
 
     count, files = await sync_credential_documents(db, credential)
+    if count == 0:
+        msg = f"No new supported documents found in {norm.capitalize()}."
+    else:
+        msg = f"Successfully imported {count} document(s) from {norm.capitalize()}."
     return SyncResponse(
         provider=norm,
         imported_count=count,
         files=files,
-        message=f"Successfully imported {count} documents from {norm.capitalize()}",
+        message=msg,
     )
 
 

@@ -60,36 +60,68 @@ export function CloudStorageSection() {
     }
   }, []);
 
+  const handleCallback = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const provider =
+      urlParams.get('provider') ||
+      (urlParams.has('scope') ? 'google' : 'dropbox');
+
+    if (code) {
+      setConnecting(provider);
+      setMessage(null);
+      try {
+        await connectCloudAccount(provider, code);
+        setMessage({
+          type: 'success',
+          text: `Successfully connected ${provider === 'google' ? 'Google Drive' : 'Dropbox'}.`,
+        });
+        // Clean URL params
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, '', cleanUrl);
+        await fetchStatuses();
+      } catch (err) {
+        setMessage({
+          type: 'error',
+          text: `Failed to complete authentication: ${toApiError(err).message}`,
+        });
+      } finally {
+        setConnecting(null);
+      }
+    }
+  }, [fetchStatuses]);
+
   useEffect(() => {
     fetchStatuses();
-  }, [fetchStatuses]);
+    handleCallback();
+  }, [fetchStatuses, handleCallback]);
 
   async function handleConnect(provider: string) {
     setConnecting(provider);
     setMessage(null);
     try {
-      // Generate code/connect
-      const code = `mock_oauth_${provider}_${Date.now()}`;
-      await connectCloudAccount(provider, code);
-      setMessage({
-        type: 'success',
-        text: `Successfully connected ${provider === 'google' ? 'Google Drive' : 'Dropbox'}.`,
-      });
-      await fetchStatuses();
-    } catch (err) {
-      try {
-        const url = await getCloudAuthUrl(provider);
-        if (url && typeof window !== 'undefined') {
-          window.location.href = url;
-          return;
-        }
-      } catch {
-        // Fall back to error display
+      const url = await getCloudAuthUrl(provider);
+      if (url && typeof window !== 'undefined') {
+        window.location.href = url;
+        return;
       }
-      setMessage({
-        type: 'error',
-        text: `Failed to connect: ${toApiError(err).message}`,
-      });
+    } catch (err) {
+      // If fetching real auth URL fails, fallback to sandbox/mock connect
+      try {
+        const code = `mock_oauth_${provider}_${Date.now()}`;
+        await connectCloudAccount(provider, code);
+        setMessage({
+          type: 'success',
+          text: `Successfully connected ${provider === 'google' ? 'Google Drive' : 'Dropbox'}.`,
+        });
+        await fetchStatuses();
+      } catch {
+        setMessage({
+          type: 'error',
+          text: `Failed to connect: ${toApiError(err).message}`,
+        });
+      }
     } finally {
       setConnecting(null);
     }

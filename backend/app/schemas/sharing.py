@@ -1,13 +1,24 @@
+import re
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, field_validator
+
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class ShareDocumentRequest(BaseModel):
-    email: EmailStr
+    email: str
     permission: Literal["view", "review"] = "view"
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_format(cls, value: str) -> str:
+        s = value.strip().lower()
+        if not EMAIL_PATTERN.match(s):
+            raise ValueError("Enter a valid email address.")
+        return s
 
 
 class UpdateShareRequest(BaseModel):

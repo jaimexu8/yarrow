@@ -36,6 +36,7 @@ export function ShareModal({
   const [permission, setPermission] = useState<SharePermission>('view');
   const [sharing, setSharing] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -57,6 +58,7 @@ export function ShareModal({
     if (open) {
       setEmail('');
       setPermission('view');
+      setFieldErrors({});
       setError(null);
       setSuccess(null);
       fetchShares();
@@ -69,6 +71,7 @@ export function ShareModal({
 
     setSharing(true);
     setError(null);
+    setFieldErrors({});
     setSuccess(null);
 
     try {
@@ -81,7 +84,14 @@ export function ShareModal({
       setEmail('');
       await fetchShares();
     } catch (err) {
-      setError(toApiError(err).message);
+      const apiError = toApiError(err);
+      if (Object.keys(apiError.fields).length > 0) {
+        setFieldErrors(apiError.fields);
+        // If there's a field-specific error message, surface it directly or show the general error
+        setError(apiError.fields.email ?? apiError.message);
+      } else {
+        setError(apiError.message);
+      }
     } finally {
       setSharing(false);
     }
@@ -125,7 +135,7 @@ export function ShareModal({
         with other registered users for collaborative review.
       </p>
 
-      {error && (
+      {error && !fieldErrors.email && (
         <div
           role="alert"
           className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800"
@@ -153,7 +163,13 @@ export function ShareModal({
               placeholder="colleague@example.com"
               required
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (fieldErrors.email) {
+                  setFieldErrors(({ email: _removed, ...rest }) => rest);
+                }
+              }}
+              error={fieldErrors.email}
             />
           </div>
           <div className="w-full sm:w-32">

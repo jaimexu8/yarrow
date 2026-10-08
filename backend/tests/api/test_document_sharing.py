@@ -96,6 +96,24 @@ class TestDocumentSharing:
         )
         assert res.status_code == 404
 
+    async def test_share_with_seeded_local_domain_email_reaches_user_lookup(
+        self, client, auth_headers, db_session, fake_storage, fake_queue
+    ):
+        doc_id, _, _ = await _create_completed_document(
+            client, auth_headers, db_session, fake_storage, fake_queue
+        )
+        # Should not fail with 422 validation error
+        res = await client.post(
+            f"/api/v1/documents/{doc_id}/share",
+            headers=auth_headers,
+            json={
+                "email": "user@yarrow.local",
+                "permission": "view",
+            },
+        )
+        # Either 200 (if user@yarrow.local exists in DB) or 404 (if not in test DB), never 422
+        assert res.status_code in (200, 404)
+
     async def test_share_with_oneself_is_400(
         self, client, auth_headers, db_session, fake_storage, fake_queue
     ):
