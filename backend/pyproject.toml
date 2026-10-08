@@ -30,6 +30,7 @@ pypdf = "*"
 pdfplumber = "*"
 celery = {extras = ["redis"], version = "*"}
 redis = "*"
+cryptography = "<47"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"

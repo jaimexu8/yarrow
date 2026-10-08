@@ -42,6 +42,7 @@ yarrow-db = {path = "../packages/yarrow-db", develop = true}
 # storage_key. Shared with the backend so that the two agree on bucket,
 # key layout, and endpoint configuration.
 yarrow-storage = {path = "../packages/yarrow-storage", develop = true}
+cryptography = "<47"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
