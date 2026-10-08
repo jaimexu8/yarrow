@@ -49,6 +49,36 @@ export function regionKind(region: RegionNode): RegionKind {
   return 'paragraph';
 }
 
+export function isRegionFilterMatch(
+  region: RegionNode,
+  filter: string | null
+): boolean {
+  if (!filter || filter === 'all') return false;
+  const kind = regionKind(region);
+  const rawType = (region.region_type ?? '').toLowerCase();
+
+  if (filter === 'header') {
+    return (
+      kind === 'heading' ||
+      rawType === 'header' ||
+      rawType in HEADING_LEVELS ||
+      rawType.includes('title')
+    );
+  }
+  if (filter === 'paragraph') {
+    return (
+      kind === 'paragraph' || rawType === 'paragraph' || rawType === 'text'
+    );
+  }
+  if (filter === 'table') {
+    return kind === 'table' || kind === 'caption' || rawType.includes('table');
+  }
+  if (filter === 'figure') {
+    return kind === 'figure' || FIGURE_LABELS.has(rawType);
+  }
+  return false;
+}
+
 /** Collapse runs of spaces and tabs, keep line breaks. */
 function clean(text: string | null): string {
   return (text ?? '')
@@ -383,6 +413,7 @@ export function RegionBlock({
     activeRegionId,
     setActiveRegionId,
     scrollToPage,
+    regionFilter,
   } = useViewer();
   const content = RENDERERS[regionKind(region)](region, {
     ...context,
@@ -392,6 +423,9 @@ export function RegionBlock({
 
   const focused = region.id === highlightRegionId;
   const isActive = activeRegionId === region.id;
+  const isFilterMatch = isRegionFilterMatch(region, regionFilter);
+  const isFilterActive = Boolean(regionFilter && regionFilter !== 'all');
+  const isDimmed = isFilterActive && !isFilterMatch;
 
   return (
     <div
@@ -399,23 +433,34 @@ export function RegionBlock({
       data-region-id={region.id}
       data-region-type={region.region_type ?? undefined}
       data-page={region.page_number}
+      data-page-number={region.page_number}
       onClick={() => scrollToPage(region.page_number)}
       onMouseEnter={() => setActiveRegionId(region.id)}
       onMouseLeave={() => {
         if (activeRegionId === region.id) setActiveRegionId(null);
       }}
       className={cn(
-        'group relative rounded-md border p-2 -mx-2 transition-colors cursor-pointer',
+        'group relative rounded-md border p-2 -mx-2 transition-all cursor-pointer',
         focused
           ? 'scroll-mt-8 border-transparent bg-amber-50 ring-2 ring-amber-400'
           : isActive
             ? 'border-blue-300 bg-blue-50'
-            : 'border-transparent hover:border-slate-200 hover:bg-slate-50/50'
+            : isFilterMatch
+              ? 'border-indigo-400 bg-indigo-50/80 ring-2 ring-indigo-400 shadow-sm'
+              : 'border-transparent hover:border-slate-200 hover:bg-slate-50/50',
+        isDimmed && !isActive && !focused && 'opacity-35 hover:opacity-100'
       )}
     >
-      <div className="absolute right-2 top-2 hidden group-hover:flex items-center gap-2">
+      <div className="absolute right-2 top-2 flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
         {region.region_type && (
-          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-700">
+          <span
+            className={cn(
+              'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+              isFilterMatch
+                ? 'bg-indigo-600 text-white font-bold ring-1 ring-indigo-400'
+                : 'bg-indigo-100 text-indigo-700'
+            )}
+          >
             {region.region_type}
           </span>
         )}

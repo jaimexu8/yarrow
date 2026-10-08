@@ -71,7 +71,7 @@ test('offers markdown and plain text, and exports the chosen format', async () =
   ).toBe(false);
   expect(
     screen
-      .getByRole('menuitem', { name: 'Plain text (.txt)' })
+      .getByRole('menuitem', { name: 'Structured JSON (.json)' })
       .hasAttribute('disabled')
   ).toBe(false);
 
@@ -88,6 +88,14 @@ test('offers markdown and plain text, and exports the chosen format', async () =
   fireEvent.click(screen.getByRole('button', { name: /export/i }));
   fireEvent.click(screen.getByRole('menuitem', { name: 'Plain text (.txt)' }));
   expect(exportDocument).toHaveBeenCalledWith('doc-1', 'text', 'report.pdf');
+
+  vi.mocked(exportDocument).mockClear();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  fireEvent.click(screen.getByRole('button', { name: /export/i }));
+  fireEvent.click(
+    screen.getByRole('menuitem', { name: 'Structured JSON (.json)' })
+  );
+  expect(exportDocument).toHaveBeenCalledWith('doc-1', 'json', 'report.pdf');
 });
 
 test('shows the server message when the export fails', async () => {
