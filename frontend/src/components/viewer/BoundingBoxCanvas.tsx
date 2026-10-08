@@ -1,5 +1,6 @@
 import { useViewer } from './ViewerContext';
 import type { PageOverlayInfo } from './PageView';
+import { isRegionFilterMatch } from './regionRenderers';
 import { cn } from '@/lib/cn';
 
 export function BoundingBoxCanvas({
@@ -7,7 +8,7 @@ export function BoundingBoxCanvas({
   displayWidth,
   displayHeight,
 }: PageOverlayInfo) {
-  const { activeRegionId, setActiveRegionId } = useViewer();
+  const { activeRegionId, setActiveRegionId, regionFilter } = useViewer();
 
   if (!page || !page.width || !page.height) return null;
 
@@ -25,6 +26,7 @@ export function BoundingBoxCanvas({
           region.bbox.y1,
         ];
         const isActive = activeRegionId === region.id;
+        const isFilterMatch = isRegionFilterMatch(region, regionFilter);
 
         return (
           <div
@@ -32,8 +34,10 @@ export function BoundingBoxCanvas({
             className={cn(
               'absolute border-2 pointer-events-auto transition-colors cursor-pointer',
               isActive
-                ? 'border-blue-500 bg-blue-500/20 z-20'
-                : 'border-transparent hover:border-blue-300 hover:bg-blue-300/10 z-10'
+                ? 'border-blue-500 bg-blue-500/20 z-20 ring-2 ring-blue-400'
+                : isFilterMatch
+                  ? 'border-indigo-500 bg-indigo-500/20 z-15 ring-1 ring-indigo-400'
+                  : 'border-transparent hover:border-blue-300 hover:bg-blue-300/10 z-10'
             )}
             style={{
               left: Math.round(x0 * scaleX),

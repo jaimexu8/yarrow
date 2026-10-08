@@ -1,11 +1,12 @@
 import { isAxiosError } from 'axios';
 import api from './api';
 
-export type ExportFormat = 'markdown' | 'text';
+export type ExportFormat = 'markdown' | 'text' | 'json';
 
 const EXTENSION: Record<ExportFormat, string> = {
   markdown: 'md',
   text: 'txt',
+  json: 'json',
 };
 
 /**
