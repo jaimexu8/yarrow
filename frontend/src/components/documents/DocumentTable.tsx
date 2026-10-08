@@ -373,13 +373,6 @@ function DocumentTableRow({
           },
         ]
       : []),
-    {
-      label: 'Delete',
-      icon: Trash,
-      keepFocus: true,
-      destructive: true,
-      onSelect: () => {}, // TODO
-    },
   ];
   // Only until it finishes: a completed or failed job can't be canceled.
   if (canCancel(doc)) {
