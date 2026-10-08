@@ -6,10 +6,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-yarrow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yarrow_password}
       POSTGRES_DB: ${POSTGRES_DB:-yarrow}
+      PGDATA: /var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - pg_data:/var/lib/postgresql
+      - pg_data:/var/lib/postgresql/data
     healthcheck:
       test:
         [
