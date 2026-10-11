@@ -15,7 +15,7 @@ name: yarrow-ocr-x86
 
 services:
   vlm-server:
-    image: vllm/vllm-openai:v0.30.0
+    image: vllm/vllm-openai:v0.31.0
     command:
       - PaddlePaddle/PaddleOCR-VL
       - --served-model-name=PaddleOCR-VL-0.9B
@@ -118,6 +118,9 @@ services:
 
   gateway:
     image: nginx:1.27-alpine
+    depends_on:
+      hybrid-gateway:
+        condition: service_healthy
     configs:
       - source: nginx-config
         target: /etc/nginx/templates/nginx.conf.template
