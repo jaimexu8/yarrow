@@ -131,9 +131,6 @@ services:
     # nginx resolves the hybrid-gateway upstream hostname once at startup;
     # starting before that container exists is a fatal boot error, so wait
     # for it to be healthy first.
-    depends_on:
-      hybrid-gateway:
-        condition: service_healthy
     ports:
       - "8080:8080"
     healthcheck:
