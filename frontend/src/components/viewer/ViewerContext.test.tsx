@@ -75,7 +75,11 @@ function TestPane({ pane }: { pane: Pane }) {
 
 function renderViewer() {
   render(
-    <ViewerProvider document={{ page_count: 3 } as DocumentSummary} tree={null}>
+    <ViewerProvider
+      document={{ page_count: 3 } as DocumentSummary}
+      tree={null}
+      refresh={() => {}}
+    >
       <TestPane pane="original" />
       <TestPane pane="extracted" />
     </ViewerProvider>
