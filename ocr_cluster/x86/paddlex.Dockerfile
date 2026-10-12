@@ -21,15 +21,20 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ARG PADDLE_GPU_VERSION="3.4.0"
-ARG PADDLEOCR_VERSION=">=3.4.0,<3.5"
-ARG PADDLEX_VERSION=">=3.4.0,<3.5"
+ARG PADDLEOCR_VERSION=">=3.7,<3.8"
+ARG PADDLEX_VERSION=">=3.7.2,<3.8"
 
 # paddlepaddle_gpu is only published on Paddle's package index, and its CUDA 13
 # runtime (the cuda-toolkit metapackage) only on NVIDIA's index. Install the
 # application packages first: they declare a CPU paddlepaddle dependency, which
 # the --force-reinstall of the GPU wheel below then overwrites.
+#
+# paddlepaddle_gpu pins numpy only as >=1.21, so the force-reinstall re-resolves
+# numpy to the latest release. paddlex 3.7 pins numpy <2.4, so without an
+# explicit pin the final image would carry a numpy the paddle app forbids.
+# Pin the same range paddlex 3.7 declares.
 RUN pip install "paddleocr[doc-parser]${PADDLEOCR_VERSION}" "paddlex[serving]${PADDLEX_VERSION}" \
-    && pip install --force-reinstall "paddlepaddle_gpu==${PADDLE_GPU_VERSION}" \
+    && pip install --force-reinstall "paddlepaddle_gpu==${PADDLE_GPU_VERSION}" "numpy>=1.24,<2.4" \
         --extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cu130/ \
         --extra-index-url https://pypi.nvidia.com
 

@@ -6,7 +6,7 @@ import sys
 
 
 def _install_cpu_thread_cap(num_threads):
-    from paddlex.inference.utils.pp_option import PaddlePredictorOption
+    from paddlex.inference.models.runners.paddle_static.config.pp_option import PaddlePredictorOption
 
     original = PaddlePredictorOption._get_default_config
 
