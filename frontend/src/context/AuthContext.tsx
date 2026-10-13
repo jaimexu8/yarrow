@@ -49,6 +49,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const gen = ++generation.current;
     const token = localStorage.getItem('token');
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Mount-time session probe: no stored token means nothing to verify; status is known synchronously before any async work.
       setStatus('unauthenticated');
       return;
     }

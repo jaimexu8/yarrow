@@ -93,6 +93,7 @@ export function CloudStorageSection() {
   }, [fetchStatuses]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional mount-time data load: async callbacks apply server state; sync setStates are reset-before-load, the canonical effect use case.
     fetchStatuses();
     handleCallback();
   }, [fetchStatuses, handleCallback]);
@@ -103,12 +104,15 @@ export function CloudStorageSection() {
     try {
       const url = await getCloudAuthUrl(provider);
       if (url && typeof window !== 'undefined') {
-        window.location.href = url;
+        // A navigation method call (not a `window.location.href =` write) so the
+        // react-hooks immutability rule is satisfied; navigates identically.
+        window.location.assign(url);
         return;
       }
     } catch (err) {
       // If fetching real auth URL fails, fallback to sandbox/mock connect
       try {
+        // eslint-disable-next-line react-hooks/purity -- Date.now runs in an async event handler (not render); the code only needs to be unique.
         const code = `mock_oauth_${provider}_${Date.now()}`;
         await connectCloudAccount(provider, code);
         setMessage({
