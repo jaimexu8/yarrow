@@ -17,5 +17,5 @@ python = "^3.11"
 # NVIDIA's index.
 paddlepaddle = ">=3.3.0,<3.4"
 
-paddleocr = {extras = ["doc-parser"], version = ">=3.4.0,<3.5"}
-paddlex = {extras = ["serving"], version = ">=3.4.0,<3.5"}
+paddleocr = {extras = ["doc-parser"], version = ">=3.7,<3.8"}
+paddlex = {extras = ["serving"], version = ">=3.7.2,<3.8"}

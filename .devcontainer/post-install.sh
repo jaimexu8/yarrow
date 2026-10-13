@@ -28,8 +28,8 @@ if [ ! -x "$HOME/.poetry-venv/bin/poetry" ]; then
 fi
 
 # 3. JS dependencies: root (husky, lint-staged, prettier) and frontend.
-npm install --no-audit --no-fund
-(cd frontend && npm install --no-audit --no-fund)
+npm ci --no-audit --no-fund
+(cd frontend && npm ci --no-audit --no-fund)
 
 # 4. Python dependencies for backend and worker (project venvs under ~/.cache/pypoetry).
 # --no-root: neither project is packaged (matches the Dockerfiles).
