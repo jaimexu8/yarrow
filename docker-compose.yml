@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
 
   valkey:
-    image: valkey/valkey:9.0-alpine@sha256:187679e3bd4036959631e3f03983ab2ba503ab21e6fd0454d508e909db2ee989
+    image: valkey/valkey:9.2-alpine@sha256:cdcb7b1c7b6f1c9cb9442c71ac6275e78184657448407b2c1fdde7ee8024f4fb
     container_name: yarrow_valkey
     # Append-only log, synced every second, so logouts (revoked tokens,
     # US-19) survive a crash. The default snapshots alone could lose minutes
@@ -40,7 +40,7 @@ services:
     restart: unless-stopped
 
   rustfs:
-    image: rustfs/rustfs:1.0.0
+    image: rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c
     container_name: yarrow_rustfs
     environment:
       RUSTFS_VOLUMES: /data/rustfs0
@@ -67,7 +67,7 @@ services:
     restart: "no"
 
   rustfs-volumes:
-    image: alpine:3.22
+    image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
     container_name: yarrow_rustfs_volumes
     command: sh -c "chown -R 10001:10001 /data /logs"
     volumes:
@@ -76,7 +76,7 @@ services:
     restart: "no"
 
   create-bucket:
-    image: rustfs/rc:v0.1.36
+    image: rustfs/rc:v0.1.36@sha256:ab024bfebee49a750ce886b4c70963ccd9ddaa03f491704a90710641d7a26699
     container_name: yarrow_s3_setup
     depends_on:
       rustfs:
@@ -92,7 +92,7 @@ services:
         && rc anonymous set download rustfs/${S3_BUCKET_NAME:-yarrow-documents}
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:latest@sha256:94f6b70c1436defae6799d9ac7ff0eeff9540465b842026d5cdb018f1c0234ea
     container_name: yarrow_mailpit
     ports:
       - "8025:8025" # web UI
