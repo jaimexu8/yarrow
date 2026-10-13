@@ -39,7 +39,10 @@ jobs:
           pip install poetry==2.5.1
           cd backend
           poetry config virtualenvs.create false
-          poetry install
+          # The backend is a non-packaged project (no `packages`/`package-mode`
+          # set), so installing the root project errors on poetry >= 2. Use
+          # --no-root, matching the backend/worker Dockerfiles.
+          poetry install --no-root
       - name: Lint and Format Check
         run: |
           cd backend
