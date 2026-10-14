@@ -4,7 +4,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 // being reachable. Import this module only on the client (e.g. with a
 // dynamic import), since pdf.js needs browser APIs.
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.js',
+  'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString();
 

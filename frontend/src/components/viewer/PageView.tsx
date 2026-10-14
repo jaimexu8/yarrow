@@ -148,7 +148,13 @@ export function PdfPageView({
         target.height = Math.floor(viewport.height);
         const context = target.getContext('2d');
         if (!context) return;
-        task = page.render({ canvasContext: context, viewport });
+        // pdf.js v6 requires the canvas itself; the context is kept because
+        // the canvas is the one this effect just sized up.
+        task = page.render({
+          canvas: target,
+          canvasContext: context,
+          viewport,
+        });
         await task.promise;
         if (!cancelled) setDrawn(true);
       } catch (error) {

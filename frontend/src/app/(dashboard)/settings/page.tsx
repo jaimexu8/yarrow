@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { deleteAccount, updateAccount } from '@/lib/auth';
 import { toApiError } from '@/lib/errors';
 import { Input } from '@/components/ui/Input';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { CloudStorageSection } from '@/components/settings/CloudStorageSection';
 
@@ -26,15 +26,19 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const { user, clearSession, refreshUser } = useAuth();
 
-  // Start from the account's current details once they have loaded.
+  // Start from the account's current details once they have loaded. Adjusting
+  // the form state during render (rather than in an effect) avoids a synchronous
+  // setState that would cause a cascading render.
   const [filled, setFilled] = useState(false);
-  useEffect(() => {
+  const [prevUser, setPrevUser] = useState(user);
+  if (user !== prevUser) {
+    setPrevUser(user);
     if (user && !filled) {
       setName(user.name ?? '');
       setEmail(user.email);
       setFilled(true);
     }
-  }, [user, filled]);
+  }
 
   async function handleSaveAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -54,15 +54,24 @@ export function ShareModal({
     }
   }, [documentId, open]);
 
-  useEffect(() => {
+  // Reset the form and reload shares each time the modal opens. Done during
+  // render (not in an effect) to avoid a synchronous setState causing a
+  // cascading render; the fetch itself stays in an effect since it is async.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) {
       setEmail('');
       setPermission('view');
       setFieldErrors({});
       setError(null);
       setSuccess(null);
-      fetchShares();
     }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional mount/open-time data load: fetchShares is async and applies server state; runs only when the modal opens.
+    if (open) fetchShares();
   }, [open, fetchShares]);
 
   async function handleShare(event: FormEvent<HTMLFormElement>) {

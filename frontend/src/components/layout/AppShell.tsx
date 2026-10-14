@@ -67,10 +67,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     openButtonRef.current?.focus();
   }
 
-  // Following a link closes the drawer.
-  useEffect(() => {
+  // Following a link closes the drawer. Done during render (not in an effect)
+  // to avoid a synchronous setState causing a cascading render.
+  const [prevPath, setPrevPath] = useState(pathname);
+  if (pathname !== prevPath) {
+    setPrevPath(pathname);
     setDrawerOpen(false);
-  }, [pathname]);
+  }
 
   // While the drawer is open: focus it, close on Escape, and stop the page
   // behind it from scrolling.

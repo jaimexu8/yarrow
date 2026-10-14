@@ -2,7 +2,7 @@
 
 import { isAxiosError } from 'axios';
 import { useEffect, useState } from 'react';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
@@ -12,7 +12,14 @@ import { PageFrame, PdfPageView, type RenderPageOverlay } from './PageView';
 import { usePageTracking, useViewer } from './ViewerContext';
 
 type Original =
-  | { kind: 'pdf'; pdf: PDFDocumentProxy; aspectRatios: number[] }
+  | {
+      kind: 'pdf';
+      pdf: PDFDocumentProxy;
+      // The loading task owns the worker; pdf.js v6 removed
+      // PDFDocumentProxy.destroy(), so cleanup goes through task.destroy().
+      task: PDFDocumentLoadingTask;
+      aspectRatios: number[];
+    }
   | { kind: 'image'; url: string; aspectRatio: number };
 
 // Default page aspect ratio (letter size: 8.5 x 11 inches)
@@ -20,8 +27,8 @@ const DEFAULT_ASPECT = 8.5 / 11;
 
 async function openPdf(data: ArrayBuffer): Promise<Original> {
   const { default: pdfjs } = await import('@/lib/pdf');
-  const pdf = await pdfjs.getDocument({ data: new Uint8Array(data.slice(0)) })
-    .promise;
+  const task = pdfjs.getDocument({ data: new Uint8Array(data.slice(0)) });
+  const pdf = await task.promise;
 
   const aspectRatios = await Promise.all(
     Array.from({ length: pdf.numPages }, async (_, index) => {
@@ -29,7 +36,7 @@ async function openPdf(data: ArrayBuffer): Promise<Original> {
       return viewport.width / viewport.height;
     })
   );
-  return { kind: 'pdf', pdf, aspectRatios };
+  return { kind: 'pdf', pdf, task, aspectRatios };
 }
 
 function imageAspect(url: string): Promise<number> {
@@ -59,7 +66,8 @@ export function OriginalPane({
   useEffect(() => {
     let current = true;
     let objectUrl: string | null = null;
-    let pdf: PDFDocumentProxy | null = null;
+    let task: PDFDocumentLoadingTask | null = null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional reset-before-load: the async block fetches and parses the file; async callbacks apply result or error.
     setError(null);
 
     (async () => {
@@ -75,7 +83,7 @@ export function OriginalPane({
           return;
         }
         const opened = await openPdf(file.data);
-        if (opened.kind === 'pdf') pdf = opened.pdf;
+        if (opened.kind === 'pdf') task = opened.task;
         if (!current) return;
         setOriginal(opened);
         if (opened.kind === 'pdf') setPageCount(opened.pdf.numPages);
@@ -92,7 +100,7 @@ export function OriginalPane({
     return () => {
       current = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
-      pdf?.destroy();
+      task?.destroy();
     };
   }, [document.id, document.file_type, setPageCount, attempt]);
 
