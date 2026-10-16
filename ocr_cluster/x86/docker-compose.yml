@@ -7,28 +7,31 @@
 #       -> paddleocr-vl-api (PaddleOCR-VL layout on the host GPU, VLM via vlm-server)
 #         -> vlm-server (PaddlePaddle/PaddleOCR-VL on the host GPU)
 #
-# All three inference services share the single host GPU (16 GB): vLLM holds
-# ~4.9 GB at gpu-memory-utilization=0.3, the Paddle layout models (PP-OCRv5
+# All three inference services share the single host GPU (16 GB on my system): SGLang holds
+# ~6.6 GB at mem-fraction-static=0.4 (1.9 GB weights + ~4.8 GB KV cache),
+# the Paddle layout models (PP-OCRv5
 # mobile det/rec + PP-DocLayoutV2) hold ~2.5 GB combined, leaving the rest
 # for KV cache and activations.
 name: yarrow-ocr-x86
 
 services:
   vlm-server:
-    image: vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
+    image: lmsysorg/sglang:v0.5.21-cu130-runtime@sha256:df6ad77ad91b1f83985ebb789de97b83fc8745786abf5c2913d6d0387007e4cb
     command:
-      - PaddlePaddle/PaddleOCR-VL
+      - python3
+      - -m
+      - sglang.launch_server
+      - --model-path=PaddlePaddle/PaddleOCR-VL
       - --served-model-name=PaddleOCR-VL-0.9B
       - --host=0.0.0.0
       - --port=8000
       - --trust-remote-code
-      - --mm-encoder-attn-backend=TORCH_SDPA
-      - --gpu-memory-utilization=0.3
-      - --max-model-len=8192
-      - --max-num-seqs=16
-      - --max-num-batched-tokens=8192
-      - --no-enable-prefix-caching
-      - --mm-processor-cache-gb=0
+      - --context-length=8192
+      - --max-running-requests=16
+      - --mem-fraction-static=0.4
+      # OCR crops are unique per request, so prefix caching only wastes
+      # memory
+      - --disable-radix-cache
     volumes:
       - vlm-hf-cache:/root/.cache/huggingface
     shm_size: "2gb"
@@ -75,6 +78,7 @@ services:
       dockerfile: paddlex.Dockerfile
     environment:
       PIPELINE_NAME: PaddleOCR-VL
+      VLM_BACKEND: sglang-server
       VLM_SERVER_URL: http://vlm-server:8000/v1
       DEVICE: gpu
     depends_on:
