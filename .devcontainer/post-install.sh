@@ -24,7 +24,7 @@ fi
 if [ ! -x "$HOME/.poetry-venv/bin/poetry" ]; then
   python -m venv "$HOME/.poetry-venv"
   "$HOME/.poetry-venv/bin/pip" install --quiet --upgrade pip
-  "$HOME/.poetry-venv/bin/pip" install --quiet "poetry==1.8.2"
+  "$HOME/.poetry-venv/bin/pip" install --quiet "poetry==2.5.1"
 fi
 
 # 3. JS dependencies: root (husky, lint-staged, prettier) and frontend.
