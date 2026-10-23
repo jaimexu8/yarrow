@@ -41,3 +41,4 @@ Thumbs.db
 logs/
 *.log
 
+*.tsbuildinfo

@@ -1,2 +1,70 @@
 #!/bin/sh
-npx lint-staged
+# Pre-commit gate. Runs only the checks that match what is staged, and stays
+# quiet when the tooling for an area is not installed. Everything here fails
+# open: CI runs the same checks (and more) on every push, so a hook that cannot
+# run should not block local work.
+#
+# Bypass everything with:  SKIP=1 git commit ...
+
+# Escape hatch.
+if [ "$SKIP" = "1" ]; then
+  echo "husky: SKIP=1 set, skipping pre-commit checks"
+  exit 0
+fi
+
+staged=$(git diff --cached --name-only)
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+frontend_staged=$(printf '%s\n' "$staged" | grep '^frontend/' || true)
+python_staged=$(printf '%s\n' "$staged" | grep -E '^(backend|worker|packages)/.*\.py$' || true)
+
+# Neither area touched, so there is nothing to check. Bail before starting any
+# tool.
+if [ -z "$frontend_staged" ] && [ -z "$python_staged" ]; then
+  exit 0
+fi
+
+# When npm is available, defer to lint-staged. It stashes unstaged changes and
+# re-stages fixes correctly for both areas, so it is the safe path.
+if command -v npx >/dev/null 2>&1; then
+  exec npx lint-staged
+fi
+
+# No npm on this machine. Run the Python checks directly with ruff so backend
+# commits are not blocked; the frontend checks fall through to CI.
+if [ -n "$python_staged" ]; then
+  if command -v poetry >/dev/null 2>&1; then
+    # lint-staged would stash unstaged edits before fixing. We do not, so a
+    # file with live working-tree edits is checked but left untouched, to avoid
+    # pulling work-in-progress into the commit. Files whose working tree
+    # matches the index are fixed and re-staged.
+    to_fix=""
+    for f in $python_staged; do
+      if [ -n "$(git diff --name-only -- "$f")" ]; then
+        echo "husky: $f has unstaged edits; checking but not auto-fixing"
+        poetry -C backend run ruff check "$f" || exit 1
+        poetry -C backend run ruff format --check "$f" || exit 1
+      else
+        to_fix="$to_fix $f"
+      fi
+    done
+    if [ -n "$to_fix" ]; then
+      # shellcheck disable=SC2086  # paths are split into separate args on purpose
+      poetry -C backend run ruff check --fix $to_fix || exit 1
+      # shellcheck disable=SC2086
+      poetry -C backend run ruff format $to_fix || exit 1
+      # shellcheck disable=SC2086
+      git add $to_fix
+    fi
+  else
+    echo "husky: poetry not found; skipping Python checks (CI will run them)"
+  fi
+fi
+
+if [ -n "$frontend_staged" ]; then
+  echo "husky: npm/npx not found; skipping frontend checks (CI will run them)"
+fi
+
+exit 0

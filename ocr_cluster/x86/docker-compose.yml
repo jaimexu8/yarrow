@@ -15,7 +15,7 @@ name: yarrow-ocr-x86
 
 services:
   vlm-server:
-    image: vllm/vllm-openai:v0.30.0
+    image: vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
     command:
       - PaddlePaddle/PaddleOCR-VL
       - --served-model-name=PaddleOCR-VL-0.9B
@@ -117,7 +117,10 @@ services:
     restart: unless-stopped
 
   gateway:
-    image: nginx:1.27-alpine
+    image: nginx:1.31-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
+    depends_on:
+      hybrid-gateway:
+        condition: service_healthy
     configs:
       - source: nginx-config
         target: /etc/nginx/templates/nginx.conf.template
@@ -128,9 +131,6 @@ services:
     # nginx resolves the hybrid-gateway upstream hostname once at startup;
     # starting before that container exists is a fatal boot error, so wait
     # for it to be healthy first.
-    depends_on:
-      hybrid-gateway:
-        condition: service_healthy
     ports:
       - "8080:8080"
     healthcheck:

@@ -24,12 +24,12 @@ fi
 if [ ! -x "$HOME/.poetry-venv/bin/poetry" ]; then
   python -m venv "$HOME/.poetry-venv"
   "$HOME/.poetry-venv/bin/pip" install --quiet --upgrade pip
-  "$HOME/.poetry-venv/bin/pip" install --quiet "poetry==1.8.2"
+  "$HOME/.poetry-venv/bin/pip" install --quiet "poetry==2.5.1"
 fi
 
 # 3. JS dependencies: root (husky, lint-staged, prettier) and frontend.
-npm install --no-audit --no-fund
-(cd frontend && npm install --no-audit --no-fund)
+npm ci --no-audit --no-fund
+(cd frontend && npm ci --no-audit --no-fund)
 
 # 4. Python dependencies for backend and worker (project venvs under ~/.cache/pypoetry).
 # --no-root: neither project is packaged (matches the Dockerfiles).
