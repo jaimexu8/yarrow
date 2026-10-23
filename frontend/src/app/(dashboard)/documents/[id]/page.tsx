@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState, use } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
@@ -191,8 +191,11 @@ function DocumentViewerLayout({ refresh }: { refresh: () => void }) {
 export default function DocumentViewerPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  // Next 15+ passes `params` as a Promise; this page is a client component,
+  // so unwrap it with use() before rendering.
+  const { id } = use(params);
   return (
     <Suspense
       fallback={
@@ -201,7 +204,7 @@ export default function DocumentViewerPage({
         </div>
       }
     >
-      <DocumentViewer documentId={params.id} />
+      <DocumentViewer documentId={id} />
     </Suspense>
   );
 }

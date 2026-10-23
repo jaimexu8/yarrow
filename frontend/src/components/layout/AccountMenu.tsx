@@ -79,10 +79,13 @@ export function AccountMenu() {
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open, close]);
 
-  // Navigating (e.g. to settings) closes it.
-  useEffect(() => {
+  // Navigating (e.g. to settings) closes it. Done during render (not in an
+  // effect) to avoid a synchronous setState causing a cascading render.
+  const [prevPath, setPrevPath] = useState(pathname);
+  if (pathname !== prevPath) {
+    setPrevPath(pathname);
     setOpen(false);
-  }, [pathname]);
+  }
 
   function onButtonKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {

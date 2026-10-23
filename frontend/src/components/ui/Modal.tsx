@@ -57,7 +57,9 @@ export function Modal({
         if (event.target === event.currentTarget && dismissible) onClose();
       }}
       className={cn(
-        'w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-900/40',
+        // m-auto restores the native <dialog> centering that Tailwind's
+        // preflight margin reset removes (UA stylesheet: margin: auto).
+        'm-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-900/40',
         // The dialog shows above the page but still inherits text styles
         // from wherever it sits in the DOM
         'whitespace-normal text-left font-normal',

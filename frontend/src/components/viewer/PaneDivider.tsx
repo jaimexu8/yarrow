@@ -53,7 +53,7 @@ export function PaneDivider({
 }: {
   split: number;
   onSplitChange: (split: number) => void;
-  container: RefObject<HTMLElement>;
+  container: RefObject<HTMLElement | null>;
 }) {
   const { mode, setMode } = useViewer();
   const [dragging, setDragging] = useState(false);

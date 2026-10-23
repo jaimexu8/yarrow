@@ -3,7 +3,6 @@
 import {
   forwardRef,
   useState,
-  type FormEvent,
   type InputHTMLAttributes,
   type ReactNode,
 } from 'react';
@@ -119,7 +118,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             setInvalid(invalidKind(e.currentTarget));
             onBlur?.(e);
           }}
-          onInput={(e: FormEvent<HTMLInputElement>) => {
+          onInput={(e) => {
             // Once an error is showing, update it as the value changes and
             // clear it the moment the value is fixed. Checked on the next
             // frame so a parent that reformats the value (e.g. strips spaces

@@ -34,6 +34,7 @@ export function FindInDocument() {
   const [hits, setHits] = useState<DocumentHit[]>([]);
   const [active, setActive] = useState(0);
 
+  // eslint-disable-next-line react-hooks/refs -- Latest-value ref tracking highlightRegionId for the search effect; never read during render.
   regionRef.current = highlightRegionId;
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export function FindInDocument() {
     const nextHits = findInDocument(tree, term);
     const draftChanged = draftRef.current !== draft;
     draftRef.current = draft;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Search results derive synchronously from (tree, draft) and must recompute on change; applying here keeps highlight state consistent atomically.
     setHits(nextHits);
 
     if (!term) {

@@ -262,6 +262,7 @@ export function ExtractedContentList() {
 
   useEffect(() => {
     if (document.status !== 'completed' || !tree) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional reset-before-load: the effect (re)fetches merge candidates on document change; async callbacks apply the result.
       setTableEdits(null);
       return;
     }
