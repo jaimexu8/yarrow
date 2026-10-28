@@ -1,4 +1,5 @@
 from .base import Base
+from .batch import Batch
 from .cloud_credential import CloudCredential
 from .document import Document
 from .job import Job
@@ -11,6 +12,7 @@ from .warning import Warning
 
 __all__ = [
     "Base",
+    "Batch",
     "CloudCredential",
     "Document",
     "DocumentShare",

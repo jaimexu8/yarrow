@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { useId, useRef, useState, type DragEvent } from 'react';
+import { BatchProgressPanel } from '@/components/documents/BatchProgressPanel';
 import { DocumentList } from '@/components/documents/DocumentList';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
-import { newUploadId, uploadDocument } from '@/lib/documents';
+import { newBatchId, newUploadId, uploadDocument } from '@/lib/documents';
+import { storeBatchId, useStoredBatchId } from '@/lib/useBatchProgress';
 import {
   ACCEPT_ATTRIBUTE,
   ACCEPTED_TYPES_TEXT,
@@ -41,11 +43,14 @@ function keyFor(file: File) {
 }
 
 /**
- * US-7 Upload PDF, US-8 Bulk upload, US-37 Reject unsupported types.
+ * US-7 Upload PDF, US-8 Bulk upload, US-37 Reject unsupported types,
+ * US-31 Batch upload progress.
  *
  * Files are uploaded one at a time, each with its own progress and result,
  * so one bad file never affects the others and a failed one can be retried
- * on its own.
+ * on its own. Every file of one "Upload" click carries the same batch id, so
+ * the server can report how far the run as a whole has got; the id is kept
+ * for the tab so coming back to this page picks the run up again.
  */
 export default function UploadPage() {
   const inputId = useId();
@@ -54,6 +59,9 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  // The run whose progress is shown, remembered for the tab so coming back
+  // to this page picks it up again (US-31).
+  const batchId = useStoredBatchId();
 
   function addFiles(files: FileList | File[]) {
     // Copy the files out now. A FileList belongs to the input or drop event,
@@ -92,8 +100,17 @@ export default function UploadPage() {
     );
   }
 
-  async function uploadAll(keys: string[]) {
+  /**
+   * Upload the given files. ``newRun`` starts a fresh batch (the Upload
+   * button); a Retry of one file rejoins the run it was part of, so the
+   * counts stay right.
+   */
+  async function uploadAll(keys: string[], newRun: boolean) {
     if (keys.length === 0) return;
+    const runId = newRun || !batchId ? newBatchId() : batchId;
+    // The server only knows the batch once a file has been accepted, so the
+    // progress panel is shown (and the id remembered) from that point.
+    let shown = runId === batchId;
     setUploading(true);
     setItems((current) =>
       current.map((item) =>
@@ -111,7 +128,8 @@ export default function UploadPage() {
       const outcome = await uploadDocument(
         item.file,
         item.uploadId,
-        (progress) => update(key, { progress })
+        (progress) => update(key, { progress }),
+        runId
       );
       if (outcome.kind === 'accepted') {
         update(key, {
@@ -120,6 +138,12 @@ export default function UploadPage() {
           documentId: outcome.documentId,
           message: outcome.processingStarted ? undefined : outcome.message,
         });
+        if (!shown) {
+          storeBatchId(runId);
+          shown = true;
+        }
+        // The run has one more file; show it in the progress panel now.
+        setRefreshKey((n) => n + 1);
       } else if (outcome.kind === 'rejected') {
         update(key, { status: 'rejected', message: outcome.reason });
       } else {
@@ -224,7 +248,7 @@ export default function UploadPage() {
                     current.filter((other) => other.key !== item.key)
                   )
                 }
-                onRetry={() => uploadAll([item.key])}
+                onRetry={() => uploadAll([item.key], false)}
               />
             ))}
           </ul>
@@ -250,7 +274,12 @@ export default function UploadPage() {
             className="w-auto px-5"
             disabled={ready.length === 0}
             loading={uploading}
-            onClick={() => uploadAll(ready.map((item) => item.key))}
+            onClick={() =>
+              uploadAll(
+                ready.map((item) => item.key),
+                true
+              )
+            }
           >
             {uploadButtonLabel(uploading, ready.length)}
           </Button>
@@ -265,6 +294,14 @@ export default function UploadPage() {
           )}
         </div>
       </section>
+
+      {batchId && (
+        <BatchProgressPanel
+          batchId={batchId}
+          refreshKey={refreshKey}
+          onDismiss={() => storeBatchId(null)}
+        />
+      )}
 
       <section aria-labelledby="library-heading" className="space-y-3">
         <div className="flex items-baseline justify-between">

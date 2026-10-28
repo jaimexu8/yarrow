@@ -15,11 +15,20 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
-from yarrow_db.models import Document, DocumentShare, Job, Page, Region, User
+from yarrow_db.models import (
+    Batch,
+    Document,
+    DocumentShare,
+    Job,
+    Page,
+    Region,
+    User,
+)
 from yarrow_db.models.region import RegionImage
 from yarrow_storage import ObjectNotFoundError, get_storage
 
@@ -35,6 +44,7 @@ from app.deps import (
     require_read_access,
 )
 from app.schemas import (
+    BatchProgress,
     BulkDocumentRequest,
     BulkItemResult,
     DocumentDetail,
@@ -65,6 +75,8 @@ logger = logging.getLogger(__name__)
 
 # Jobs a user can still cancel (US-42): waiting in the queue, or being processed.
 CANCELABLE_JOB_STATES = {"queued", "processing"}
+# Every Document.status value, in the order a batch summary reports them.
+STATUS_VALUES = ("queued", "processing", "completed", "failed", "canceled")
 # Postgres deadlock_detected
 DEADLOCK_DETECTED = "40P01"
 
@@ -89,18 +101,20 @@ SNIFF_BYTES = 8192
 READ_CHUNK = 1024 * 1024
 
 
-async def _find_earlier_upload(
+async def _earlier_upload(
     db: AsyncSession, owner_id: UUID, upload_id: str
-) -> UploadAccepted | None:
-    """The result of this user's earlier upload with the same client id."""
+) -> Document | None:
+    """This user's earlier upload with the same client id, if any."""
     result = await db.execute(
         select(Document).where(
             Document.owner_id == owner_id, Document.client_upload_id == upload_id
         )
     )
-    document = result.scalars().first()
-    if document is None:
-        return None
+    return result.scalars().first()
+
+
+async def _accepted_for(db: AsyncSession, document: Document) -> UploadAccepted:
+    """The upload result of a document that was stored earlier."""
     job = (
         (
             await db.execute(
@@ -161,10 +175,36 @@ async def _measure(upload: UploadFile) -> tuple[int, str, str | None]:
     return size, digest.hexdigest(), kind.extension if kind else None
 
 
+async def _get_or_create_batch(
+    db: AsyncSession, owner_id: UUID, batch_id: UUID
+) -> Batch:
+    """The caller's batch with this id, created on first sight (US-31).
+
+    Files are uploaded one request at a time, all carrying the same id, so
+    the first request creates the row and the rest find it. The insert
+    ignores a conflict rather than checking first, so two requests arriving
+    together (even from different users guessing the same id) cannot both
+    insert and one of them fail. Whoever lost the race, or anyone sending
+    the id of someone else's batch, gets a 404 and never joins it.
+    """
+    await db.execute(
+        pg_insert(Batch)
+        .values(id=batch_id, owner_id=owner_id)
+        .on_conflict_do_nothing(index_elements=["id"])
+    )
+    batch = await db.get(Batch, batch_id, populate_existing=True)
+    if batch is None or batch.owner_id != owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Batch not found"
+        )
+    return batch
+
+
 @router.post("/upload", response_model=UploadResponse)
 async def upload_documents(
     files: list[UploadFile] = File(...),
     client_upload_ids: list[str] | None = Form(None),
+    batch_id: UUID | None = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -177,6 +217,9 @@ async def upload_documents(
     ``client_upload_ids`` (optional, one per file, in the same order) makes
     retries safe: a file whose id this user has already uploaded returns the
     existing document instead of being stored a second time.
+
+    ``batch_id`` (optional) groups every file of one upload run so their
+    progress can be reported together (US-31). Jobs stay one per file.
     """
     if client_upload_ids is not None:
         if len(client_upload_ids) != len(files):
@@ -209,6 +252,9 @@ async def upload_documents(
         .execution_options(populate_existing=True)
     )
     current_user = locked.scalar_one()
+    # Created on the first file this request keeps, so that a request whose
+    # files are all rejected leaves no empty batch behind.
+    batch: Batch | None = None
     # Running total, so that several files in one request cannot each pass a
     # quota check that they only collectively exceed.
     used_bytes = current_user.storage_used_bytes or 0
@@ -218,11 +264,19 @@ async def upload_documents(
         upload_id = client_upload_ids[index] if client_upload_ids else None
 
         if upload_id:
-            earlier = await _find_earlier_upload(db, current_user.id, upload_id)
+            earlier = await _earlier_upload(db, current_user.id, upload_id)
             if earlier is not None:
                 # A retry of an upload that already succeeded (its response
                 # was lost): report the stored document, store nothing new.
-                accepted.append(earlier)
+                if batch_id is not None and earlier.batch_id is None:
+                    # The first attempt was stored before its batch was known
+                    # (or without one); count it in the run being retried.
+                    if batch is None:
+                        batch = await _get_or_create_batch(
+                            db, current_user.id, batch_id
+                        )
+                    earlier.batch_id = batch.id
+                accepted.append(await _accepted_for(db, earlier))
                 continue
 
         size, _sha256, extension = await _measure(upload)
@@ -263,6 +317,8 @@ async def upload_documents(
             )
             continue
 
+        if batch_id is not None and batch is None:
+            batch = await _get_or_create_batch(db, current_user.id, batch_id)
         document_id = uuid4()
         key = _storage_key(document_id)
         try:
@@ -291,6 +347,7 @@ async def upload_documents(
             storage_key=key,
             status="queued",
             client_upload_id=upload_id,
+            batch_id=batch.id if batch else None,
         )
         job = Job(
             id=uuid4(),
@@ -375,6 +432,47 @@ async def list_documents(
         .order_by(Document.created_at.desc())
     )
     return await documents_out(db, list(result.scalars().all()))
+
+
+@router.get("/batches/{batch_id}", response_model=BatchProgress)
+async def get_batch_progress(
+    batch_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Per-status counts for the files uploaded together in one run (US-31).
+
+    Counted from the documents each time it is asked, so leaving and coming
+    back to the Upload page shows where things really are. Another user's
+    batch is a 404, like another user's document.
+    """
+    batch = await db.get(Batch, batch_id)
+    if batch is None or batch.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Batch not found"
+        )
+
+    rows = await db.execute(
+        select(Document.status, func.count())
+        .where(Document.batch_id == batch_id)
+        .group_by(Document.status)
+    )
+    counts = {state: 0 for state in STATUS_VALUES}
+    for state, count in rows:
+        if state not in counts:
+            # Still in the batch, so still in the total. Reported as queued
+            # for the user, and logged so a bad or new status value is seen.
+            logger.warning(
+                f"Batch {batch_id}: {count} document(s) have status {state!r}"
+            )
+            state = "queued"
+        counts[state] += count
+    return BatchProgress(
+        batch_id=batch.id,
+        total=sum(counts.values()),
+        created_at=batch.created_at,
+        **counts,
+    )
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)

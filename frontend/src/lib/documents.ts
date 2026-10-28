@@ -120,6 +120,45 @@ export function newUploadId(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * A new id for one upload run (US-31). Every file in the run is sent with it,
+ * so the server can group them and report their progress together.
+ */
+export function newBatchId(): string {
+  return newUploadId();
+}
+
+/** Per-status counts for one upload run; matches BatchProgress on the server. */
+export type BatchProgress = {
+  batch_id: string;
+  total: number;
+  queued: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  canceled: number;
+  created_at: string | null;
+};
+
+/** Whether any file in the batch is still queued or being processed. */
+export function isBatchWorking(progress: BatchProgress): boolean {
+  return progress.queued + progress.processing > 0;
+}
+
+/**
+ * The latest counts for a batch (US-31). Counted on the server from the
+ * documents' current statuses, so it is accurate after leaving and coming
+ * back to the page. Someone else's batch, or an unknown one, is a 404.
+ */
+export async function getBatchProgress(
+  batchId: string
+): Promise<BatchProgress> {
+  const res = await api.get<BatchProgress>(
+    `/api/v1/documents/batches/${batchId}`
+  );
+  return res.data;
+}
+
 type UploadResponse = {
   accepted: {
     document_id: string;
@@ -151,15 +190,19 @@ export type UploadOutcome =
 /**
  * Upload a single file (US-7). The page sends files one at a time so each has
  * its own progress and result, and one failure can't affect the rest (US-8).
+ * ``batchId`` ties the file to its upload run (US-31).
  */
 export async function uploadDocument(
   file: File,
   uploadId: string,
-  onProgress: (percent: number) => void
+  onProgress: (percent: number) => void,
+  batchId?: string
 ): Promise<UploadOutcome> {
   const form = new FormData();
   form.append('files', file);
   form.append('client_upload_ids', uploadId);
+  // Groups this file with the others of the same run (US-31).
+  if (batchId) form.append('batch_id', batchId);
   try {
     const res = await api.post<UploadResponse>(
       '/api/v1/documents/upload',
