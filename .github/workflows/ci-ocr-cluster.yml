@@ -8,6 +8,9 @@ on:
     paths:
       - "ocr_cluster/**"
       - ".github/workflows/ci-ocr-cluster.yml"
+  # Manual runs: lets you test the cache on a branch, and seed the cache on
+  # main (PR-scoped caches are not readable from main or other PRs).
+  workflow_dispatch:
 
 # Builds each OCR cluster stack (x86 and aarch64) and brings its non-VLM
 # services up with `docker compose up -d --wait` (healthchecks live in the
@@ -28,7 +31,10 @@ on:
 #          every other run just pip-installs the wheel
 #          (PADDLE_WHEEL_FROM=paddle-wheel-prebuilt + the wheels build
 #          context in ocr_cluster/dgx/paddlex.Dockerfile skips the compile
-#          stage entirely).
+#          stage entirely). The cache is restored with actions/cache/restore
+#          and saved with actions/cache/save immediately after the compile,
+#          so a later failure or timeout never throws the wheel away
+#          (`save-always` on actions/cache is deprecated and does not work).
 
 env:
   # Both stacks' gateway services interpolate GATEWAY_API_KEY with a :?
@@ -105,12 +111,13 @@ jobs:
       # Exact key only: the wheel is built against a specific PADDLE_GIT_REF, so
       # a stale wheel from an older Dockerfile would silently mismatch the
       # packages that expect it. changed Dockerfile -> full recompile.
+      # Restore only; the matching save step runs right after the compile.
       - name: Restore compiled wheel cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: wheel-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/paddle-wheel/dgx
           key: ocr-paddle-wheel-dgx-v1-${{ hashFiles('ocr_cluster/dgx/paddlex.Dockerfile') }}
-          save-always: true
       # The 4-core Paddle compile exceeds the runner's 16 GB RAM at times; a
       # killed build loses all progress, so buy memory headroom with swap.
       - name: Add swap for the Paddle compile
@@ -150,6 +157,14 @@ jobs:
             docker rmi ocrt-paddle-compile:dgx
             echo "wheel extracted:"; ls -lh "$WHEEL_DIR"; du -sh "$WHEEL_DIR"
           fi
+      # Save immediately after the compile so later failures/timeouts can't
+      # lose the 4-hour result. Skipped on an exact cache hit.
+      - name: Save compiled wheel cache
+        if: steps.wheel-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/paddle-wheel/dgx
+          key: ${{ steps.wheel-cache.outputs.cache-primary-key }}
       - name: Build the paddlex image from the cached wheel
         run: |
           docker buildx build \
