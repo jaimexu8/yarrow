@@ -49,6 +49,12 @@ jobs:
       - name: Set up Buildx
         id: buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Install pytest
+        run: pip install pytest
       - name: Build the paddlex image
         run: |
           docker buildx build \
@@ -116,6 +122,12 @@ jobs:
           free -h
       - name: Runner resources before the build
         run: df -h / /mnt
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Install pytest
+        run: pip install pytest
       - name: Compile the sm_121 wheel if the cache is empty
         run: |
           WHEEL_DIR="$HOME/.cache/paddle-wheel/dgx"
