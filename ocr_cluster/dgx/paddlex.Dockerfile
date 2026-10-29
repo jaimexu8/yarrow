@@ -1,6 +1,22 @@
 # PaddleX serving container: PP-StructureV3 on a source-built PaddlePaddle GPU
 # wheel for NVIDIA GB10 (aarch64, compute capability 12.1).
-FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04
+#
+# Which stage supplies the compiled wheel to the runtime stage is chosen with
+# PADDLE_WHEEL_FROM:
+#
+#   - paddle-compile (default): compile Paddle from source (hours). Plain
+#     `docker compose build` on the GB10 box takes this path; nothing extra to
+#     pass.
+#   - paddle-wheel-prebuilt: install a wheel copied in via the "wheels" build
+#     context. CI takes this path (see ci-ocr-cluster.yml): the wheel is
+#     compiled once and cached between runs, so the 4-hour compile only
+#     happens when this Dockerfile changes. BuildKit evaluates only the
+#     stages in the dependency graph of the requested target, so pointing the
+#     runtime stage at paddle-wheel-prebuilt skips the compile entirely --
+#     even though paddle-compile is defined above it and would fail without
+#     the wheels context if it were evaluated.
+ARG PADDLE_WHEEL_FROM=paddle-compile
+FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS paddle-compile
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -82,10 +98,47 @@ RUN git clone --branch "${PADDLE_GIT_REF}" --depth 1 \
     && python -m pip install /opt/wheels/*.whl \
     && rm -rf /opt/paddle
 
-# Install the application packages first, then restore the locally built GPU
-# wheel in case either package declares a CPU Paddle dependency.
-RUN python -m pip install "paddleocr[doc-parser]${PADDLEOCR_VERSION}" "paddlex[serving]${PADDLEX_VERSION}" \
-    && python -m pip install --force-reinstall /opt/wheels/*.whl
+FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS paddle-wheel-prebuilt
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DEFAULT_TIMEOUT=300 \
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+
+# Runtime dependencies only; the compiler toolchain of paddle-compile is not
+# needed here.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-venv \
+        libgl1 libglib2.0-0 libgomp1 wget curl ca-certificates \
+        fontconfig fonts-dejavu-core fonts-noto-cjk fonts-wqy-microhei \
+        libopenblas-dev liblapack-dev unzip \
+    && fc-cache -fv \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG PADDLEOCR_VERSION=">=3.4.0,<3.5"
+ARG PADDLEX_VERSION=">=3.4.0,<3.5"
+
+ENV PATH="/opt/venv/bin:${PATH}"
+
+# Install the application packages first, then force-reinstall the locally
+# built GPU wheel in case either package declares a CPU Paddle dependency.
+RUN python3 -m venv /opt/venv \
+    && python -m pip install --upgrade pip \
+    && python -m pip install "paddleocr[doc-parser]${PADDLEOCR_VERSION}" "paddlex[serving]${PADDLEX_VERSION}"
+
+# The wheels context carries the wheel produced by paddle-compile (extracted
+# and cached between CI runs). This stage is only ever evaluated when the
+# build passes PADDLE_WHEEL_FROM=paddle-wheel-prebuilt together with the
+# wheels context.
+COPY --from=wheels / /tmp/wheels
+RUN python -m pip install --force-reinstall /tmp/wheels/*.whl \
+    && rm -rf /tmp/wheels
+
+FROM ${PADDLE_WHEEL_FROM} AS runtime
+
+ENV PADDLE_PDX_LOCAL_FONT_FILE_PATH=/usr/share/fonts/truetype/wqy/wqy-microhei.ttc
 
 ARG PADDLEX_UID=1001
 ARG PADDLEX_GID=1001
@@ -123,11 +176,11 @@ RUN python -c "from paddlex import create_pipeline; create_pipeline('PP-Structur
 # build host need not have a GPU visible.
 RUN python -c "from paddlex import create_model; create_model('PP-DocLayoutV2', device='cpu')"
 
-# Same race, different file: the PingFang font used to render `visualize`
-# output images is lazily downloaded on first use, not at pipeline creation,
-# so it needs its own warmup -- otherwise N replicas write the same font path
-# at once and the result is a truncated file ("OSError: unknown file format").
-RUN python -c "from paddlex.utils.fonts import PINGFANG_FONT; PINGFANG_FONT.path"
+# The PingFang warmup layer was removed: PADDLE_PDX_LOCAL_FONT_FILE_PATH (set
+# above) points at the WQY Micro Hei font installed by apt, so the lazy font
+# download from Baidu's CDN never fires -- the CDN once rejected the fetch
+# mid-build and killed a CI run, and at runtime the font race was the source
+# of "OSError: unknown file format" corruption in the visualize path.
 
 USER root
 COPY --from=shared entrypoint.sh /usr/local/bin/entrypoint.sh
