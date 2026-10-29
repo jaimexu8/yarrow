@@ -32,6 +32,8 @@ type Item = {
   file: File;
   /** Sent with every attempt for this file, so a retry can't duplicate it. */
   uploadId: string;
+  /** The run this file was last sent in, so a Retry rejoins that run. */
+  batchId?: string;
   status: ItemStatus;
   progress: number;
   message?: string;
@@ -102,15 +104,15 @@ export default function UploadPage() {
 
   /**
    * Upload the given files. ``newRun`` starts a fresh batch (the Upload
-   * button); a Retry of one file rejoins the run it was part of, so the
-   * counts stay right.
+   * button); a Retry of one file rejoins the run that file was sent in, even
+   * if a later run is the one on screen, so every run's counts stay right.
    */
   async function uploadAll(keys: string[], newRun: boolean) {
     if (keys.length === 0) return;
-    const runId = newRun || !batchId ? newBatchId() : batchId;
-    // The server only knows the batch once a file has been accepted, so the
+    const freshRun = newBatchId();
+    // The server only knows a batch once a file has been accepted, so the
     // progress panel is shown (and the id remembered) from that point.
-    let shown = runId === batchId;
+    let shown = false;
     setUploading(true);
     setItems((current) =>
       current.map((item) =>
@@ -124,7 +126,8 @@ export default function UploadPage() {
     for (const key of keys) {
       const item = items.find((candidate) => candidate.key === key);
       if (!item) continue;
-      update(key, { status: 'uploading', progress: 0 });
+      const runId = newRun ? freshRun : (item.batchId ?? batchId ?? freshRun);
+      update(key, { status: 'uploading', progress: 0, batchId: runId });
       const outcome = await uploadDocument(
         item.file,
         item.uploadId,
@@ -138,7 +141,9 @@ export default function UploadPage() {
           documentId: outcome.documentId,
           message: outcome.processingStarted ? undefined : outcome.message,
         });
-        if (!shown) {
+        // A new run takes over the panel. A retry into an earlier run that is
+        // no longer on screen leaves the panel showing the current run.
+        if (!shown && (newRun || !batchId)) {
           storeBatchId(runId);
           shown = true;
         }
@@ -299,6 +304,7 @@ export default function UploadPage() {
         <BatchProgressPanel
           batchId={batchId}
           refreshKey={refreshKey}
+          uploading={uploading}
           onDismiss={() => storeBatchId(null)}
         />
       )}

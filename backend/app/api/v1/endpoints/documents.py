@@ -318,7 +318,14 @@ async def upload_documents(
             continue
 
         if batch_id is not None and batch is None:
-            batch = await _get_or_create_batch(db, current_user.id, batch_id)
+            # Refuse someone else's batch before storing anything. The batch
+            # itself is only created once this file is safely stored, so a
+            # storage failure leaves no empty batch behind.
+            existing = await db.get(Batch, batch_id)
+            if existing is not None and existing.owner_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Batch not found"
+                )
         document_id = uuid4()
         key = _storage_key(document_id)
         try:
@@ -338,6 +345,8 @@ async def upload_documents(
             )
             continue
 
+        if batch_id is not None and batch is None:
+            batch = await _get_or_create_batch(db, current_user.id, batch_id)
         document = Document(
             id=document_id,
             owner_id=current_user.id,

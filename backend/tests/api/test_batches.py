@@ -111,6 +111,25 @@ class TestSharedBatchId:
         progress = await client.get(_batch_url(batch_id), headers=auth_headers)
         assert progress.status_code == 404
 
+    async def test_storage_failure_creates_no_batch(
+        self, client, auth_headers, fake_storage, fake_queue, db_session, monkeypatch
+    ):
+        """A file that could not be stored is refused as retryable, and since
+        nothing was kept the run's batch is not created yet either."""
+
+        def _storage_down(file, key):
+            raise RuntimeError("bucket unreachable")
+
+        monkeypatch.setattr(fake_storage, "upload_file", _storage_down)
+        batch_id = uuid.uuid4()
+        response = await _upload(client, auth_headers, batch_id=batch_id)
+        assert response.status_code == 400
+        assert response.json()["detail"][0]["retryable"] is True
+
+        assert (await db_session.execute(select(Batch))).scalars().all() == []
+        progress = await client.get(_batch_url(batch_id), headers=auth_headers)
+        assert progress.status_code == 404
+
     async def test_retry_after_lost_reply_joins_the_run(
         self, client, auth_headers, fake_storage, fake_queue, db_session
     ):
