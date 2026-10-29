@@ -33,6 +33,12 @@ RUN python3 -m venv /opt/venv \
 
 # GB10 needs a local ARM64 wheel: published Paddle GPU wheels do not include
 # sm_121 and fail at runtime with "Mismatched GPU Architecture".
+#
+# The pybind11-stubgen pin below matters: cmake's configure step installs it
+# unpinned, and 3.0.0 (2026-09) dropped the run(sub_dir=...) API that
+# Paddle v3.4.0's tools/gen_pybind11_stub.py calls -- so the wheel-packing
+# step fails after the hours-long compile has already succeeded. 2.5.5 has
+# the exact API v3.4.0 targets (verified against both sources).
 WORKDIR /opt
 RUN git clone --branch "${PADDLE_GIT_REF}" --depth 1 --recurse-submodules \
         https://github.com/PaddlePaddle/Paddle.git paddle \
@@ -53,6 +59,7 @@ RUN git clone --branch "${PADDLE_GIT_REF}" --depth 1 --recurse-submodules \
         -DWITH_TENSORRT=OFF \
         -DCMAKE_CUDA_FLAGS="-U__ARM_NEON -DEIGEN_DONT_VECTORIZE=1" \
         -DPYTHON_EXECUTABLE=/opt/venv/bin/python \
+    && python -m pip install --no-deps "pybind11-stubgen==2.5.5" \
     && ninja -j"$(nproc)" \
     && mkdir -p /opt/wheels \
     && cp /opt/paddle/build/python/dist/*.whl /opt/wheels/ \
