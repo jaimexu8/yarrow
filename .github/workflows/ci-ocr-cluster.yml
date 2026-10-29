@@ -129,7 +129,8 @@ jobs:
               --load \
               --target paddle-compile \
               -t ocrt-paddle-compile:dgx \
-              -f ocr_cluster/dgx/paddlex.Dockerfile
+              -f ocr_cluster/dgx/paddlex.Dockerfile \
+              ocr_cluster/dgx
             cid="$(docker create ocrt-paddle-compile:dgx)"
             mkdir -p "$WHEEL_DIR"
             docker cp "$cid:/opt/wheels/." "$WHEEL_DIR/"
@@ -146,7 +147,8 @@ jobs:
             --build-context "wheels=$HOME/.cache/paddle-wheel/dgx" \
             --build-context shared=ocr_cluster/shared \
             -t yarrow-ocr-test-paddlex:ci \
-            -f ocr_cluster/dgx/paddlex.Dockerfile
+            -f ocr_cluster/dgx/paddlex.Dockerfile \
+            ocr_cluster/dgx
       - name: Build the hybrid-gateway image
         run: |
           docker buildx build \
