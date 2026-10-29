@@ -45,12 +45,16 @@ RUN python3 -m venv /opt/venv \
 # rejects clones under load ("unable to handle this request due to load"),
 # which killed one CI run 2 minutes in. `git submodule update` resumes where
 # it left off, so retries make forward progress until the fetch completes.
+# Submodules are fetched in FULL (no --depth): Paddle's CMake extern-project
+# patch steps check out tags (`git checkout v21.12` for protobuf,
+# `v0.3.28` for openblas), which fail with "pathspec ... did not match" on
+# shallow submodule clones.
 WORKDIR /opt
 RUN git clone --branch "${PADDLE_GIT_REF}" --depth 1 \
         https://github.com/PaddlePaddle/Paddle.git paddle \
     && cd /opt/paddle \
     && ok=""; for i in 1 2 3 4 5; do \
-        if git submodule update --init --recursive --depth 1; then ok=1; break; fi; \
+        if git submodule update --init --recursive; then ok=1; break; fi; \
         echo "submodule fetch failed (attempt ${i}/5); GitLab may be under load; retrying in 60s"; \
         sleep 60; \
     done; [ -n "$ok" ] \
