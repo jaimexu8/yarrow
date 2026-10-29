@@ -27,6 +27,9 @@ class Document(Base):
     # document already stored instead of creating a duplicate. Unique per
     # owner (index in migration 0006).
     client_upload_id = Column(String)
+    # The upload run this file was part of (US-31); NULL for documents
+    # uploaded before batches existed or sent without a batch id.
+    batch_id = Column(UUID(as_uuid=True), ForeignKey("batches.id"), index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

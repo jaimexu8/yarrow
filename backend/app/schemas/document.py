@@ -159,3 +159,21 @@ class BulkItemResult(BaseModel):
     document_id: UUID
     ok: bool
     message: str | None = None
+
+
+class BatchProgress(BaseModel):
+    """How far the files uploaded together in one run have got (US-31).
+
+    Counted from the documents' current statuses every time, never cached, so
+    the numbers are right even after the page was closed and reopened. Each
+    file keeps its own job: a failed one is just counted under ``failed``.
+    """
+
+    batch_id: UUID
+    total: int
+    queued: int
+    processing: int
+    completed: int
+    failed: int
+    canceled: int
+    created_at: datetime | None = None
