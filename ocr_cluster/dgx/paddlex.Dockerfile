@@ -39,9 +39,21 @@ RUN python3 -m venv /opt/venv \
 # Paddle v3.4.0's tools/gen_pybind11_stub.py calls -- so the wheel-packing
 # step fails after the hours-long compile has already succeeded. 2.5.5 has
 # the exact API v3.4.0 targets (verified against both sources).
+#
+# Submodules are fetched with a retry loop rather than --recurse-submodules:
+# the Eigen submodule is hosted on gitlab.com, and gitlab intermittently
+# rejects clones under load ("unable to handle this request due to load"),
+# which killed one CI run 2 minutes in. `git submodule update` resumes where
+# it left off, so retries make forward progress until the fetch completes.
 WORKDIR /opt
-RUN git clone --branch "${PADDLE_GIT_REF}" --depth 1 --recurse-submodules \
+RUN git clone --branch "${PADDLE_GIT_REF}" --depth 1 \
         https://github.com/PaddlePaddle/Paddle.git paddle \
+    && cd /opt/paddle \
+    && ok=""; for i in 1 2 3 4 5; do \
+        if git submodule update --init --recursive --depth 1; then ok=1; break; fi; \
+        echo "submodule fetch failed (attempt ${i}/5); GitLab may be under load; retrying in 60s"; \
+        sleep 60; \
+    done; [ -n "$ok" ] \
     && git -C /opt/paddle/third_party/gloo fetch --tags \
     && python -m pip install -r /opt/paddle/python/requirements.txt \
     && mkdir /opt/paddle/build \
