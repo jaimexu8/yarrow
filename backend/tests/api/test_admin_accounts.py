@@ -131,3 +131,23 @@ class TestAdminAccounts:
             json={"is_active": False},
         )
         assert response.status_code == 400
+
+    async def test_admin_can_promote_an_account(
+        self, client, auth_headers, register, verify, login, db_session
+    ):
+        await _promote(client, auth_headers, db_session)
+        other, _ = await _other_headers(register, verify, login)
+        account = next(
+            row
+            for row in (await client.get(ACCOUNTS, headers=auth_headers)).json()
+            if row["email"] == other["email"]
+        )
+
+        response = await client.patch(
+            f"{ACCOUNTS}/{account['id']}/status",
+            headers=auth_headers,
+            json={"is_admin": True},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["is_admin"] is True

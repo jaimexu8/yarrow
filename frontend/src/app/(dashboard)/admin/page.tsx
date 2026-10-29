@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
 import { RequireAdmin } from '@/components/auth/RequireAdmin';
+import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
+import { useAuth } from '@/context/AuthContext';
 import {
   getAdminStats,
   listAccounts,
-  setAccountActive,
+  setAccountStatus,
   type AdminAccount,
   type AdminStats,
   type JobStatusCounts,
@@ -17,7 +20,7 @@ import { toApiError } from '@/lib/errors';
 import { formatBytes } from '@/lib/uploads';
 import { cn } from '@/lib/cn';
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu';
-import { Ban, Check, X } from 'lucide-react';
+import { Ban, Check, X, ArrowUpFromDot } from 'lucide-react';
 
 const CELL =
   'border-y border-slate-200 bg-white px-3 py-3 sm:px-4 align-middle first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r';
@@ -85,10 +88,12 @@ function StatsSection({ stats }: { stats: AdminStats }) {
 function AccountTableRow({
   account,
   onStatusChange,
+  onAdminStatusChange,
   pending,
 }: {
   account: AdminAccount;
   onStatusChange: (accountId: string, isActive: boolean) => void;
+  onAdminStatusChange: (accountId: string, isAdmin: boolean) => void;
   pending: boolean;
 }) {
   const actions: ActionMenuItem[] = [
@@ -100,6 +105,14 @@ function AccountTableRow({
       onSelect: () => onStatusChange(account.id, !account.is_active),
     },
   ];
+
+  actions.push({
+    label: account.is_admin ? 'Demote from Admin' : 'Promote to Admin',
+    icon: ArrowUpFromDot,
+    destructive: false,
+    keepFocus: true,
+    onSelect: () => onAdminStatusChange(account.id, !account.is_admin),
+  });
 
   return (
     <tr>
@@ -146,10 +159,12 @@ function AccountTableRow({
 function AccountTable({
   accounts,
   onStatusChange,
+  onAdminStatusChange,
   pendingAccountId,
 }: {
   accounts: AdminAccount[];
   onStatusChange: (accountId: string, isActive: boolean) => void;
+  onAdminStatusChange: (accountId: string, isAdmin: boolean) => void;
   pendingAccountId: string | null;
 }) {
   return (
@@ -171,6 +186,7 @@ function AccountTable({
               account={account}
               key={account.id}
               onStatusChange={onStatusChange}
+              onAdminStatusChange={onAdminStatusChange}
               pending={pendingAccountId === account.id}
             />
           ))}
@@ -183,10 +199,12 @@ function AccountTable({
 function AccountsSection({
   accounts,
   onStatusChange,
+  onAdminStatusChange,
   pendingAccountId,
 }: {
   accounts: AdminAccount[];
   onStatusChange: (accountId: string, isActive: boolean) => void;
+  onAdminStatusChange: (accountId: string, isAdmin: boolean) => void;
   pendingAccountId: string | null;
 }) {
   return (
@@ -200,6 +218,7 @@ function AccountsSection({
         <AccountTable
           accounts={accounts}
           onStatusChange={onStatusChange}
+          onAdminStatusChange={onAdminStatusChange}
           pendingAccountId={pendingAccountId}
         />
       )}
@@ -208,17 +227,22 @@ function AccountsSection({
 }
 
 function AdminBody() {
+  const { user, logout } = useAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [accounts, setAccounts] = useState<AdminAccount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [selfDemotionError, setSelfDemotionError] = useState<string | null>(
+    null
+  );
 
   async function changeAccountStatus(accountId: string, isActive: boolean) {
     setPendingAccountId(accountId);
     setActionError(null);
     try {
-      await setAccountActive(accountId, isActive);
+      await setAccountStatus(accountId, { is_active: isActive });
       setAccounts(
         (current) =>
           current?.map((account) =>
@@ -234,6 +258,53 @@ function AdminBody() {
     }
   }
 
+  async function saveAdminStatus(accountId: string, isAdmin: boolean) {
+    setPendingAccountId(accountId);
+    setActionError(null);
+    try {
+      await setAccountStatus(accountId, { is_admin: isAdmin });
+      if (accountId === user?.id && !isAdmin) {
+        await logout();
+        return;
+      }
+      setAccounts(
+        (current) =>
+          current?.map((account) =>
+            account.id === accountId
+              ? { ...account, is_admin: isAdmin }
+              : account
+          ) ?? null
+      );
+    } catch (err) {
+      setActionError(toApiError(err).message);
+    } finally {
+      setPendingAccountId(null);
+    }
+  }
+
+  function onAdminStatusChange(accountId: string, isAdmin: boolean) {
+    if (accountId === user?.id && !isAdmin) {
+      setSelfDemotionError(null);
+      setConfirmModalOpen(true);
+      return;
+    }
+    void saveAdminStatus(accountId, isAdmin);
+  }
+
+  async function confirmDemoteSelf() {
+    if (!user) return;
+    setPendingAccountId(user.id);
+    setSelfDemotionError(null);
+    try {
+      await setAccountStatus(user.id, { is_admin: false });
+      setConfirmModalOpen(false);
+      await logout();
+    } catch (err) {
+      setSelfDemotionError(toApiError(err).message);
+    } finally {
+      setPendingAccountId(null);
+    }
+  }
   useEffect(() => {
     let current = true;
     Promise.all([getAdminStats(), listAccounts()])
@@ -267,12 +338,48 @@ function AdminBody() {
 
   return (
     <>
+      <Modal
+        open={confirmModalOpen}
+        onClose={() => setConfirmModalOpen(false)}
+        title="Demote your administrator account?"
+        dismissible={pendingAccountId !== user?.id}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmModalOpen(false)}
+              disabled={pendingAccountId === user?.id}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={confirmDemoteSelf}
+              loading={pendingAccountId === user?.id}
+            >
+              Demote and log out
+            </Button>
+          </>
+        }
+      >
+        <p>
+          You will lose administrator access and be logged out immediately. You
+          will not be able to access this page again unless another
+          administrator restores your role.
+        </p>
+        {selfDemotionError && (
+          <p role="alert" className="mt-3 text-red-700">
+            {selfDemotionError}
+          </p>
+        )}
+      </Modal>
       <StatsSection stats={stats} />
       <div className="space-y-3">
         {actionError && <Alert>{actionError}</Alert>}
         <AccountsSection
           accounts={accounts}
           onStatusChange={changeAccountStatus}
+          onAdminStatusChange={onAdminStatusChange}
           pendingAccountId={pendingAccountId}
         />
       </div>

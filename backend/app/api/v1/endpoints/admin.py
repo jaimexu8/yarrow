@@ -95,7 +95,30 @@ async def update_account_status(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_active_admin),
 ):
-    if account_id == admin.id and not update.is_active:
+    """Update the status of an admin account.
+
+    An administrator cannot disable itself, but can disable other users (admins) and downgrade itself to a normal user.
+
+    Args:
+        account_id (UUID): The ID of the account to update.
+        update (AdminAccountStatus): The new status for the account.
+        db (AsyncSession, optional): The database session. Defaults to Depends(get_db).
+        admin (User, optional): The currently authenticated admin user. Defaults to Depends(get_current_active_admin).
+
+    Raises:
+        HTTPException: If the admin tries to disable their own account.
+        HTTPException: If the account to update is not found.
+
+    Returns:
+        AdminAccountStatus: The updated status of the account.
+    """
+    if update.is_active is None and update.is_admin is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one account status field must be provided.",
+        )
+
+    if account_id == admin.id and update.is_active is False:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot disable your own account.",
@@ -107,6 +130,14 @@ async def update_account_status(
             status_code=status.HTTP_404_NOT_FOUND, detail="Account not found."
         )
 
-    account.is_active = update.is_active
+    if update.is_active is not None:
+        account.is_active = update.is_active
+    if update.is_admin is not None:
+        account.is_admin = update.is_admin
+
     await db.commit()
-    return AdminAccountStatus(id=account.id, is_active=account.is_active)
+    return AdminAccountStatus(
+        id=account.id,
+        is_active=account.is_active,
+        is_admin=account.is_admin,
+    )
