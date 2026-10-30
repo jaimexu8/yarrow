@@ -176,6 +176,11 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
         parser = DocumentParser()
         parser.load_file(file_data)
 
+        # Rotate any rotated pages upright before OCR, so the text is readable
+        # and every downstream consumer (OCR, quality check, figure crops,
+        # viewer) sees the same upright page.
+        parser.correct_orientations()
+
         with session_scope() as session:
             job = session.get(Job, UUID(job_id))
             if job is None:
@@ -238,6 +243,21 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
                 .all()
             )
 
+            # Corrected-page images stored for the targeted pages in a prior
+            # run. Re-stored ones (same key) are kept; the rest are deleted
+            # after the commit so a page that is no longer rotated leaves no
+            # orphan behind.
+            replaced_page_image_keys = list(
+                session.execute(
+                    select(Page.page_image_key).where(
+                        Page.id.in_(page_ids),
+                        Page.page_image_key.is_not(None),
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
             # Delete all objects related to the targeted pages
             statements = [
                 delete(TableCell).where(TableCell.region_table_id.in_(region_table_ids)),
@@ -269,6 +289,32 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
                 except Exception:
                     logger.exception(f"Could not store figure {image_key}")
                     failed_image_keys.add(image_key)
+
+            # A corrected page whose image cannot be stored keeps its page and
+            # warning, just not the upright picture; its key is cleared so the
+            # viewer falls back to the original.
+            failed_page_keys: set[str] = set()
+            for image_key, image in parser.page_images.items():
+                try:
+                    get_storage().upload_file(io.BytesIO(image), image_key)
+                    uploaded_image_keys.append(image_key)
+                except Exception:
+                    logger.exception(f"Could not store corrected page {image_key}")
+                    failed_page_keys.add(image_key)
+            for obj in all_objects:
+                if isinstance(obj, Page) and obj.page_image_key in failed_page_keys:
+                    obj.page_image_key = None
+
+            # A page image this run is re-storing reuses its old key, and a
+            # page that is no longer rotated keeps no key; the rest are
+            # deleted after the commit so they leave no orphan behind.
+            kept_page_image_keys = set(parser.page_images) | {
+                obj.page_image_key for obj in all_objects if isinstance(obj, Page) and obj.page_image_key
+            }
+            replaced_image_keys = [
+                key for key in replaced_image_keys + replaced_page_image_keys if key not in kept_page_image_keys
+            ]
+
             all_objects = [
                 obj for obj in all_objects if not (isinstance(obj, RegionImage) and obj.image_key in failed_image_keys)
             ]

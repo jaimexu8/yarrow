@@ -21,6 +21,8 @@ from .auth import (
 )
 from .common import BBox, StrictModel
 from .document import (
+    BulkDocumentRequest,
+    BulkItemResult,
     DocumentDetail,
     DocumentOut,
     DocumentRename,
@@ -65,6 +67,8 @@ from .table import (
 __all__ = [
     "SCHEMA_VERSION",
     "BBox",
+    "BulkDocumentRequest",
+    "BulkItemResult",
     "CloudConnectionOut",
     "DocumentDetail",
     "DocumentOut",

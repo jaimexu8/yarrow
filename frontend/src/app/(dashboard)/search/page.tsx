@@ -9,7 +9,12 @@ import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
 import { toApiError } from '@/lib/errors';
 import { documentHitHref, HighlightedText } from '@/lib/highlight';
-import { searchDocuments, type SearchHit } from '@/lib/search';
+import {
+  searchDocuments,
+  viewerHighlightTerm,
+  isApproxMatch,
+  type SearchHit,
+} from '@/lib/search';
 
 const DOCUMENT_TYPES = [
   { value: 'application/pdf', label: 'PDF' },
@@ -26,12 +31,15 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchHit[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submittedTerm, setSubmittedTerm] = useState('');
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError(null);
     try {
+      const term = viewerHighlightTerm(query);
+      setSubmittedTerm(term);
       setResults(
         await searchDocuments(query, {
           dateFrom: dateFrom || undefined,
@@ -56,6 +64,11 @@ export default function SearchPage() {
         <p className="text-sm text-slate-600">
           Find text in your processed documents. Leave the search box empty to
           browse by date or type.
+        </p>
+        <p className="text-xs text-slate-500">
+          Wrap a phrase in double quotes to search for it exactly, e.g.
+          &ldquo;quarterly summary&rdquo;. OCR near matches (1/l, 0/O, a small
+          typo) still match.
         </p>
       </div>
 
@@ -149,11 +162,31 @@ export default function SearchPage() {
                       className="border-t border-slate-100 first:border-t-0"
                     >
                       <Link
-                        href={documentHitHref(hit.id, snippet.region_id, query)}
+                        href={documentHitHref(
+                          hit.id,
+                          snippet.region_id,
+                          submittedTerm
+                        )}
                         className="block px-4 py-3 hover:bg-slate-50"
                       >
                         <p className="text-xs font-medium text-slate-500">
                           Page {snippet.page_number}
+                          {isApproxMatch(snippet, submittedTerm) && (
+                            <span
+                              title="Approximate match: the text differs slightly from your search (e.g. an OCR error like 1/l or 0/O)"
+                              className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-sky-800"
+                            >
+                              approx
+                            </span>
+                          )}
+                          {snippet.edited && (
+                            <span
+                              title="This region was manually corrected"
+                              className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-amber-800"
+                            >
+                              corrected
+                            </span>
+                          )}
                         </p>
                         <p className="mt-1 text-sm text-slate-800">
                           <HighlightedText

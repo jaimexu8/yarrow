@@ -1,0 +1,44 @@
+[
+  {
+    "page": 1,
+    "content_rotation_ccw_deg": 4,
+    "id": "ROT-01-004",
+    "account": "4829-1937-0001"
+  },
+  {
+    "page": 2,
+    "content_rotation_ccw_deg": -11,
+    "id": "ROT-02-011",
+    "account": "4829-1937-0002"
+  },
+  {
+    "page": 3,
+    "content_rotation_ccw_deg": 17,
+    "id": "ROT-03-017",
+    "account": "4829-1937-0003"
+  },
+  {
+    "page": 4,
+    "content_rotation_ccw_deg": -28,
+    "id": "ROT-04-028",
+    "account": "4829-1937-0004"
+  },
+  {
+    "page": 5,
+    "content_rotation_ccw_deg": 45,
+    "id": "ROT-05-045",
+    "account": "4829-1937-0005"
+  },
+  {
+    "page": 6,
+    "content_rotation_ccw_deg": 90,
+    "id": "ROT-06-090",
+    "account": "4829-1937-0006"
+  },
+  {
+    "page": 7,
+    "content_rotation_ccw_deg": 173,
+    "id": "ROT-07-173",
+    "account": "4829-1937-0007"
+  }
+]

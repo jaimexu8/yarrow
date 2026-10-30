@@ -7,7 +7,12 @@ class Settings(DatabaseSettings):
 
     VALKEY_HOST: str = "valkey"
     VALKEY_PORT: str = "6379"
-    CELERY_BROKER_URL: str = "redis://valkey:6379/0"
+    # Valkey logical database for the auth data (token denylist, rate limits).
+    # The Celery broker and result backend live on their own databases (1 and 2)
+    # so queue traffic never shares a database with the persisted auth keys.
+    VALKEY_DB: int = 0
+    CELERY_BROKER_URL: str = "redis://valkey:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://valkey:6379/2"
 
     S3_ENDPOINT: str = "http://rustfs:9000"
     S3_ACCESS_KEY: str = "rustfsadmin"

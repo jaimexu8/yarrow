@@ -8,7 +8,13 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { toApiError } from '@/lib/errors';
 import { getOriginalFile } from '@/lib/viewer';
-import { PageFrame, PdfPageView, type RenderPageOverlay } from './PageView';
+import {
+  CorrectedPageView,
+  PageFrame,
+  PdfPageView,
+  OriginalToggle,
+  type RenderPageOverlay,
+} from './PageView';
 import { usePageTracking, useViewer } from './ViewerContext';
 
 type Original =
@@ -57,7 +63,15 @@ export function OriginalPane({
 }: {
   renderPageOverlay?: RenderPageOverlay;
 }) {
-  const { document, setPageCount, initialPage, scrollToPage } = useViewer();
+  const {
+    document,
+    setPageCount,
+    initialPage,
+    scrollToPage,
+    tree,
+    originalPages,
+    toggleOriginalPage,
+  } = useViewer();
   const onScroll = usePageTracking('original');
   const [original, setOriginal] = useState<Original | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -140,29 +154,88 @@ export function OriginalPane({
         </div>
       ) : (
         <div className="mx-auto max-w-3xl space-y-6">
-          {original.kind === 'pdf' ? (
-            original.aspectRatios.map((aspectRatio, index) => (
-              <PdfPageView
-                key={index}
-                pdf={original.pdf}
-                pageNumber={index + 1}
-                aspectRatio={aspectRatio}
-                renderOverlay={renderPageOverlay}
-              />
-            ))
-          ) : (
-            <PageFrame
-              pageNumber={1}
-              aspectRatio={original.aspectRatio}
-              renderOverlay={renderPageOverlay}
-            >
-              <img
-                src={original.url}
-                alt={`Original of ${document.filename}`}
-                className="absolute inset-0 size-full object-contain"
-              />
-            </PageFrame>
-          )}
+          {original.kind === 'pdf'
+            ? original.aspectRatios.map((aspectRatio, index) => {
+                const pageNumber = index + 1;
+                const parsedPage =
+                  tree?.pages.find((page) => page.page_number === pageNumber) ??
+                  null;
+                // A rotated page shows its corrected upright image by default,
+                // with a toggle back to the raw original.
+                const isCorrected =
+                  !!parsedPage?.image_key && !originalPages.has(pageNumber);
+                const pageView = isCorrected ? (
+                  <CorrectedPageView
+                    documentId={document.id}
+                    pageNumber={pageNumber}
+                    fallbackAspectRatio={aspectRatio}
+                    renderOverlay={renderPageOverlay}
+                  />
+                ) : (
+                  <PdfPageView
+                    pdf={original.pdf}
+                    pageNumber={pageNumber}
+                    aspectRatio={aspectRatio}
+                    renderOverlay={renderPageOverlay}
+                  />
+                );
+                return (
+                  <div key={index} className="relative">
+                    {pageView}
+                    {parsedPage?.image_key && (
+                      <OriginalToggle
+                        label={
+                          isCorrected
+                            ? 'Auto-rotated: show original'
+                            : 'Showing original: show corrected'
+                        }
+                        onClick={() => toggleOriginalPage(pageNumber)}
+                      />
+                    )}
+                  </div>
+                );
+              })
+            : (() => {
+                const parsedPage =
+                  tree?.pages.find((page) => page.page_number === 1) ?? null;
+                const isCorrected =
+                  !!parsedPage?.image_key && !originalPages.has(1);
+                const pageView = isCorrected ? (
+                  <CorrectedPageView
+                    documentId={document.id}
+                    pageNumber={1}
+                    fallbackAspectRatio={original.aspectRatio}
+                    renderOverlay={renderPageOverlay}
+                  />
+                ) : (
+                  <PageFrame
+                    pageNumber={1}
+                    aspectRatio={original.aspectRatio}
+                    renderOverlay={renderPageOverlay}
+                  >
+                    <img
+                      src={original.url}
+                      alt={`Original of ${document.filename}`}
+                      className="absolute inset-0 size-full object-contain"
+                    />
+                  </PageFrame>
+                );
+                return (
+                  <div className="relative">
+                    {pageView}
+                    {parsedPage?.image_key && (
+                      <OriginalToggle
+                        label={
+                          isCorrected
+                            ? 'Auto-rotated: show original'
+                            : 'Showing original: show corrected'
+                        }
+                        onClick={() => toggleOriginalPage(1)}
+                      />
+                    )}
+                  </div>
+                );
+              })()}
         </div>
       )}
     </div>

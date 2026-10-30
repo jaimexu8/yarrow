@@ -12,11 +12,24 @@
 # the Paddle layout models (PP-OCRv5
 # mobile det/rec + PP-DocLayoutV2) hold ~2.5 GB combined, leaving the rest
 # for KV cache and activations.
-name: yarrow-ocr-x86
+name: yarrow
+
+# x-pipeline-image: shared build definition for the two services that run the
+# PP-StructureV3 / PaddleOCR-VL paddlex image. Each service keeps its own image
+# tag: compose builds every service that declares a build, and with both
+# exporting the SAME tag the two exports race and one aborts with
+# "image ... already exists". Distinct tags avoid that; identical content means
+# the layers are content-addressed and shared anyway.
+x-pipeline-image: &pipeline-image
+  build:
+    context: .
+    dockerfile: paddlex.Dockerfile
+    additional_contexts:
+      - shared=../shared
 
 services:
   vlm-server:
-    image: lmsysorg/sglang:v0.5.21-cu130-runtime@sha256:df6ad77ad91b1f83985ebb789de97b83fc8745786abf5c2913d6d0387007e4cb
+    image: lmsysorg/sglang:v0.5.22-cu130-runtime@sha256:c3d99f078c329a5b2d0c0c02c4237cf8b0dcd1dc6f875a943ae163c1720854cb
     command:
       - python3
       - -m
@@ -51,7 +64,8 @@ services:
     restart: unless-stopped
 
   paddlex-pipeline:
-    image: yarrow-ocr-x86-paddlex:latest
+    <<: *pipeline-image
+    image: yarrow-paddlex-pipeline:latest
     environment:
       DEVICE: gpu
     mem_limit: 6g
@@ -72,10 +86,8 @@ services:
     restart: unless-stopped
 
   paddleocr-vl-api:
-    image: yarrow-ocr-x86-paddlex:latest
-    build:
-      context: .
-      dockerfile: paddlex.Dockerfile
+    <<: *pipeline-image
+    image: yarrow-paddleocr-vl-api:latest
     environment:
       PIPELINE_NAME: PaddleOCR-VL
       VLM_BACKEND: sglang-server
@@ -102,7 +114,7 @@ services:
 
   hybrid-gateway:
     build:
-      context: .
+      context: ../shared
       dockerfile: hybrid-gateway.Dockerfile
     environment:
       STRUCTURE_GATEWAY_URL: http://paddlex-pipeline:8080/layout-parsing
@@ -149,4 +161,4 @@ volumes:
 
 configs:
   nginx-config:
-    file: ./nginx.conf.template
+    file: ../shared/nginx.conf.template

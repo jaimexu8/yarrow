@@ -27,4 +27,4 @@ services:
 
 configs:
   nginx-config:
-    file: ./nginx.conf.template
+    file: ../shared/nginx.conf.template

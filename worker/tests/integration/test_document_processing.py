@@ -316,7 +316,9 @@ class TestQualityChecker:
 
     expected_warnings: ClassVar[dict[str, set[str]]] = {
         "scan_normal.png": set(),
-        "scan_skewed.png": {"Image is skewed"},
+        # A tilted page is now corrected before OCR, so it emits a rotation
+        # warning instead of a skew one.
+        "scan_skewed.png": {"Page was auto-rotated"},
         "scan_blurry.png": {"Image is blurry"},
         "scan_truncated.png": {"Image is truncated"},
         "scan_dark.png": {"Image is too dark"},
@@ -349,3 +351,59 @@ class TestQualityChecker:
             assert expected <= kinds, f"{filename}: expected {sorted(expected)}, got {sorted(kinds)}"
         else:
             assert kinds == set(), f"{filename}: expected no warnings, got {sorted(kinds)}"
+
+
+class TestRotationCorrection:
+    """End-to-end rotation correction: rotated pages are re-stored and warned about."""
+
+    HERE = os.path.dirname(os.path.abspath(__file__))
+    TEST_DOCS_DIR = os.path.join(HERE, "test_docs")
+
+    def test_rotated_pages_are_corrected_and_stored(self, test_initializer):
+        """Each rotated page of the multi-orientation PDF gets a rotation warning and a corrected image."""
+
+        filename = "ocr_rotation_test.pdf"
+        filepath = os.path.join(TestRotationCorrection.TEST_DOCS_DIR, filename)
+        (seeded_document,) = test_initializer.configure(filenames=[filename], filepaths=[filepath])
+
+        # Runs the real parser against the live inference gateway; skipped unless the
+        # OCR cluster is up (see the module-level integration marker).
+        process_document_task(job_id=str(seeded_document.job_id))
+
+        with session_scope() as session:
+            pages = session.scalars(
+                select(Page).where(Page.document_id == seeded_document.document_id).order_by(Page.page_number)
+            ).all()
+            rotation_warnings = session.scalars(
+                select(Warning.message)
+                .join(Page, Warning.page_id == Page.id)
+                .where(Page.document_id == seeded_document.document_id, Warning.message.like("Page was auto-rotated%"))
+            ).all()
+
+        # Every page of this document is rotated, so every page is corrected and re-stored.
+        assert len(pages) == 7, f"expected 7 pages, got {len(pages)}"
+        for page in pages:
+            assert page.page_image_key is not None, f"page {page.page_number} was not re-stored"
+        assert len(rotation_warnings) == 7, f"expected 7 rotation warnings, got {len(rotation_warnings)}"
+
+    def test_upright_scan_is_not_rotated(self, test_initializer):
+        """An upright scan gets no rotation warning and no corrected page image."""
+
+        filename = "scan_normal.png"
+        filepath = os.path.join(TestRotationCorrection.TEST_DOCS_DIR, filename)
+        (seeded_document,) = test_initializer.configure(filenames=[filename], filepaths=[filepath])
+
+        process_document_task(job_id=str(seeded_document.job_id))
+
+        with session_scope() as session:
+            (page,) = session.scalars(
+                select(Page).where(Page.document_id == seeded_document.document_id)
+            ).all()
+            rotation_warnings = session.scalars(
+                select(Warning.message)
+                .join(Page, Warning.page_id == Page.id)
+                .where(Page.document_id == seeded_document.document_id, Warning.message.like("Page was auto-rotated%"))
+            ).all()
+
+        assert rotation_warnings == [], f"expected no rotation warnings, got {rotation_warnings}"
+        assert page.page_image_key is None, "upright page should not be re-stored"

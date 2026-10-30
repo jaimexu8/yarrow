@@ -7,6 +7,7 @@ from app.api.v1.endpoints import (
     health,
     integrations,
     parsed,
+    regions,
     search,
     sharing,
     tables,
@@ -20,6 +21,7 @@ api_router.include_router(documents.router, prefix="/documents", tags=["document
 api_router.include_router(sharing.router, prefix="/documents", tags=["sharing"])
 api_router.include_router(parsed.router, prefix="/documents", tags=["parsed"])
 api_router.include_router(tables.router, prefix="/documents", tags=["tables"])
+api_router.include_router(regions.router, prefix="/documents", tags=["regions"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(warnings.router, prefix="/warnings", tags=["warnings"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

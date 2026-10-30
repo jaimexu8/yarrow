@@ -79,12 +79,12 @@ RUN mkdir -p /home/paddlex/.paddlex /home/paddlex/config \
 
 USER paddlex
 
-# Model warmup runs BEFORE the COPY of entrypoint.sh/paddlex_wrapper.py below. Those two
-# scripts change often; the models are ~2 GB and never change. With the COPY
-# first, every edit to entrypoint.sh invalidated these layers and re-downloaded
-# the whole model set. Keeping the volatile files last makes a script edit a
-# seconds-long rebuild, which is what lets `docker compose up --build` be the
-# normal way to run this stack.
+# Model warmup runs BEFORE the COPY of shared/entrypoint.sh and paddlex_wrapper.py
+# below. The shared script changes often; the models are ~2 GB and never change.
+# If the COPY came first, every edit to entrypoint.sh invalidated these layers
+# and re-downloaded the whole model set. Keeping the volatile files last makes a
+# script edit a seconds-long rebuild, which is what lets `docker compose up
+# --build` be the normal way to run this stack.
 
 # Pre-fetch every PP-StructureV3 submodel into the image at build time. Left
 # to runtime, all N replicas mount the same paddlex-pipeline-cache volume and
@@ -107,7 +107,7 @@ RUN python -c "from paddlex import create_model; create_model('PP-DocLayoutV2', 
 RUN python -c "from paddlex.utils.fonts import PINGFANG_FONT; PINGFANG_FONT.path"
 
 USER root
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --from=shared entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY paddlex_wrapper.py /usr/local/bin/paddlex_wrapper.py
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/paddlex_wrapper.py
 USER paddlex

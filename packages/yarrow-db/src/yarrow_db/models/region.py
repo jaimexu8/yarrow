@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, Enum, Float, ForeignKey, Integer, String
+from sqlalchemy import Column, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -37,7 +37,11 @@ class RegionText(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     region_id = Column(UUID(as_uuid=True), ForeignKey("regions.id"), nullable=False)
+    # The active text: the raw OCR output until a user corrects it, then the
+    # correction. The raw OCR output is preserved verbatim in original_text so
+    # corrections can be reverted and diffed
     text_content = Column(String)
+    original_text = Column(Text)
     confidence = Column(Float)
 
     region = relationship("Region")

@@ -30,6 +30,7 @@ from app.pipeline.file_loaders.jpeg_loader import JPEGLoader
 from app.pipeline.file_loaders.jpg_loader import JPGLoader
 from app.pipeline.file_loaders.pdf_loader import PDFLoader
 from app.pipeline.file_loaders.png_loader import PNGLoader
+from app.pipeline.orientation import OrientationCorrector
 from app.pipeline.quality_checker import QualityChecker
 from app.pipeline.reading_order import order_blocks
 
@@ -187,7 +188,16 @@ class DocumentParser:
         # storage key their RegionImage points at. The caller uploads them.
         self.figure_images: dict[str, bytes] = {}
 
+        # Corrected page images (upright) by storage key, built by
+        # correct_orientations for pages that were rotated. The caller
+        # uploads them, mirroring figure_images.
+        self.page_images: dict[str, bytes] = {}
+        # Content rotation (degrees) applied to correct each page, keyed by
+        # 0-based page index. Only present for pages that were actually rotated.
+        self.page_orientations: dict[int, float] = {}
+
         self.quality_checker = QualityChecker()
+        self.orientation_corrector = OrientationCorrector()
 
     @property
     def failed_page_numbers(self) -> list[int]:
@@ -206,6 +216,23 @@ class DocumentParser:
             raise ValueError(f"No loader found for file extension: {file_extension}")
 
         self.pages = loader.process_file(file_data)
+
+    def correct_orientations(self) -> None:
+        """Detect and fix the rotation of every page, in place.
+
+        Each page is classified and corrected independently, so a document
+        with mixed orientations is handled page by page. The corrected base64
+        replaces the page, so OCR, the quality check and the figure crops all
+        read the upright image. A page left unchanged is not recorded in
+        page_orientations, so it is not warned about and not re-stored.
+        """
+        self.page_orientations = {}
+        for index, page_b64 in enumerate(self.pages):
+            corrected, angle, confidence = self.orientation_corrector.correct_page(page_b64)
+            if angle != 0.0:
+                self.pages[index] = corrected
+                self.page_orientations[index] = angle
+                logger.info(f"Page {index + 1} auto-rotated by {angle:.1f}° (confidence {confidence:.2f})")
 
     def process_page(self, page_data: str) -> JsonDict:
         headers = {"Content-Type": "application/json"}
@@ -645,6 +672,7 @@ class DocumentParser:
         """
         pruned_result = self.get_pruned_result()
         self.figure_images = {}
+        self.page_images = {}
         document.page_count = len(pruned_result)
 
         pages = []
@@ -665,15 +693,31 @@ class DocumentParser:
             # Construct page object
             page_id = uuid.uuid4()
             error_message = self.page_errors.get(page_index)
+            page_number = page_index + 1
             page = Page(
                 id=page_id,
                 document_id=document.id,
-                page_number=page_index + 1,
+                page_number=page_number,
                 width=page_data.get("width"),
                 height=page_data.get("height"),
                 status="failed" if error_message else "completed",
                 error_message=error_message,
             )
+
+            # A page that was rotated is stored with its corrected image so the
+            # viewer shows the upright page the OCR ran on, and is warned about.
+            if page_index in self.page_orientations:
+                image_key = f"documents/{document.id}/pages/{page_number}.png"
+                page.page_image_key = image_key
+                self.page_images[image_key] = base64.b64decode(self.pages[page_index])
+                warnings.append(
+                    Warning(
+                        page_id=page_id,
+                        warning_type="quality",
+                        message=f"Page was auto-rotated by {self.page_orientations[page_index]:.0f}°",
+                    )
+                )
+
             pages.append(page)
 
             # Quality warnings do not stop the page's content from being built

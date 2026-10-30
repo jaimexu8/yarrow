@@ -2,8 +2,10 @@ import os
 
 from celery import Celery
 
-broker_url = os.getenv("CELERY_BROKER_URL", "redis://valkey:6379/0")
-result_backend = os.getenv("CELERY_RESULT_BACKEND", "redis://valkey:6379/0")
+# Broker and result backend live on their own Valkey databases (1 and 2) so
+# queue traffic never shares a database with the auth data on database 0.
+broker_url = os.getenv("CELERY_BROKER_URL", "redis://valkey:6379/1")
+result_backend = os.getenv("CELERY_RESULT_BACKEND", "redis://valkey:6379/2")
 
 celery_app = Celery(
     "worker", broker=broker_url, backend=result_backend, include=["app.tasks.ingestion"]

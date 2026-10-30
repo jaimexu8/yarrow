@@ -27,6 +27,7 @@ it('links to the page of the document', () => {
 it.each([
   ['Image is blurry', 'blur'],
   ['Image is skewed by -6.2°', 'skew'],
+  ['Page was auto-rotated by 45°', 'rotated'],
   ['Image is truncated', 'truncation'],
   ['Image is too dark', 'dark'],
   ['Image is too bright', 'bright'],
@@ -40,6 +41,11 @@ it.each([
 it('labels a tilt with its size, without the direction', () => {
   expect(warningLabel('Image is skewed by -6.2°')).toBe('Tilted 6.2°');
   expect(warningLabel('Image is skewed by 12.0°')).toBe('Tilted 12.0°');
+});
+
+it('labels a rotation with its size', () => {
+  expect(warningLabel('Page was auto-rotated by 45°')).toBe('Rotated 45°');
+  expect(warningLabel('Page was auto-rotated by -11°')).toBe('Rotated 11°');
 });
 
 it('labels the other kinds by name', () => {

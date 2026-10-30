@@ -29,11 +29,14 @@ from app.core.queue import enqueue_document_processing, revoke_document_processi
 from app.core.security import get_current_user
 from app.deps import (
     DocumentAccess,
+    get_document_access,
     require_edit_access,
     require_owner_access,
     require_read_access,
 )
 from app.schemas import (
+    BulkDocumentRequest,
+    BulkItemResult,
     DocumentDetail,
     DocumentOut,
     DocumentRename,
@@ -561,6 +564,128 @@ async def delete_document_endpoint(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post("/bulk-reprocess", response_model=list[BulkItemResult])
+async def bulk_reprocess_documents(
+    body: BulkDocumentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Reprocess several documents at once, reporting each on its own.
+
+    The ids are processed in order, one document per request to the
+    single-document reprocess service. A document whose job is still running is
+    reported with ``ok: false`` and the rest are processed, so one busy document
+    does not stall the batch.
+    """
+    user_id = current_user.id
+    results: list[BulkItemResult] = []
+    for document_id in body.document_ids:
+        try:
+            # Re-read the user each pass: the reprocess service commits per
+            # document, which expires the object loaded by get_current_user.
+            user = await db.get(User, user_id)
+            # Raises 404 (not the caller's) or 403 (read-only share) for a
+            # document the user cannot reprocess.
+            await get_document_access(document_id, db=db, current_user=user)
+            outcome = await reprocess_document(
+                db, document_id, enqueue_document_processing
+            )
+        except HTTPException as exc:
+            # 404 (not the caller's) or 403 (read-only share): reported per item.
+            message = (
+                exc.detail
+                if isinstance(exc.detail, str)
+                else "This document could not be reprocessed."
+            )
+            results.append(
+                BulkItemResult(document_id=document_id, ok=False, message=message)
+            )
+            continue
+        if not outcome.ok:
+            results.append(
+                BulkItemResult(
+                    document_id=document_id, ok=False, message=outcome.detail
+                )
+            )
+        else:
+            results.append(BulkItemResult(document_id=document_id, ok=True))
+    return results
+
+
+@router.post("/bulk-delete", response_model=list[BulkItemResult])
+async def bulk_delete_documents(
+    body: BulkDocumentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Permanently delete several documents at once, reporting each on its own.
+
+    Each id goes through the same single-document deletion: the row, its
+    extracted data and jobs are removed and the owner's storage quota is
+    refunded. A document that a worker is saving results for at that moment is
+    reported with ``ok: false`` (code ``DOCUMENT_BUSY``) so it can be retried
+    without blocking the rest of the batch.
+    """
+    user_id = current_user.id
+    results: list[BulkItemResult] = []
+    for document_id in body.document_ids:
+        # Re-read the user each pass: delete_document commits per document,
+        # which expires the object loaded by get_current_user.
+        user = await db.get(User, user_id)
+        try:
+            access = await get_document_access(document_id, db=db, current_user=user)
+        except HTTPException as exc:
+            # A 404 (someone else's or a missing document) is not an error in a
+            # bulk request: the user asked to remove a list of things and this
+            # one is already gone, so it is reported rather than failing all.
+            message = (
+                exc.detail
+                if isinstance(exc.detail, str)
+                else "This document could not be deleted."
+            )
+            results.append(
+                BulkItemResult(document_id=document_id, ok=False, message=message)
+            )
+            continue
+        if access.document.owner_id != user.id:
+            results.append(
+                BulkItemResult(
+                    document_id=document_id,
+                    ok=False,
+                    message="Only the owner can delete this document",
+                )
+            )
+            continue
+
+        outcome = await delete_document(db, document_id)
+        if not outcome.ok:
+            results.append(
+                BulkItemResult(
+                    document_id=document_id, ok=False, message=outcome.detail
+                )
+            )
+            continue
+
+        for task_id in outcome.task_ids:
+            try:
+                await run_in_threadpool(revoke_document_processing, task_id)
+            except Exception:
+                logger.exception(f"Revoking task {task_id} failed")
+
+        if outcome.storage_keys:
+            orphaned = await run_in_threadpool(
+                delete_stored_objects, get_storage(), outcome.storage_keys
+            )
+            if orphaned:
+                logger.error(
+                    f"Deleted document {document_id} left "
+                    f"{len(orphaned)} stored object(s) behind: {orphaned}"
+                )
+
+        results.append(BulkItemResult(document_id=document_id, ok=True))
+    return results
+
+
 def _iter_object(handle, chunk_size: int = READ_CHUNK):
     """Yield the object in chunks, always closing the handle"""
     try:
@@ -650,4 +775,46 @@ async def get_region_image(
         media_type="image/png",
         # Region ids are new on every reprocess, so a crop never changes
         headers={"Cache-Control": "private, max-age=86400, immutable"},
+    )
+
+
+@router.get("/{document_id}/pages/{page_number}/image")
+async def get_page_image(
+    page_number: int,
+    access: DocumentAccess = Depends(require_read_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Streams the upright page image for a page that was rotated before OCR.
+
+    Served through the backend for the same reason as the original file.
+    Returns 404 when the page was not corrected (no stored image).
+    """
+    image_key = await db.scalar(
+        select(Page.page_image_key).where(
+            Page.document_id == access.document.id,
+            Page.page_number == page_number,
+            Page.page_image_key.is_not(None),
+        )
+    )
+    if image_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This page has no corrected image",
+        )
+
+    try:
+        handle = await run_in_threadpool(get_storage().download_file, image_key)
+    except ObjectNotFoundError:
+        logger.error(f"Object missing for page {page_number}: {image_key}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The page image is no longer in storage",
+        ) from None
+
+    return StreamingResponse(
+        _iter_object(handle),
+        media_type="image/png",
+        # The key is stable per page number; a reprocess rewrites the same
+        # key, so it is cached per session but not immutable.
+        headers={"Cache-Control": "private, max-age=3600"},
     )

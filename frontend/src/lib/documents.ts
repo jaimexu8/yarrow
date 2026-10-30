@@ -203,6 +203,39 @@ export async function deleteDocument(id: string): Promise<void> {
   await api.delete(`/api/v1/documents/${id}`);
 }
 
+/** One document's outcome in a bulk request. ``ok`` is false with a reason when it could not be acted on. */
+export type BulkResult = {
+  document_id: string;
+  ok: boolean;
+  message: string | null;
+};
+
+/**
+ * Reprocess several documents at once. The server acts on each id it can and
+ * reports the rest (e.g. a document whose job is still running), so the caller
+ * can drop the ones it started and keep the ones it did not.
+ */
+export async function bulkReprocess(
+  documentIds: string[]
+): Promise<BulkResult[]> {
+  const res = await api.post<BulkResult[]>('/api/v1/documents/bulk-reprocess', {
+    document_ids: documentIds,
+  });
+  return res.data;
+}
+
+/**
+ * Delete several documents at once. The server deletes each id it can and
+ * reports the rest (e.g. a document a worker is saving results for), so the
+ * caller can drop the ones it deleted and keep the ones that failed.
+ */
+export async function bulkDelete(documentIds: string[]): Promise<BulkResult[]> {
+  const res = await api.post<BulkResult[]>('/api/v1/documents/bulk-delete', {
+    document_ids: documentIds,
+  });
+  return res.data;
+}
+
 /**
  * A server-side rejection. When the server marks it retryable (a problem on
  * its side, like storage being briefly down), it is reported as a failure so

@@ -30,7 +30,9 @@ async def health_check(db: AsyncSession = Depends(get_db)):
 
     # Check Valkey/Redis
     try:
-        r = redis.from_url(f"redis://{settings.VALKEY_HOST}:{settings.VALKEY_PORT}/0")
+        r = redis.from_url(
+            f"redis://{settings.VALKEY_HOST}:{settings.VALKEY_PORT}/{settings.VALKEY_DB}"
+        )
         await r.ping()
         status["valkey"] = "connected"
     except Exception:

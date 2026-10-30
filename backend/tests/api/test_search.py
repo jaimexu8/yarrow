@@ -56,6 +56,245 @@ async def _set_meta(db_session, document_id, **fields):
     await db_session.flush()
 
 
+async def _add_corrected_text(db_session, document_id, corrected, original):
+    """A region whose active text was manually corrected"""
+    result = await db_session.execute(
+        select(Page).where(Page.document_id == document_id, Page.page_number == 1)
+    )
+    page = result.scalar_one_or_none()
+    if page is None:
+        page = Page(id=uuid.uuid4(), document_id=document_id, page_number=1)
+        db_session.add(page)
+        await db_session.flush()
+    region = Region(id=uuid.uuid4(), page_id=page.id, reading_order=0)
+    row = RegionText(
+        region_id=region.id, text_content=corrected, original_text=original
+    )
+    db_session.add_all([region, row])
+    await db_session.flush()
+    return region.id
+
+
+class TestExactPhraseSearch:
+    """quoted terms are exact phrases; unquoted words are AND terms."""
+
+    async def _doc_with(
+        self,
+        client,
+        auth_headers,
+        fake_storage,
+        fake_queue,
+        db_session,
+        text,
+        name="phrase.pdf",
+    ):
+        document_id = await _upload(client, auth_headers, name)
+        region_id = await _add_text(db_session, document_id, text)
+        return document_id, region_id
+
+    async def test_quoted_phrase_matches_contiguously(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        document_id, region_id = await self._doc_with(
+            client,
+            auth_headers,
+            fake_storage,
+            fake_queue,
+            db_session,
+            "the quarterly summary is ready",
+        )
+
+        response = await client.get(
+            SEARCH, params={"q": '"quarterly summary"'}, headers=auth_headers
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert [hit["id"] for hit in body] == [str(document_id)]
+        snippet = body[0]["snippets"][0]
+        assert snippet["region_id"] == str(region_id)
+        # the whole phrase is highlighted, not just the first word
+        assert (
+            snippet["text"][snippet["match_start"] : snippet["match_end"]]
+            == "quarterly summary"
+        )
+
+    async def test_quoted_phrase_rejects_interleaved_words(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        await self._doc_with(
+            client,
+            auth_headers,
+            fake_storage,
+            fake_queue,
+            db_session,
+            "quarterly report of the summary",
+        )
+
+        response = await client.get(
+            SEARCH, params={"q": '"quarterly summary"'}, headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert response.json() == []
+
+    async def test_quoted_phrase_rejects_reversed_words(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        await self._doc_with(
+            client,
+            auth_headers,
+            fake_storage,
+            fake_queue,
+            db_session,
+            "summary quarterly",
+        )
+
+        response = await client.get(
+            SEARCH, params={"q": '"quarterly summary"'}, headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert response.json() == []
+
+    async def test_unquoted_multi_word_matches_non_contiguous(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        document_id, _ = await self._doc_with(
+            client,
+            auth_headers,
+            fake_storage,
+            fake_queue,
+            db_session,
+            "summary of the quarterly report",
+        )
+
+        response = await client.get(
+            SEARCH, params={"q": "quarterly summary"}, headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert [hit["id"] for hit in response.json()] == [str(document_id)]
+
+    async def test_phrase_and_word_and_semantics(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        # both the phrase and the extra word must be present
+        await self._doc_with(
+            client,
+            auth_headers,
+            fake_storage,
+            fake_queue,
+            db_session,
+            "the quarterly summary of 2024",
+        )
+
+        response = await client.get(
+            SEARCH, params={"q": '"quarterly summary" 2024'}, headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert len(response.json()) == 1
+
+
+class TestOcrTolerance:
+    """common OCR confusions (1/l/I, 0/O) and one-edit typos."""
+
+    async def test_confusable_digits_match(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        document_id = await _upload_and_text(
+            client,
+            auth_headers,
+            fake_storage,
+            fake_queue,
+            db_session,
+            "in 2O24 the numbers change",
+        )
+
+        response = await client.get(SEARCH, params={"q": "2024"}, headers=auth_headers)
+        assert response.status_code == 200
+        assert [hit["id"] for hit in response.json()] == [str(document_id)]
+        snippet = response.json()[0]["snippets"][0]
+        # the span covers the OCR'd text, so the UI can flag a near match
+        assert snippet["text"][snippet["match_start"] : snippet["match_end"]] == "2O24"
+
+    async def test_confusable_phrase_match(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        await _upload_and_text(
+            client,
+            auth_headers,
+            fake_storage,
+            fake_queue,
+            db_session,
+            "section l.1 begins here",
+        )
+
+        response = await client.get(
+            SEARCH, params={"q": '"section 1.1"'}, headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert len(response.json()) == 1
+        snippet = response.json()[0]["snippets"][0]
+        assert (
+            snippet["text"][snippet["match_start"] : snippet["match_end"]]
+            == "section l.1"
+        )
+
+    async def test_fuzzy_one_edit_typo_matches(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        await _upload_and_text(
+            client,
+            auth_headers,
+            fake_storage,
+            fake_queue,
+            db_session,
+            "we recieve the goods",
+        )
+
+        response = await client.get(
+            SEARCH, params={"q": "receive"}, headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert len(response.json()) == 1
+
+    async def test_corrected_region_matches_and_is_flagged(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        document_id = await _upload(client, auth_headers, "corrected.pdf")
+        await _add_corrected_text(
+            db_session,
+            document_id,
+            "the final result is 100",
+            "the ffnal result is 100",
+        )
+
+        response = await client.get(
+            SEARCH, params={"q": '"final result"'}, headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert len(response.json()) == 1
+        snippet = response.json()[0]["snippets"][0]
+        assert snippet["edited"] is True
+
+    async def test_query_longer_than_cap_is_422(self, client, auth_headers):
+        response = await client.get(
+            SEARCH, params={"q": "a" * 501}, headers=auth_headers
+        )
+        assert response.status_code == 422
+
+
+async def _upload_and_text(
+    client,
+    auth_headers,
+    fake_storage,
+    fake_queue,
+    db_session,
+    text,
+    name="tolerant.pdf",
+):
+    document_id = await _upload(client, auth_headers, name)
+    await _add_text(db_session, document_id, text)
+    return document_id
+
+
 class TestSearch:
     async def test_requires_auth(self, client):
         assert (await client.get(SEARCH, params={"q": "hello"})).status_code == 401

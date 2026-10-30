@@ -10,33 +10,16 @@ from app.api.v1.endpoints.documents import CONTENT_TYPE_BY_EXTENSION
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.schemas.search import SearchHit, SearchSnippet
+from app.services.search_query import first_match_span, parse_query, terms_match
 
 router = APIRouter()
 
 _SNIPPET_RADIUS = 60
 _MAX_SNIPPETS = 5
+# Queries longer than this would generate a very large regex and slow the
+# index scan down; real searches are much shorter (NFR-12: clear error).
+_MAX_QUERY_LENGTH = 500
 _ALLOWED_FILE_TYPES = frozenset(CONTENT_TYPE_BY_EXTENSION.values())
-
-
-def _like(term: str) -> str:
-    # treat % and _ as normal characters
-    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
-
-
-def _snippet(text: str, term: str) -> tuple[str, int, int] | None:
-    # first match, with a short window of surrounding text
-    idx = text.lower().find(term.lower())
-    if idx < 0:
-        return None
-    start = max(0, idx - _SNIPPET_RADIUS)
-    end = min(len(text), idx + len(term) + _SNIPPET_RADIUS)
-    prefix = "..." if start > 0 else ""
-    suffix = "..." if end < len(text) else ""
-    snippet = prefix + text[start:end] + suffix
-    match_start = len(prefix) + (idx - start)
-    match_end = match_start + len(term)
-    return snippet, match_start, match_end
 
 
 def _validate_filters(
@@ -83,11 +66,23 @@ async def search_documents(
     _validate_filters(date_from, date_to, file_type)
 
     term = q.strip()
+    if len(term) > _MAX_QUERY_LENGTH:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Search query is too long ({len(term)} characters). "
+                f"Keep it under {_MAX_QUERY_LENGTH}."
+            ),
+        )
+
     clauses = _filter_clauses(date_from, date_to, file_type)
     if not term and not clauses:
         return []
 
     if term:
+        terms = parse_query(term)
+        if not terms:
+            return []
         result = await db.execute(
             select(Document, Page, Region, RegionText)
             .join(Page, Page.document_id == Document.id)
@@ -95,7 +90,6 @@ async def search_documents(
             .join(RegionText, RegionText.region_id == Region.id)
             .where(
                 Document.owner_id == current_user.id,
-                RegionText.text_content.ilike(_like(term), escape="\\"),
                 *clauses,
             )
             .order_by(
@@ -107,10 +101,24 @@ async def search_documents(
 
         hits: dict[UUID, SearchHit] = {}
         for document, page, region, region_text in result.all():
-            built = _snippet(region_text.text_content or "", term)
-            if built is None:
+            text = region_text.text_content or ""
+            if not terms_match(text, terms):
                 continue
-            snippet_text, match_start, match_end = built
+            span = first_match_span(text, terms[0])
+            if span is None:
+                continue
+            match_start, match_end = span
+            start = max(0, match_start - _SNIPPET_RADIUS)
+            end = min(len(text), match_end + _SNIPPET_RADIUS)
+            prefix = "..." if start > 0 else ""
+            suffix = "..." if end < len(text) else ""
+            snippet_text = prefix + text[start:end] + suffix
+            # match_start/match_end are offsets into the snippet text, so the
+            # client can highlight the exact characters that matched (which for
+            # an OCR confusable or typo differ from the query, e.g. "l.1").
+            snippet_match_start = len(prefix) + (match_start - start)
+            snippet_match_end = snippet_match_start + (match_end - match_start)
+
             hit = hits.get(document.id)
             if hit is None:
                 hit = SearchHit(id=document.id, filename=document.filename, snippets=[])
@@ -122,8 +130,9 @@ async def search_documents(
                     region_id=region.id,
                     page_number=page.page_number,
                     text=snippet_text,
-                    match_start=match_start,
-                    match_end=match_end,
+                    match_start=snippet_match_start,
+                    match_end=snippet_match_end,
+                    edited=region_text.original_text is not None,
                 )
             )
 

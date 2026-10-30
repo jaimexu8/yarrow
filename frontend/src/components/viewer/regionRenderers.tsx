@@ -1,6 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { ImageIcon } from 'lucide-react';
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
+import { ImageIcon, Pencil, Undo2 } from 'lucide-react';
 import { HighlightedText } from '@/lib/highlight';
+import { correctionErrorDetail } from '@/lib/corrections';
+import { undoRegionCorrection as undoCorrectionApi } from '@/lib/corrections';
 import {
   getRegionImage,
   type RegionNode,
@@ -8,6 +10,8 @@ import {
   type TableNode,
 } from '@/lib/viewer';
 import { useViewer } from './ViewerContext';
+import { InlineRegionEditor } from './InlineRegionEditor';
+import { CorrectionDiffModal } from './CorrectionDiffModal';
 import { cn } from '@/lib/cn';
 
 /*
@@ -408,14 +412,41 @@ export function RegionBlock({
   context: RegionRenderContext;
 }) {
   const {
+    document,
     highlightRegionId,
     highlightQuery,
     activeRegionId,
     setActiveRegionId,
     scrollToPage,
     regionFilter,
+    undoRegionCorrection,
+    refresh,
+    canEdit,
   } = useViewer();
-  const content = RENDERERS[regionKind(region)](region, {
+  const [editing, setEditing] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [undoing, setUndoing] = useState(false);
+  const [undoError, setUndoError] = useState<string | null>(null);
+
+  const revertCorrection = async () => {
+    if (undoing) return;
+    setUndoing(true);
+    setUndoError(null);
+    try {
+      const result = await undoCorrectionApi(document.id, region.id);
+      if (result.changed) undoRegionCorrection(region.id);
+      refresh();
+    } catch (caught) {
+      setUndoError(
+        correctionErrorDetail(caught) ?? 'Could not revert the correction.'
+      );
+    } finally {
+      setUndoing(false);
+    }
+  };
+
+  const kind = regionKind(region);
+  const content = RENDERERS[kind](region, {
     ...context,
     query: highlightQuery,
   });
@@ -426,6 +457,19 @@ export function RegionBlock({
   const isFilterMatch = isRegionFilterMatch(region, regionFilter);
   const isFilterActive = Boolean(regionFilter && regionFilter !== 'all');
   const isDimmed = isFilterActive && !isFilterMatch;
+
+  // Table text lives in its cells and figure regions have no text row, so
+  // only the text-bearing kinds take the inline editor.
+  // The backend refuses corrections on documents that are still processing,
+  // so don't offer the editor until the document completed.
+  const editable =
+    canEdit &&
+    kind !== 'table' &&
+    region.text != null &&
+    document.status === 'completed';
+  const showEdited = region.is_edited === true;
+
+  const stop = (event: MouseEvent) => event.stopPropagation();
 
   return (
     <div
@@ -452,6 +496,20 @@ export function RegionBlock({
       )}
     >
       <div className="absolute right-2 top-2 flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+        {editable && (
+          <button
+            type="button"
+            onClick={(event) => {
+              stop(event);
+              setEditing(true);
+            }}
+            aria-label={`Correct text on page ${region.page_number}`}
+            title="Correct this text"
+            className="rounded border border-slate-200 bg-white p-1 shadow-sm text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+          >
+            <Pencil aria-hidden="true" className="size-3.5" />
+          </button>
+        )}
         {region.region_type && (
           <span
             className={cn(
@@ -464,11 +522,68 @@ export function RegionBlock({
             {region.region_type}
           </span>
         )}
+        {showEdited && (
+          <button
+            type="button"
+            onClick={(event) => {
+              stop(event);
+              setShowDiff(true);
+            }}
+            aria-label={`View the correction on page ${region.page_number}`}
+            title="This text was corrected; click to compare with the OCR output"
+            className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800 ring-1 ring-amber-300"
+          >
+            edited
+          </button>
+        )}
+        {showEdited && editable && (
+          <button
+            type="button"
+            onClick={(event) => {
+              stop(event);
+              void revertCorrection();
+            }}
+            disabled={undoing}
+            aria-label={`Revert this correction on page ${region.page_number}`}
+            title="Revert this correction to the raw OCR output"
+            className="flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 shadow-sm hover:bg-amber-100 disabled:opacity-60"
+          >
+            <Undo2 aria-hidden="true" className="size-3.5" />
+            {undoing ? 'Reverting…' : 'Undo'}
+          </button>
+        )}
         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500 shadow-sm border border-slate-200">
           p. {region.page_number}
         </span>
       </div>
-      {content}
+      {editing ? (
+        <InlineRegionEditor
+          documentId={document.id}
+          regionId={region.id}
+          initialText={region.text ?? ''}
+          pageNumber={region.page_number}
+          onDone={() => setEditing(false)}
+        />
+      ) : (
+        content
+      )}
+      {undoError && (
+        <p role="alert" className="mt-1 text-sm text-red-600">
+          {undoError}
+        </p>
+      )}
+      {showEdited && region.original_text != null && (
+        <CorrectionDiffModal
+          documentId={document.id}
+          regionId={region.id}
+          pageNumber={region.page_number}
+          editedText={region.text ?? ''}
+          originalText={region.original_text}
+          canRevert={editable}
+          open={showDiff}
+          onClose={() => setShowDiff(false)}
+        />
+      )}
     </div>
   );
 }

@@ -60,7 +60,9 @@ class FakeSession:
         self.added = []
         # Keys of the figure crops already stored for the pages being replaced
         self.existing_image_keys: list[str] = []
-    
+        # Corrected-page image keys already stored for the pages being replaced
+        self.existing_page_image_keys: list[str] = []
+
     def get(self, model, key, with_for_update=False):
         # with_for_update is accepted and ignored: there is no concurrency to
         # serialize against in these tests, but ingestion locks the document
@@ -74,7 +76,7 @@ class FakeSession:
 
     def add_all(self, objects):
         self.added.extend(objects)
-        
+
     def execute(self, statement):
         # Only Page selects are answered, from the rows the task added: ingestion
         # derives the document's status by reading its pages back, so returning
@@ -85,6 +87,10 @@ class FakeSession:
             for column in getattr(statement, "column_descriptions", [])
         }
         if Page in entities:
+            # The page_image_key select reads the stored keys back; answer it
+            # from the configured prior-run keys so the replaced-list logic runs.
+            if any(getattr(column, "name", None) == "page_image_key" for column in getattr(statement, "column_descriptions", [])):
+                return FakeResult(self.existing_page_image_keys)
             return FakeResult(
                 [(page.page_number, page.status) for page in self.added
                  if isinstance(page, Page)]
@@ -92,10 +98,10 @@ class FakeSession:
         if RegionImage in entities:
             return FakeResult(self.existing_image_keys)
         return FakeResult()
-    
+
     def scalar(self, statement):
         return 0
-    
+
     def flush(self):
         return
         
@@ -120,6 +126,8 @@ class FakeDocumentParser:
     load_error = None
     inference_error = None
     figures: ClassVar[dict[str, bytes]] = {}
+    # 1-based page number -> content rotation, for pages the fake corrects
+    corrected_pages: ClassVar[dict[int, float]] = {}
     
     def __init__(self) -> None:
         self.pages: list[str] = []
@@ -128,16 +136,19 @@ class FakeDocumentParser:
         self.load_error = None
         self.inference_error = None
         self.figure_images: dict[str, bytes] = {}
+        self.page_images: dict[str, bytes] = {}
+        self.page_orientations: dict[int, float] = {}
             
     @classmethod
-    def configure(cls, page_count=1, failed=(), load_error=None, inference_error=None, figures=None):
+    def configure(cls, page_count=1, failed=(), load_error=None, inference_error=None, figures=None, corrected_pages=None):
         cls.page_count = page_count
         cls.failed = failed
         cls.load_error = load_error
         cls.inference_error = inference_error
         # Figure crops by storage key, each given a RegionImage row
         cls.figures = dict(figures or {})
-        
+        cls.corrected_pages = dict(corrected_pages or {})
+    
     @property
     def failed_page_numbers(self) -> list[int]:
         return sorted(FakeDocumentParser.failed)
@@ -148,21 +159,33 @@ class FakeDocumentParser:
         
         self.pages = [f"page_{i}" for i in range(FakeDocumentParser.page_count)]
     
+    def correct_orientations(self):
+        # The real parser rewrites self.pages in place; the fake keeps its
+        # placeholder pages and only records which were "corrected".
+        for page_number, angle in FakeDocumentParser.corrected_pages.items():
+            self.page_orientations[page_number - 1] = angle
+    
     def process_sync(self, page_to_process = None):
         if FakeDocumentParser.inference_error is not None:
             raise FakeDocumentParser.inference_error
     
     def to_model_objects(self, document, target_pages = None, merge_consecutive_tables=False):
         output = []
+        self.page_images = {}
         for number in range(1, len(self.pages) + 1):
             failed = number in FakeDocumentParser.failed
-            output.append(Page(
+            page = Page(
                 id=uuid4(),
                 document_id=document.id,
                 page_number=number,
                 status="failed" if failed else "completed",
                 error_message="inference failed" if failed else None,
-            ))
+            )
+            if number in FakeDocumentParser.corrected_pages:
+                key = f"documents/{document.id}/pages/{number}.png"
+                page.page_image_key = key
+                self.page_images[key] = b"corrected"
+            output.append(page)
         
         document.page_count = len(self.pages)
 

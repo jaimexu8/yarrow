@@ -24,7 +24,7 @@ def get_valkey() -> redis.Redis:
     client = _clients.get(loop)
     if client is None:
         client = redis.from_url(
-            f"redis://{settings.VALKEY_HOST}:{settings.VALKEY_PORT}/0",
+            f"redis://{settings.VALKEY_HOST}:{settings.VALKEY_PORT}/{settings.VALKEY_DB}",
             decode_responses=True,
             # Signed-in requests wait on the denylist lookup. Without limits,
             # a Valkey that accepts connections but stops answering would hang

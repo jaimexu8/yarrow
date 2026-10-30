@@ -21,8 +21,12 @@ export type Pane = 'original' | 'extracted';
 type ViewerState = {
   document: DocumentSummary;
 
-  // Null until the parsed content has loaded.
+  // Null until the parsed content has loaded. Corrections made in the
+  // session are applied here before a full reload
   tree: DocumentTree | null;
+
+  // Whether the viewer may correct text or edit tables (owner or reviewer).
+  canEdit: boolean;
 
   // Page count in the document, once known from either the file or the tree.
   pageCount: number | null;
@@ -49,6 +53,20 @@ type ViewerState = {
   highlightQuery: string;
   setHighlight: (regionId: string | null, query: string) => void;
 
+  // Pages the reader has switched back to the raw original in the original
+  // pane. A rotated page (image_key set) shows its corrected upright image by
+  // default; selecting its page adds it here so the un-rotated original is
+  // shown instead, for comparison.
+  originalPages: Set<number>;
+  toggleOriginalPage: (page: number) => void;
+
+  // The manual clockwise rotation (0/90/180/270) the reader has applied to
+  // each page in the original pane, keyed by page number. View-only: it turns
+  // the displayed page around in place so a scan the auto-correction missed
+  // can be read, without touching the stored image or re-running OCR.
+  pageRotations: Record<number, number>;
+  rotatePage: (page: number) => void;
+
   // Track which region is currently active (hovered or clicked)
   activeRegionId: string | null;
   setActiveRegionId: (id: string | null) => void;
@@ -61,6 +79,15 @@ type ViewerState = {
 
   regionFilter: string | null;
   setRegionFilter: (filter: string | null) => void;
+
+  /**
+   * Record a saved correction in the loaded tree: the active text becomes
+   * `text` and the region is flagged with its preserved OCR output, until a
+   * full refresh replaces the tree.
+   */
+  applyRegionCorrection: (regionId: string, text: string) => void;
+  /** Record an undone correction in the loaded tree. */
+  undoRegionCorrection: (regionId: string) => void;
   /** Load the document again, e.g. after merging or splitting its tables. */
   refresh: () => void;
 };
@@ -102,6 +129,84 @@ export function ViewerProvider({
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
   const [showLowConfidence, setShowLowConfidence] = useState(false);
   const [regionFilter, setRegionFilter] = useState<string | null>(null);
+  const [originalPages, setOriginalPages] = useState<Set<number>>(new Set());
+  const [pageRotations, setPageRotations] = useState<Record<number, number>>(
+    {}
+  );
+
+  const toggleOriginalPage = useCallback((page: number) => {
+    setOriginalPages((current) => {
+      const next = new Set(current);
+      if (next.has(page)) next.delete(page);
+      else next.add(page);
+      return next;
+    });
+  }, []);
+
+  const rotatePage = useCallback((page: number) => {
+    setPageRotations((current) => ({
+      ...current,
+      [page]: ((current[page] ?? 0) + 90) % 360,
+    }));
+  }, []);
+
+  // Corrections save through the API and then land here, so find-in-document
+  // and the rendered text reflect them without waiting for a full reload.
+  // The prop wins again whenever the page passes a new tree in (reset
+  // during render, the React-endorsed way to adjust state to props).
+  const [treeWithCorrections, setTreeWithCorrections] = useState(tree);
+  const [lastLoadedTree, setLastLoadedTree] = useState(tree);
+  if (tree !== lastLoadedTree) {
+    setLastLoadedTree(tree);
+    setTreeWithCorrections(tree);
+  }
+
+  const applyRegionCorrection = useCallback(
+    (regionId: string, text: string) => {
+      setTreeWithCorrections((current) => {
+        if (!current) return current;
+        const pages = current.pages.map((page) => ({
+          ...page,
+          regions: page.regions.map((region) =>
+            region.id === regionId
+              ? {
+                  ...region,
+                  text,
+                  is_edited: true,
+                  // The first correction freezes the OCR output as the
+                  // diff's baseline; later corrections keep it.
+                  original_text: region.is_edited
+                    ? (region.original_text ?? null)
+                    : (region.text ?? ''),
+                }
+              : region
+          ),
+        }));
+        return { ...current, pages };
+      });
+    },
+    []
+  );
+
+  const undoRegionCorrection = useCallback((regionId: string) => {
+    setTreeWithCorrections((current) => {
+      if (!current) return current;
+      const pages = current.pages.map((page) => ({
+        ...page,
+        regions: page.regions.map((region) =>
+          region.id === regionId
+            ? {
+                ...region,
+                text: region.original_text ?? region.text,
+                is_edited: false,
+                original_text: null,
+              }
+            : region
+        ),
+      }));
+      return { ...current, pages };
+    });
+  }, []);
 
   const setHighlight = useCallback((regionId: string | null, query: string) => {
     setHighlightRegionId(regionId);
@@ -152,8 +257,9 @@ export function ViewerProvider({
   const value = useMemo<ViewerState>(
     () => ({
       document,
-      tree,
-      pageCount: pageCount ?? tree?.stats.page_count ?? null,
+      tree: treeWithCorrections,
+      canEdit: treeWithCorrections?.can_edit ?? false,
+      pageCount: pageCount ?? treeWithCorrections?.stats.page_count ?? null,
       setPageCount,
       mode,
       setMode,
@@ -173,11 +279,17 @@ export function ViewerProvider({
       setShowLowConfidence,
       regionFilter,
       setRegionFilter,
+      originalPages,
+      toggleOriginalPage,
+      pageRotations,
+      rotatePage,
+      applyRegionCorrection,
+      undoRegionCorrection,
       refresh,
     }),
     [
       document,
-      tree,
+      treeWithCorrections,
       pageCount,
       mode,
       currentPage,
@@ -193,6 +305,12 @@ export function ViewerProvider({
       showBoundingBoxes,
       showLowConfidence,
       regionFilter,
+      originalPages,
+      toggleOriginalPage,
+      pageRotations,
+      rotatePage,
+      applyRegionCorrection,
+      undoRegionCorrection,
     ]
   );
 

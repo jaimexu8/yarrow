@@ -1,26 +1,37 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useId, useRef, useState } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import {
   ArrowDown,
   ArrowUp,
+  Check,
   FileText,
   Pencil,
-  Search,
   RotateCw,
+  Search,
   SearchX,
   Upload,
   Trash,
+  X,
   XCircle,
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { ActionMenu, type ActionMenuItem } from '@/components/ui/ActionMenu';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
 import {
+  bulkDelete,
+  bulkReprocess,
   canCancel,
   isInterrupted,
   parseApiDate,
@@ -30,6 +41,7 @@ import {
 } from '@/lib/documents';
 import { cn } from '@/lib/cn';
 import { formatBytes } from '@/lib/uploads';
+import { toApiError } from '@/lib/errors';
 import { useDocuments } from '@/lib/useDocuments';
 import {
   DeleteDocumentDialog,
@@ -89,12 +101,52 @@ export function DocumentLibrary() {
   const filterInput = useRef<HTMLInputElement>(null);
   const [deletions, setDeletions] = useState(0);
 
+  // Row selection for bulk actions. A plain Set, plus the last row that was
+  // toggled so Shift+click can range-select from it.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const [anchor, setAnchor] = useState<string | null>(null);
+
   // After a delete, the row and the menu button that had focus are gone;
   // continue from the search box rather than dropping focus to the top of
   // the page. Runs after React has removed the row.
   useEffect(() => {
     if (deletions > 0) filterInput.current?.focus();
   }, [deletions]);
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Toggles one row. A plain click only changes that row; Shift+click
+  // extends the selection to cover every row between it and the anchor,
+  // inclusive (all of them end up selected, like a file manager).
+  function toggleRow(id: string, event: ReactMouseEvent) {
+    setAnchor(id);
+    if (!event.shiftKey) {
+      toggleSelected(id);
+      return;
+    }
+    const from = sorted.findIndex((d) => d.id === anchor);
+    const to = sorted.findIndex((d) => d.id === id);
+    if (from < 0 || to < 0) {
+      toggleSelected(id);
+      return;
+    }
+    const [lo, hi] = from < to ? [from, to] : [to, from];
+    const range = sorted.slice(lo, hi + 1).map((d) => d.id);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const rowId of range) next.add(rowId);
+      return next;
+    });
+  }
 
   function toggleSort(col: SortColumn) {
     if (sortCol === col) {
@@ -107,8 +159,67 @@ export function DocumentLibrary() {
 
   function handleDeleted(doc: DocumentSummary) {
     remove(doc.id);
+    dropSelected([doc.id]);
     setAnnouncement(`Deleted ${doc.filename}.`);
     setDeletions((count) => count + 1);
+  }
+
+  // Removes rows that are no longer selectable from the current selection.
+  // Used after deletes so a stale id does not keep a bulk action armed.
+  function dropSelected(ids: string[]) {
+    if (ids.length === 0) return;
+    const gone = new Set(ids);
+    setSelected((prev) => {
+      if (![...prev].some((id) => gone.has(id))) return prev;
+      const next = new Set(prev);
+      for (const id of gone) next.delete(id);
+      return next;
+    });
+    if (anchor !== null && gone.has(anchor)) setAnchor(null);
+  }
+
+  const [bulk, setBulk] = useState<{
+    action: 'delete' | 'reprocess';
+    ids: string[];
+  } | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
+  function requestBulk(action: 'delete' | 'reprocess') {
+    if (selected.size === 0) return;
+    setBulk({ action, ids: [...selected] });
+    setBulkError(null);
+  }
+
+  function clearSelection() {
+    setSelected(() => new Set());
+    setAnchor(null);
+  }
+
+  async function runBulk() {
+    if (!bulk) return;
+    const { action, ids } = bulk;
+    setBulkBusy(true);
+    setBulkError(null);
+    try {
+      const results =
+        action === 'delete' ? await bulkDelete(ids) : await bulkReprocess(ids);
+      const okIds: string[] = [];
+      for (const item of results) {
+        if (item.ok) okIds.push(item.document_id);
+      }
+      if (action === 'delete') {
+        for (const id of okIds) remove(id);
+      }
+      // Whatever was acted on leaves the selection; the rest stay so the
+      // user can retry or keep them.
+      dropSelected(okIds);
+      setBulk(null);
+    } catch (err) {
+      setBulkError(toApiError(err).message);
+    } finally {
+      setBulkBusy(false);
+    }
   }
 
   // Announced even when the library just became empty.
@@ -168,6 +279,16 @@ export function DocumentLibrary() {
     <div className="space-y-4">
       {status}
       {warning}
+      {bulk && (
+        <BulkConfirmDialog
+          action={bulk.action}
+          count={bulk.ids.length}
+          busy={bulkBusy}
+          error={bulkError}
+          onConfirm={runBulk}
+          onClose={() => setBulk(null)}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-0 flex-1">
           <label htmlFor={filterId} className="sr-only">
@@ -222,83 +343,115 @@ export function DocumentLibrary() {
           }}
         />
       ) : (
-        <table className="w-full border-separate border-spacing-y-2">
-          <caption className="sr-only">Your documents, newest first</caption>
-          <thead>
-            <tr>
-              <th scope="col" className={HEAD}>
-                <button
-                  className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
-                  onClick={() => toggleSort('name')}
-                >
-                  Document
-                  {sortCol === 'name' &&
-                    (sortDir === 'asc' ? (
-                      <ArrowUp className="size-4" />
-                    ) : (
-                      <ArrowDown className="size-4" />
-                    ))}
-                </button>
-              </th>
-              <th scope="col" className={cn(HEAD, 'hidden md:table-cell')}>
-                <button
-                  className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
-                  onClick={() => toggleSort('date')}
-                >
-                  Uploaded
-                  {sortCol === 'date' &&
-                    (sortDir === 'asc' ? (
-                      <ArrowUp className="size-4" />
-                    ) : (
-                      <ArrowDown className="size-4" />
-                    ))}
-                </button>
-              </th>
-              <th scope="col" className={cn(HEAD, 'hidden sm:table-cell')}>
-                <button
-                  className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
-                  onClick={() => toggleSort('pages')}
-                >
-                  Pages
-                  {sortCol === 'pages' &&
-                    (sortDir === 'asc' ? (
-                      <ArrowUp className="size-4" />
-                    ) : (
-                      <ArrowDown className="size-4" />
-                    ))}
-                </button>
-              </th>
-              <th scope="col" className={HEAD}>
-                <button
-                  className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
-                  onClick={() => toggleSort('status')}
-                >
-                  Status
-                  {sortCol === 'status' &&
-                    (sortDir === 'asc' ? (
-                      <ArrowUp className="size-4" />
-                    ) : (
-                      <ArrowDown className="size-4" />
-                    ))}
-                </button>
-              </th>
-              <th scope="col" className={cn(HEAD, 'text-right')}>
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((doc) => (
-              <DocumentTableRow
-                key={doc.id}
-                doc={doc}
-                onChanged={replace}
-                onStale={reload}
-                onDeleted={handleDeleted}
-              />
-            ))}
-          </tbody>
-        </table>
+        <>
+          {selected.size > 0 && (
+            <BulkActionBar
+              count={selected.size}
+              onClear={clearSelection}
+              onDelete={() => requestBulk('delete')}
+              onReprocess={() => requestBulk('reprocess')}
+            />
+          )}
+          <table className="w-full border-separate border-spacing-y-2">
+            <caption className="sr-only">Your documents, newest first</caption>
+            <thead>
+              <tr>
+                <th scope="col" className={cn(HEAD, 'w-8')}>
+                  <SelectAllButton
+                    indeterminate={
+                      selected.size > 0 && selected.size < visible.length
+                    }
+                    checked={
+                      visible.length > 0 && selected.size === visible.length
+                    }
+                    onToggle={() => {
+                      if (
+                        visible.length > 0 &&
+                        selected.size === visible.length
+                      ) {
+                        clearSelection();
+                      } else {
+                        setSelected(() => new Set(sorted.map((d) => d.id)));
+                      }
+                    }}
+                  />
+                </th>
+                <th scope="col" className={HEAD}>
+                  <button
+                    className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                    onClick={() => toggleSort('name')}
+                  >
+                    Document
+                    {sortCol === 'name' &&
+                      (sortDir === 'asc' ? (
+                        <ArrowUp className="size-4" />
+                      ) : (
+                        <ArrowDown className="size-4" />
+                      ))}
+                  </button>
+                </th>
+                <th scope="col" className={cn(HEAD, 'hidden md:table-cell')}>
+                  <button
+                    className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                    onClick={() => toggleSort('date')}
+                  >
+                    Uploaded
+                    {sortCol === 'date' &&
+                      (sortDir === 'asc' ? (
+                        <ArrowUp className="size-4" />
+                      ) : (
+                        <ArrowDown className="size-4" />
+                      ))}
+                  </button>
+                </th>
+                <th scope="col" className={cn(HEAD, 'hidden sm:table-cell')}>
+                  <button
+                    className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                    onClick={() => toggleSort('pages')}
+                  >
+                    Pages
+                    {sortCol === 'pages' &&
+                      (sortDir === 'asc' ? (
+                        <ArrowUp className="size-4" />
+                      ) : (
+                        <ArrowDown className="size-4" />
+                      ))}
+                  </button>
+                </th>
+                <th scope="col" className={HEAD}>
+                  <button
+                    className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                    onClick={() => toggleSort('status')}
+                  >
+                    Status
+                    {sortCol === 'status' &&
+                      (sortDir === 'asc' ? (
+                        <ArrowUp className="size-4" />
+                      ) : (
+                        <ArrowDown className="size-4" />
+                      ))}
+                  </button>
+                </th>
+                <th scope="col" className={cn(HEAD, 'text-right')}>
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((doc) => (
+                <DocumentTableRow
+                  key={doc.id}
+                  doc={doc}
+                  selected={selected.has(doc.id)}
+                  onToggle={(event) => toggleRow(doc.id, event)}
+                  onChanged={replace}
+                  onStale={reload}
+                  onDeleted={handleDeleted}
+                />
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   );
@@ -321,11 +474,15 @@ function UploadedAt({ value }: { value: string | null }) {
 
 function DocumentTableRow({
   doc,
+  selected,
+  onToggle,
   onChanged,
   onStale,
   onDeleted,
 }: {
   doc: DocumentSummary;
+  selected: boolean;
+  onToggle: (event: ReactMouseEvent) => void;
   onChanged: (doc: DocumentSummary) => void;
 
   // Callback when the server indicates that the row is out of date
@@ -394,6 +551,24 @@ function DocumentTableRow({
 
   return (
     <tr>
+      <td className={cn(CELL, 'w-8 pl-2.5 sm:pl-3')}>
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={selected}
+          aria-label={`Select ${doc.filename}`}
+          onClick={(event) => onToggle(event)}
+          className={cn(
+            'flex size-5 items-center justify-center rounded border transition-colors',
+            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900',
+            selected
+              ? 'border-slate-900 bg-slate-900 text-white'
+              : 'border-slate-300 bg-white text-transparent hover:border-slate-400'
+          )}
+        >
+          <Check aria-hidden="true" className="size-3.5" />
+        </button>
+      </td>
       <td className={cn(CELL, 'w-full max-w-0')}>
         {editing ? (
           <RenameForm doc={doc} onSaved={onChanged} onDone={stopEditing} />
@@ -497,6 +672,153 @@ function DocumentTableRow({
         />
       </td>
     </tr>
+  );
+}
+
+/** A checkbox that selects or clears every row in the current view. */
+function SelectAllButton({
+  checked,
+  indeterminate,
+  onToggle,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={indeterminate ? 'mixed' : checked}
+      aria-label="Select all documents"
+      onClick={onToggle}
+      className={cn(
+        'flex size-5 items-center justify-center rounded border transition-colors',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900',
+        checked || indeterminate
+          ? 'border-slate-900 bg-slate-900 text-white'
+          : 'border-slate-300 bg-white text-transparent hover:border-slate-400'
+      )}
+    >
+      {indeterminate ? (
+        <span className="h-0.5 w-2.5 rounded bg-white" />
+      ) : (
+        <Check aria-hidden="true" className="size-3.5" />
+      )}
+    </button>
+  );
+}
+
+/**
+ * Shown in place of the usual header area while at least one row is selected.
+ * It replaces the "Upload documents" action with bulk delete and reprocess.
+ */
+function BulkActionBar({
+  count,
+  onClear,
+  onDelete,
+  onReprocess,
+}: {
+  count: number;
+  onClear: () => void;
+  onDelete: () => void;
+  onReprocess: () => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Actions for the selected documents"
+      className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-white"
+    >
+      <p className="text-sm font-medium">
+        {count} {count === 1 ? 'document' : 'documents'} selected
+      </p>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <Button
+          variant="secondary"
+          className="w-auto px-3"
+          onClick={onReprocess}
+        >
+          <RotateCw aria-hidden="true" className="size-4" />
+          Reprocess
+        </Button>
+        <Button variant="danger" className="w-auto px-3" onClick={onDelete}>
+          <Trash aria-hidden="true" className="size-4" />
+          Delete
+        </Button>
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label="Clear selection"
+          className="rounded-md p-1.5 text-slate-300 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          <X aria-hidden="true" className="size-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Confirms a bulk delete or reprocess before the request is sent. */
+function BulkConfirmDialog({
+  action,
+  count,
+  busy,
+  error,
+  onConfirm,
+  onClose,
+}: {
+  action: 'delete' | 'reprocess';
+  count: number;
+  busy: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const isDelete = action === 'delete';
+  const title = isDelete
+    ? `Delete ${count} ${count === 1 ? 'document' : 'documents'}?`
+    : `Reprocess ${count} ${count === 1 ? 'document' : 'documents'}?`;
+  const body = isDelete
+    ? `These ${count} ${
+        count === 1 ? 'document' : 'documents'
+      } and everything extracted from them will be permanently deleted. This can't be undone.`
+    : `Each selected document will be processed again. Documents that are already being processed are skipped and stay selected.`;
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!busy}
+      title={title}
+      footer={
+        <>
+          <Button
+            variant="secondary"
+            className="sm:w-auto"
+            onClick={onClose}
+            disabled={busy}
+            data-autofocus
+          >
+            Cancel
+          </Button>
+          <Button
+            variant={isDelete ? 'danger' : 'primary'}
+            className="sm:w-auto"
+            onClick={onConfirm}
+            loading={busy}
+          >
+            {error ? 'Try again' : isDelete ? 'Delete' : 'Reprocess'}
+          </Button>
+        </>
+      }
+    >
+      <p className="break-words">{body}</p>
+      {error && (
+        <Alert className="mt-4" tone="error">
+          {error}
+        </Alert>
+      )}
+    </Modal>
   );
 }
 

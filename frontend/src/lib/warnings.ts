@@ -9,7 +9,14 @@ export type WarningEntry = {
 };
 
 export type WarningKind =
-  'blur' | 'skew' | 'truncation' | 'dark' | 'bright' | 'unreadable' | 'other';
+  | 'blur'
+  | 'skew'
+  | 'truncation'
+  | 'dark'
+  | 'bright'
+  | 'rotated'
+  | 'unreadable'
+  | 'other';
 
 export const FILTERABLE_KINDS: WarningKind[] = [
   'blur',
@@ -17,6 +24,7 @@ export const FILTERABLE_KINDS: WarningKind[] = [
   'truncation',
   'dark',
   'bright',
+  'rotated',
 ];
 
 // Mapping from warning kind to human readable label and detail
@@ -28,6 +36,10 @@ export const WARNING_KINDS: Record<
   skew: {
     label: 'Tilted',
     detail: 'Lines and tables may be split or merged wrongly.',
+  },
+  rotated: {
+    label: 'Rotated',
+    detail: 'The page was turned upright automatically before OCR.',
   },
 
   truncation: {
@@ -49,6 +61,7 @@ export const WARNING_KINDS: Record<
 const MESSAGE_PREFIXES: [string, WarningKind][] = [
   ['Image is blurry', 'blur'],
   ['Image is skewed', 'skew'],
+  ['Page was auto-rotated', 'rotated'],
   ['Image is truncated', 'truncation'],
   ['Image is too dark', 'dark'],
   ['Image is too bright', 'bright'],
@@ -68,6 +81,10 @@ export function warningLabel(message: string | null): string {
   if (kind === 'skew') {
     const angle = message?.match(/(-?\d+(?:\.\d+)?)°/);
     if (angle) return `Tilted ${Math.abs(Number(angle[1])).toFixed(1)}°`;
+  }
+  if (kind === 'rotated') {
+    const angle = message?.match(/(-?\d+(?:\.\d+)?)°/);
+    if (angle) return `Rotated ${Math.abs(Number(angle[1]))}°`;
   }
   return WARNING_KINDS[kind].label;
 }

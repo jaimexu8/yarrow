@@ -1,12 +1,15 @@
 # Built from paddlex.Dockerfile. The Paddle source build is the first stage and
-# stays cached; entrypoint.sh/paddlex_wrapper.py copy in the last layers, so a script edit
-# rebuilds in seconds. If the build cache is evicted, --build recompiles Paddle
+# stays cached; shared/entrypoint.sh and paddlex_wrapper.py copy in the last
+# layers, so a script edit rebuilds in seconds. If the build cache is evicted,
+# --build recompiles Paddle from source (hours).
 # from source (hours).
 x-pipeline-image: &pipeline-image
   image: ${PIPELINE_IMAGE:-paddleocr-pipeline:gpu}
   build:
     context: .
     dockerfile: paddlex.Dockerfile
+    additional_contexts:
+      - shared=../shared
 
 services:
   paddlex-pipeline:
@@ -83,7 +86,7 @@ services:
 
   hybrid-gateway:
     build:
-      context: .
+      context: ../shared
       dockerfile: hybrid-gateway.Dockerfile
     environment:
       STRUCTURE_GATEWAY_URL: http://paddlex-pipeline:8080/layout-parsing

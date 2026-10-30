@@ -26,7 +26,9 @@ class JobOut(BaseModel):
     @model_validator(mode="after")
     def _only_user_facing_errors(self):
         # The worker may store raw exception text here (US-11, NFR-6).
-        self.error_message = public_error_message(self.error_message, self.status, DOCUMENT_FAILED_MESSAGE)
+        self.error_message = public_error_message(
+            self.error_message, self.status, DOCUMENT_FAILED_MESSAGE
+        )
         return self
 
 
@@ -42,7 +44,9 @@ class PageOut(BaseModel):
     @model_validator(mode="after")
     def _only_user_facing_errors(self):
         # The worker may store raw exception text here (US-11, NFR-6).
-        self.error_message = public_error_message(self.error_message, self.status, PAGE_FAILED_MESSAGE)
+        self.error_message = public_error_message(
+            self.error_message, self.status, PAGE_FAILED_MESSAGE
+        )
         return self
 
 
@@ -77,7 +81,9 @@ class DocumentOut(BaseModel):
     @model_validator(mode="after")
     def _only_user_facing_errors(self):
         # The worker may store raw exception text here (US-11, NFR-6).
-        self.error_message = public_error_message(self.error_message, self.status, DOCUMENT_FAILED_MESSAGE)
+        self.error_message = public_error_message(
+            self.error_message, self.status, DOCUMENT_FAILED_MESSAGE
+        )
         return self
 
 
@@ -93,7 +99,9 @@ class DocumentRename(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError("Name cannot be empty")
-        if any(char in value for char in "/\\") or any(ord(char) < 32 or ord(char) == 127 for char in value):
+        if any(char in value for char in "/\\") or any(
+            ord(char) < 32 or ord(char) == 127 for char in value
+        ):
             raise ValueError("Name cannot contain slashes or control characters")
         return value
 
@@ -132,3 +140,22 @@ class UploadRejected(BaseModel):
 class UploadResponse(BaseModel):
     accepted: list[UploadAccepted] = []
     rejected: list[UploadRejected] = []
+
+
+class BulkDocumentRequest(BaseModel):
+    """The ids of the documents a bulk operation applies to."""
+
+    document_ids: list[UUID] = Field(min_length=1, max_length=100)
+
+
+class BulkItemResult(BaseModel):
+    """The outcome of one document in a bulk operation.
+
+    ``ok`` is False with a reason in ``message`` when this document could not
+    be acted on (e.g. processing was saving its results, or a job is still
+    running), so one busy document does not block the rest of the batch.
+    """
+
+    document_id: UUID
+    ok: bool
+    message: str | None = None

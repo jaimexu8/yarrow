@@ -2,7 +2,8 @@
 #
 # Layout detection (PP-DocLayoutV2) and PP-StructureV3 run on the prebuilt
 # cu130 paddlepaddle_gpu wheel from Paddle's own package index; the 0.9B VLM
-# is not downloaded here, entrypoint.sh points the VLRecognition submodule
+# is not downloaded here, the shared entrypoint.sh points the VLRecognition
+# submodule
 # at the vlm-server container instead.
 FROM python:3.11-slim
 
@@ -76,7 +77,7 @@ RUN python -c "from paddlex import create_pipeline; create_pipeline('PP-Structur
 # first use, not at model creation, so it needs its own warmup.
 RUN python -c "from paddlex.utils.fonts import PINGFANG_FONT; PINGFANG_FONT.path"
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --from=shared entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY paddlex_wrapper.py /usr/local/bin/paddlex_wrapper.py
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/paddlex_wrapper.py
 

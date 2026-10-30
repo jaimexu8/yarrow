@@ -9,6 +9,7 @@ class SearchSnippet(BaseModel):
     text: str
     match_start: int
     match_end: int
+    edited: bool = False
 
 
 class SearchHit(BaseModel):
