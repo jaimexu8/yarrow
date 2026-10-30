@@ -1,0 +1,202 @@
+name: CI (OCR cluster)
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "ocr_cluster/**"
+      - ".github/workflows/ci-ocr-cluster.yml"
+  # Manual runs: lets you test the cache on a branch, and seed the cache on
+  # main (PR-scoped caches are not readable from main or other PRs).
+  workflow_dispatch:
+
+# Builds each OCR cluster stack (x86 and aarch64) and brings its non-VLM
+# services up with `docker compose up -d --wait` (healthchecks live in the
+# compose files; the CI override files strip GPU reservations, pin CPU, and
+# drop the vlm-server edges), then asserts edge behavior with a small pytest.
+# The sglang/vllm vlm-server is excluded.
+#
+# x86:     ubuntu runner. The x86 paddlex image ships a libcuda stub, so it
+#          runs CPU-only. The build takes ~20 min and happens on every run
+#          (the x86 job is deliberately uncached; stacking both stacks'
+#          caches risks GitHub's 10 GB per-repo cache budget).
+# aarch64: ubuntu-24.04-arm runner. The dgx stack builds PaddlePaddle from
+#          source for sm_121 (~4 h on 4 vCPUs). Instead of persisting whole
+#          BuildKit layer caches (15-20 GB, over GitHub's 10 GB cache budget)
+#          the workflow caches only the compiled wheel (~4 GB) under
+#          ~/.cache/paddle-wheel/dgx, keyed exactly on the Dockerfile: the
+#          4-hour compile happens only when paddlex.Dockerfile changes, and
+#          every other run just pip-installs the wheel
+#          (PADDLE_WHEEL_FROM=paddle-wheel-prebuilt + the wheels build
+#          context in ocr_cluster/dgx/paddlex.Dockerfile skips the compile
+#          stage entirely). The cache is restored with actions/cache/restore
+#          and saved with actions/cache/save immediately after the compile,
+#          so a later failure or timeout never throws the wheel away
+#          (`save-always` on actions/cache is deprecated and does not work).
+
+env:
+  # Both stacks' gateway services interpolate GATEWAY_API_KEY with a :?
+  # default guard, so compose refuses to start the edge unauthenticated.
+  GATEWAY_API_KEY: ci-ocr-test-key
+
+jobs:
+  ocr-cluster-x86:
+    name: OCR cluster (x86)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      OCR_CLUSTER_STACK: x86
+      COMPOSE_CMD: docker compose -p ocr-ci-x86 -f ocr_cluster/x86/docker-compose.yml -f ocr_cluster/x86/docker-compose.ci.yml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # A docker-container builder: `--load` + local cache export both need it.
+      - name: Set up Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Install pytest
+        run: pip install pytest
+      - name: Build the paddlex image
+        run: |
+          docker buildx build \
+            --builder "${{ steps.buildx.outputs.name }}" \
+            --load \
+            -t yarrow-ocr-test-paddlex:ci \
+            -f ocr_cluster/x86/paddlex.Dockerfile \
+            --build-context shared=ocr_cluster/shared \
+            ocr_cluster/x86
+      - name: Build the hybrid-gateway image
+        run: |
+          docker buildx build \
+            --builder "${{ steps.buildx.outputs.name }}" \
+            --load \
+            -t yarrow-ocr-test-hybrid-gateway:ci \
+            -f ocr_cluster/shared/hybrid-gateway.Dockerfile \
+            ocr_cluster/shared
+      - name: Bring up the non-VLM services (compose owns ordering and health)
+        run: |
+          docker compose version
+          ${{ env.COMPOSE_CMD }} config -q
+          ${{ env.COMPOSE_CMD }} up -d --wait --wait-timeout 3600 \
+            paddlex-pipeline paddleocr-vl-api hybrid-gateway gateway
+      - name: Dump service logs
+        if: failure()
+        run: ${{ env.COMPOSE_CMD }} logs --tail 300
+      - name: Assert the running stack (edge gateway health and auth)
+        env:
+          OCR_CLUSTER_TEST: "1"
+        run: pytest ocr_cluster/tests -v -m ocr_cluster
+      - name: Tear down
+        if: always()
+        run: ${{ env.COMPOSE_CMD }} down -v --remove-orphans
+
+  ocr-cluster-aarch64:
+    name: OCR cluster (aarch64)
+    runs-on: ubuntu-24.04-arm
+    # GitHub caps hosted-runner jobs at 360 minutes; the compile consumes most.
+    timeout-minutes: 360
+    env:
+      OCR_CLUSTER_STACK: dgx
+      COMPOSE_CMD: docker compose -p ocr-ci-dgx -f ocr_cluster/dgx/docker-compose.yml -f ocr_cluster/dgx/docker-compose.ci.yml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Exact key only: the wheel is built against a specific PADDLE_GIT_REF, so
+      # a stale wheel from an older Dockerfile would silently mismatch the
+      # packages that expect it. changed Dockerfile -> full recompile.
+      # Restore only; the matching save step runs right after the compile.
+      - name: Restore compiled wheel cache
+        id: wheel-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/paddle-wheel/dgx
+          key: ocr-paddle-wheel-dgx-v1-${{ hashFiles('ocr_cluster/dgx/paddlex.Dockerfile') }}
+      # The 4-core Paddle compile exceeds the runner's 16 GB RAM at times; a
+      # killed build loses all progress, so buy memory headroom with swap.
+      - name: Add swap for the Paddle compile
+        run: |
+          sudo fallocate -l 8G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
+      - name: Runner resources before the build
+        run: df -h / /mnt
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Install pytest
+        run: pip install pytest
+      - name: Compile the sm_121 wheel if the cache is empty
+        run: |
+          WHEEL_DIR="$HOME/.cache/paddle-wheel/dgx"
+          if compgen -G "$WHEEL_DIR/*.whl" > /dev/null; then
+            echo "compiled wheel found in cache:"
+            ls -lh "$WHEEL_DIR"
+          else
+            echo "no cached wheel; compiling Paddle from source (about 4 hours)"
+            docker buildx build \
+              --builder "${{ steps.buildx.outputs.name }}" \
+              --load \
+              --target paddle-compile \
+              -t ocrt-paddle-compile:dgx \
+              -f ocr_cluster/dgx/paddlex.Dockerfile \
+              ocr_cluster/dgx
+            cid="$(docker create ocrt-paddle-compile:dgx)"
+            mkdir -p "$WHEEL_DIR"
+            docker cp "$cid:/opt/wheels/." "$WHEEL_DIR/"
+            docker rm -f "$cid"
+            docker rmi ocrt-paddle-compile:dgx
+            echo "wheel extracted:"; ls -lh "$WHEEL_DIR"; du -sh "$WHEEL_DIR"
+          fi
+      # Save immediately after the compile so later failures/timeouts can't
+      # lose the 4-hour result. Skipped on an exact cache hit.
+      - name: Save compiled wheel cache
+        if: steps.wheel-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/paddle-wheel/dgx
+          key: ${{ steps.wheel-cache.outputs.cache-primary-key }}
+      - name: Build the paddlex image from the cached wheel
+        run: |
+          docker buildx build \
+            --builder "${{ steps.buildx.outputs.name }}" \
+            --load \
+            --build-arg PADDLE_WHEEL_FROM=paddle-wheel-prebuilt \
+            --build-context "wheels=$HOME/.cache/paddle-wheel/dgx" \
+            --build-context shared=ocr_cluster/shared \
+            -t yarrow-ocr-test-paddlex:ci \
+            -f ocr_cluster/dgx/paddlex.Dockerfile \
+            ocr_cluster/dgx
+      - name: Build the hybrid-gateway image
+        run: |
+          docker buildx build \
+            --builder "${{ steps.buildx.outputs.name }}" \
+            --load \
+            -t yarrow-ocr-test-hybrid-gateway:ci \
+            -f ocr_cluster/shared/hybrid-gateway.Dockerfile \
+            ocr_cluster/shared
+      - name: Bring up the non-VLM services (compose owns ordering and health)
+        run: |
+          docker compose version
+          ${{ env.COMPOSE_CMD }} config -q
+          ${{ env.COMPOSE_CMD }} up -d --wait --wait-timeout 3600 \
+            paddlex-pipeline paddleocr-vl-api hybrid-gateway gateway
+      - name: Dump service logs
+        if: failure()
+        run: ${{ env.COMPOSE_CMD }} logs --tail 300
+      - name: Assert the running stack (edge gateway health and auth)
+        env:
+          OCR_CLUSTER_TEST: "1"
+        run: pytest ocr_cluster/tests -v -m ocr_cluster
+      - name: Tear down
+        if: always()
+        run: ${{ env.COMPOSE_CMD }} down -v --remove-orphans
