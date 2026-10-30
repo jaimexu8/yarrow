@@ -17,12 +17,14 @@ class AdminAccount(BaseModel):
 
 
 class AdminAccountStatusUpdate(BaseModel):
-    is_active: bool
+    is_active: bool | None = None
+    is_admin: bool | None = None
 
 
 class AdminAccountStatus(BaseModel):
     id: UUID
     is_active: bool
+    is_admin: bool
 
 
 class JobStatusCounts(BaseModel):

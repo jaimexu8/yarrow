@@ -30,12 +30,12 @@ export async function listAccounts(): Promise<AdminAccount[]> {
   return res.data;
 }
 
-export async function setAccountActive(
+export async function setAccountStatus(
   accountId: string,
-  isActive: boolean
+  status: { is_active?: boolean; is_admin?: boolean }
 ): Promise<void> {
   await api.patch(`/api/v1/admin/accounts/${accountId}/status`, {
-    is_active: isActive,
+    ...status,
   });
 }
 
