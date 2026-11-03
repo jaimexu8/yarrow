@@ -30,6 +30,7 @@ it('sends every filter that is set', async () => {
     dateFrom: '2025-06-01',
     dateTo: '2025-06-30',
     fileType: 'application/pdf',
+    sort: 'name',
   });
   expect(api.get).toHaveBeenCalledWith('/api/v1/search/', {
     params: {
@@ -37,7 +38,16 @@ it('sends every filter that is set', async () => {
       date_from: '2025-06-01',
       date_to: '2025-06-30',
       file_type: 'application/pdf',
+      sort: 'name',
     },
+  });
+});
+
+it('omits sort when it is not set', async () => {
+  vi.mocked(api.get).mockResolvedValue({ data: [] });
+  await searchDocuments('quarterly');
+  expect(api.get).toHaveBeenCalledWith('/api/v1/search/', {
+    params: { q: 'quarterly' },
   });
 });
 

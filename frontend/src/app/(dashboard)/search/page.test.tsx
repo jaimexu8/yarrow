@@ -103,6 +103,35 @@ it('sends the raw query (with quotes) to the API', async () => {
   });
 });
 
+it('sends the chosen sort and keeps it on the next search', async () => {
+  vi.mocked(searchDocuments).mockResolvedValue([]);
+  render(<SearchPage />);
+  fireEvent.change(screen.getByLabelText(/Search/), {
+    target: { value: 'quarterly' },
+  });
+  fireEvent.change(screen.getByLabelText(/Sort/), {
+    target: { value: 'name' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+  await waitFor(() => {
+    expect(searchDocuments).toHaveBeenCalledWith(
+      'quarterly',
+      expect.objectContaining({ sort: 'name' })
+    );
+  });
+
+  vi.mocked(searchDocuments).mockClear();
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+  await waitFor(() => {
+    expect(searchDocuments).toHaveBeenCalledWith(
+      'quarterly',
+      expect.objectContaining({ sort: 'name' })
+    );
+  });
+});
+
 it('flags an approximate OCR match with an "approx" badge', async () => {
   // search 2024, but the matched text is the OCR'd "2O24"
   vi.mocked(searchDocuments).mockResolvedValue(
