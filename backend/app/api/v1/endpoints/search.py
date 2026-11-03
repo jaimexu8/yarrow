@@ -59,7 +59,7 @@ def _document_order(sort: Literal["date", "name"]):
     # date: newest first. name: a-z, case-insensitive.
     if sort == "name":
         return (nulls_last(func.lower(Document.filename)), Document.id)
-    return (nulls_last(Document.created_at).desc(), Document.id)
+    return (nulls_last(Document.created_at.desc()), Document.id)
 
 
 @router.get("/", response_model=list[SearchHit])
