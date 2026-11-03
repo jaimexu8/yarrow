@@ -127,12 +127,6 @@ export function DocumentLibrary() {
     if (deletions > 0) filterInput.current?.focus();
   }, [deletions]);
 
-  useEffect(() => {
-    if (!tagFilter || documents === null) return;
-    if (!uniqueTags(documents).some((tag) => tag.id === tagFilter)) {
-      setTagFilter('');
-    }
-  }, [documents, tagFilter]);
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -269,10 +263,13 @@ export function DocumentLibrary() {
 
   const needle = query.trim().toLocaleLowerCase();
   const tagChoices = uniqueTags(documents);
+  const activeTag = tagChoices.some((tag) => tag.id === tagFilter)
+    ? tagFilter
+    : '';
   const visible = documents.filter(
     (doc) =>
       (statusFilter === '' || doc.status === statusFilter) &&
-      (tagFilter === '' || documentHasTag(doc, tagFilter)) &&
+      (activeTag === '' || documentHasTag(doc, activeTag)) &&
       (!needle || doc.filename.toLocaleLowerCase().includes(needle))
   );
 
@@ -352,7 +349,7 @@ export function DocumentLibrary() {
             id="tag-filter"
             label="Tag"
             hideLabel
-            value={tagFilter}
+            value={activeTag}
             onChange={(event) => setTagFilter(event.target.value)}
           >
             <option value="">All tags</option>
@@ -364,7 +361,7 @@ export function DocumentLibrary() {
           </Select>
         </div>
         <p aria-live="polite" className="text-sm text-slate-500">
-          {needle || statusFilter !== '' || tagFilter !== ''
+          {needle || statusFilter !== '' || activeTag !== ''
             ? `${visible.length} of ${documents.length} documents`
             : `${documents.length} ${documents.length === 1 ? 'document' : 'documents'}`}
         </p>
@@ -375,8 +372,8 @@ export function DocumentLibrary() {
           query={query.trim()}
           statusLabel={statusFilter ? STATUS_LABELS[statusFilter] : null}
           tagLabel={
-            tagFilter
-              ? (tagChoices.find((tag) => tag.id === tagFilter)?.name ?? null)
+            activeTag
+              ? (tagChoices.find((tag) => tag.id === activeTag)?.name ?? null)
               : null
           }
           onClear={() => {
@@ -693,6 +690,7 @@ function DocumentTableRow({
         )}
         {reprocess.dialog}
         <AddTagDialog
+          key={addingTag ? doc.id : 'closed'}
           doc={doc}
           availableTags={availableTags}
           open={addingTag}
@@ -1036,12 +1034,6 @@ function AddTagDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const unused = availableTags.filter((tag) => !documentHasTag(doc, tag.id));
-
-  useEffect(() => {
-    if (!open) return;
-    setName('');
-    setError(null);
-  }, [open]);
 
   async function save(value: string) {
     const problem = tagNameError(value);

@@ -53,7 +53,6 @@ from .sharing import (
     ShareDocumentRequest,
     UpdateShareRequest,
 )
-from .tag import TagCreate, TagListItem, TagOut
 from .table import (
     MergeCandidate,
     MergeCandidatesOut,
@@ -64,6 +63,7 @@ from .table import (
     TableNode,
     TablePart,
 )
+from .tag import TagCreate, TagListItem, TagOut
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -98,13 +98,13 @@ __all__ = [
     "StrictModel",
     "SyncResponse",
     "SyncStatusOut",
-    "TagCreate",
-    "TagListItem",
-    "TagOut",
     "TableCellNode",
     "TableMutationResult",
     "TableNode",
     "TablePart",
+    "TagCreate",
+    "TagListItem",
+    "TagOut",
     "Token",
     "UpdateShareRequest",
     "UploadAccepted",
