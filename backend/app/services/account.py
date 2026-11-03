@@ -9,6 +9,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
 from yarrow_db.models import (
+    Batch,
     CloudCredential,
     Document,
     DocumentShare,
@@ -145,6 +146,8 @@ async def _delete_rows(db: AsyncSession, user_id: UUID) -> tuple[int, list[str]]
     if document_ids:
         await db.execute(delete(Document).where(Document.id.in_(document_ids)))
     await db.execute(delete(Folder).where(Folder.owner_id == user_id))
+    # Upload batches reference the user (US-31); documents reference them.
+    await db.execute(delete(Batch).where(Batch.owner_id == user_id))
     await db.execute(delete(User).where(User.id == user_id))
     return len(document_ids), keys
 

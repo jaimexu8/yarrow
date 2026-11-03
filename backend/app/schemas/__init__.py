@@ -21,6 +21,7 @@ from .auth import (
 )
 from .common import BBox, StrictModel
 from .document import (
+    BatchProgress,
     BulkDocumentRequest,
     BulkItemResult,
     DocumentDetail,
@@ -69,6 +70,7 @@ from .tag import TagCreate, TagListItem, TagOut
 __all__ = [
     "SCHEMA_VERSION",
     "BBox",
+    "BatchProgress",
     "BulkDocumentRequest",
     "BulkItemResult",
     "CloudConnectionOut",
