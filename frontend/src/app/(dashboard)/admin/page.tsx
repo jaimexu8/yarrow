@@ -3,8 +3,12 @@
 import { useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { RequireAdmin } from '@/components/auth/RequireAdmin';
+import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
+import { useAuth } from '@/context/AuthContext';
 import {
+  deleteAdminAccount,
   getAdminStats,
   jobQueuePlace,
   jobStage,
@@ -21,7 +25,7 @@ import { toApiError } from '@/lib/errors';
 import { formatBytes } from '@/lib/uploads';
 import { cn } from '@/lib/cn';
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu';
-import { Ban, Check, X } from 'lucide-react';
+import { Ban, Check, Trash, X } from 'lucide-react';
 
 const CELL =
   'border-y border-slate-200 bg-white px-3 py-3 sm:px-4 align-middle first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r';
@@ -89,11 +93,15 @@ function StatsSection({ stats }: { stats: AdminStats }) {
 function AccountTableRow({
   account,
   onStatusChange,
+  onDelete,
   pending,
+  isSelf,
 }: {
   account: AdminAccount;
   onStatusChange: (accountId: string, isActive: boolean) => void;
+  onDelete: (account: AdminAccount) => void;
   pending: boolean;
+  isSelf: boolean;
 }) {
   const actions: ActionMenuItem[] = [
     {
@@ -104,6 +112,14 @@ function AccountTableRow({
       onSelect: () => onStatusChange(account.id, !account.is_active),
     },
   ];
+  if (!isSelf) {
+    actions.push({
+      label: 'Delete',
+      icon: Trash,
+      destructive: true,
+      onSelect: () => onDelete(account),
+    });
+  }
 
   return (
     <tr>
@@ -150,11 +166,15 @@ function AccountTableRow({
 function AccountTable({
   accounts,
   onStatusChange,
+  onDelete,
   pendingAccountId,
+  currentUserId,
 }: {
   accounts: AdminAccount[];
   onStatusChange: (accountId: string, isActive: boolean) => void;
+  onDelete: (account: AdminAccount) => void;
   pendingAccountId: string | null;
+  currentUserId: string | undefined;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -175,7 +195,9 @@ function AccountTable({
               account={account}
               key={account.id}
               onStatusChange={onStatusChange}
+              onDelete={onDelete}
               pending={pendingAccountId === account.id}
+              isSelf={currentUserId === account.id}
             />
           ))}
         </tbody>
@@ -255,11 +277,15 @@ function JobsSection({ jobs }: { jobs: AdminJob[] }) {
 function AccountsSection({
   accounts,
   onStatusChange,
+  onDelete,
   pendingAccountId,
+  currentUserId,
 }: {
   accounts: AdminAccount[];
   onStatusChange: (accountId: string, isActive: boolean) => void;
+  onDelete: (account: AdminAccount) => void;
   pendingAccountId: string | null;
+  currentUserId: string | undefined;
 }) {
   return (
     <section className="space-y-3">
@@ -272,7 +298,9 @@ function AccountsSection({
         <AccountTable
           accounts={accounts}
           onStatusChange={onStatusChange}
+          onDelete={onDelete}
           pendingAccountId={pendingAccountId}
+          currentUserId={currentUserId}
         />
       )}
     </section>
@@ -280,12 +308,18 @@ function AccountsSection({
 }
 
 function AdminBody() {
+  const { user } = useAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [accounts, setAccounts] = useState<AdminAccount[] | null>(null);
   const [jobs, setJobs] = useState<AdminJob[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
+  const [accountToDelete, setAccountToDelete] = useState<AdminAccount | null>(
+    null
+  );
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function changeAccountStatus(accountId: string, isActive: boolean) {
     setPendingAccountId(accountId);
@@ -304,6 +338,26 @@ function AdminBody() {
       setActionError(toApiError(err).message);
     } finally {
       setPendingAccountId(null);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!accountToDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteAdminAccount(accountToDelete.id);
+      setAccounts(
+        (current) =>
+          current?.filter((account) => account.id !== accountToDelete.id) ??
+          null
+      );
+      setAccountToDelete(null);
+      setStats(await getAdminStats());
+    } catch (err) {
+      setDeleteError(toApiError(err).message);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -339,6 +393,10 @@ function AdminBody() {
     );
   }
 
+  const deleteLabel = accountToDelete
+    ? accountToDelete.name || accountToDelete.email
+    : '';
+
   return (
     <>
       <StatsSection stats={stats} />
@@ -348,9 +406,53 @@ function AdminBody() {
         <AccountsSection
           accounts={accounts}
           onStatusChange={changeAccountStatus}
+          onDelete={(account) => {
+            setDeleteError(null);
+            setAccountToDelete(account);
+          }}
           pendingAccountId={pendingAccountId}
+          currentUserId={user?.id}
         />
       </div>
+      <Modal
+        open={accountToDelete !== null}
+        onClose={() => {
+          if (!deleting) setAccountToDelete(null);
+        }}
+        dismissible={!deleting}
+        title="Delete this account?"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              className="sm:w-auto"
+              onClick={() => setAccountToDelete(null)}
+              disabled={deleting}
+              data-autofocus
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              className="sm:w-auto"
+              onClick={confirmDelete}
+              loading={deleting}
+            >
+              {deleteError ? 'Try again' : 'Delete'}
+            </Button>
+          </>
+        }
+      >
+        <p className="break-words">
+          This removes {deleteLabel} and all of their documents. This can&apos;t
+          be undone.
+        </p>
+        {deleteError && (
+          <Alert className="mt-4" tone="error">
+            {deleteError}
+          </Alert>
+        )}
+      </Modal>
     </>
   );
 }

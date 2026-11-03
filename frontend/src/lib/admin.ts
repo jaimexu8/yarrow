@@ -45,6 +45,10 @@ export async function getAdminStats(): Promise<AdminStats> {
   return res.data;
 }
 
+export async function deleteAdminAccount(accountId: string): Promise<void> {
+  await api.delete(`/api/v1/admin/accounts/${accountId}`);
+}
+
 export type AdminJob = {
   id: string;
   document_id: string;

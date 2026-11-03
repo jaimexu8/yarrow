@@ -1,9 +1,16 @@
-import { afterEach, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import type { AdminJob, AdminStats } from '@/lib/admin';
+import { afterEach, beforeAll, expect, it, vi } from 'vitest';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
+import type { AdminAccount, AdminJob, AdminStats } from '@/lib/admin';
 
 vi.mock('@/context/AuthContext', () => ({
-  useAuth: () => ({ user: { is_admin: true } }),
+  useAuth: () => ({ user: { id: 'admin-1', is_admin: true } }),
 }));
 
 vi.mock('@/lib/admin', async (importOriginal) => {
@@ -13,19 +20,36 @@ vi.mock('@/lib/admin', async (importOriginal) => {
     getAdminStats: vi.fn(),
     listAccounts: vi.fn(),
     listAdminJobs: vi.fn(),
+    deleteAdminAccount: vi.fn(),
     setAccountActive: vi.fn(),
   };
 });
 
 import AdminPage from './page';
-import { getAdminStats, listAccounts, listAdminJobs } from '@/lib/admin';
+import {
+  deleteAdminAccount,
+  getAdminStats,
+  listAccounts,
+  listAdminJobs,
+} from '@/lib/admin';
+
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = vi.fn(function (
+    this: HTMLDialogElement
+  ) {
+    this.open = true;
+  });
+  HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
+    this.open = false;
+  });
+});
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 
-const EMPTY_STATS: AdminStats = {
+const STATS: AdminStats = {
   user_count: 2,
   document_count: 3,
   storage_used_bytes: 0,
@@ -37,6 +61,27 @@ const EMPTY_STATS: AdminStats = {
     canceled: 0,
   },
 };
+
+const ACCOUNTS: AdminAccount[] = [
+  {
+    id: 'admin-1',
+    name: 'Aagam',
+    email: 'admin@example.com',
+    created_at: '2026-01-01T00:00:00',
+    is_admin: true,
+    document_count: 0,
+    is_active: true,
+  },
+  {
+    id: 'user-2',
+    name: 'Pat Lee',
+    email: 'pat@example.com',
+    created_at: '2026-01-02T00:00:00',
+    is_admin: false,
+    document_count: 1,
+    is_active: true,
+  },
+];
 
 function job(overrides: Partial<AdminJob> = {}): AdminJob {
   return {
@@ -57,9 +102,15 @@ function job(overrides: Partial<AdminJob> = {}): AdminJob {
   };
 }
 
-async function renderAdmin(jobs: AdminJob[]) {
-  vi.mocked(getAdminStats).mockResolvedValue(EMPTY_STATS);
-  vi.mocked(listAccounts).mockResolvedValue([]);
+async function renderAdmin({
+  jobs = [],
+  accounts = ACCOUNTS,
+}: {
+  jobs?: AdminJob[];
+  accounts?: AdminAccount[];
+} = {}) {
+  vi.mocked(getAdminStats).mockResolvedValue(STATS);
+  vi.mocked(listAccounts).mockResolvedValue(accounts);
   vi.mocked(listAdminJobs).mockResolvedValue(jobs);
   render(<AdminPage />);
   await waitFor(() => {
@@ -68,7 +119,7 @@ async function renderAdmin(jobs: AdminJob[]) {
 }
 
 it('shows jobs from other users with queue place', async () => {
-  await renderAdmin([job()]);
+  await renderAdmin({ jobs: [job()], accounts: [] });
   expect(screen.getByText('Pat Lee')).toBeTruthy();
   expect(screen.getByText('pat@example.com')).toBeTruthy();
   expect(screen.getByText('notes.pdf')).toBeTruthy();
@@ -76,32 +127,67 @@ it('shows jobs from other users with queue place', async () => {
 });
 
 it('shows queue place and stage for a running job', async () => {
-  await renderAdmin([
-    job({
-      id: 'j2',
-      status: 'processing',
-      current_stage: 'parsing',
-      queue_position: null,
-    }),
-  ]);
+  await renderAdmin({
+    jobs: [
+      job({
+        id: 'j2',
+        status: 'processing',
+        current_stage: 'parsing',
+        queue_position: null,
+      }),
+    ],
+    accounts: [],
+  });
   expect(screen.getByText('Running')).toBeTruthy();
   expect(screen.getByText('Parsing')).toBeTruthy();
 });
 
 it('shows why a failed job failed', async () => {
-  await renderAdmin([
-    job({
-      id: 'j3',
-      status: 'failed',
-      current_stage: 'parsing',
-      queue_position: null,
-      error_message:
-        'The file was uploaded, but processing could not be started. Please try again later.',
-    }),
-  ]);
+  await renderAdmin({
+    jobs: [
+      job({
+        id: 'j3',
+        status: 'failed',
+        current_stage: 'parsing',
+        queue_position: null,
+        error_message:
+          'The file was uploaded, but processing could not be started. Please try again later.',
+      }),
+    ],
+    accounts: [],
+  });
   expect(
     screen.getByText(
       'The file was uploaded, but processing could not be started. Please try again later.'
     )
   ).toBeTruthy();
+});
+
+it('deletes another account after confirm', async () => {
+  vi.mocked(deleteAdminAccount).mockResolvedValue();
+  await renderAdmin();
+
+  fireEvent.click(
+    screen.getByRole('button', { name: 'More actions for Pat Lee' })
+  );
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText(/all of their documents/)).toBeTruthy();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+  await waitFor(() => {
+    expect(deleteAdminAccount).toHaveBeenCalledWith('user-2');
+  });
+  await waitFor(() => {
+    expect(screen.queryByText('Pat Lee')).toBeNull();
+  });
+});
+
+it('does not offer delete on the signed-in admin', async () => {
+  await renderAdmin();
+  fireEvent.click(
+    screen.getByRole('button', { name: 'More actions for Aagam' })
+  );
+  expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
 });

@@ -16,6 +16,7 @@ from app.schemas.admin import (
     AdminStats,
     JobStatusCounts,
 )
+from app.services.account import delete_account
 
 router = APIRouter()
 
@@ -165,3 +166,30 @@ async def update_account_status(
     account.is_active = update.is_active
     await db.commit()
     return AdminAccountStatus(id=account.id, is_active=account.is_active)
+
+
+@router.delete("/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user_account(
+    account_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_active_admin),
+):
+    # wipe the account and its documents; disable is a separate action
+    if account_id == admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own account.",
+        )
+
+    account = await db.get(User, account_id)
+    if account is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Account not found."
+        )
+
+    outcome = await delete_account(db, account_id)
+    if not outcome.ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
