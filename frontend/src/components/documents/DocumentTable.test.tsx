@@ -4,10 +4,16 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from '@testing-library/react';
 import type { DocumentStatus, DocumentSummary } from '@/lib/documents';
-import { bulkDelete, bulkReprocess } from '@/lib/documents';
+import {
+  bulkDelete,
+  bulkReprocess,
+  moveDocumentToFolder,
+} from '@/lib/documents';
+import { createFolder, listFolders } from '@/lib/folders';
 import { DocumentLibrary } from './DocumentTable';
 
 const state = vi.hoisted(() => ({
@@ -31,8 +37,16 @@ vi.mock('@/lib/documents', async (importOriginal) => {
     ...actual,
     bulkDelete: vi.fn(),
     bulkReprocess: vi.fn(),
+    moveDocumentToFolder: vi.fn(),
   };
 });
+
+vi.mock('@/lib/folders', () => ({
+  listFolders: vi.fn(async () => []),
+  createFolder: vi.fn(),
+  renameFolder: vi.fn(),
+  deleteFolder: vi.fn(),
+}));
 
 function checkbox(filename: string) {
   return screen.getByRole('checkbox', { name: `Select ${filename}` });
@@ -64,6 +78,7 @@ function makeDoc(
     status,
     error_message: null,
     created_at: '2025-01-01T00:00:00',
+    folder_id: null,
   };
 }
 
@@ -89,6 +104,7 @@ afterEach(() => {
   state.documents = [];
   cleanup();
   vi.clearAllMocks();
+  vi.mocked(listFolders).mockResolvedValue([]);
 });
 
 test('selecting rows shows a bulk action bar with the count', () => {
@@ -237,4 +253,72 @@ test('shows a clear-filters empty state when a status matches nothing', () => {
   for (const doc of DOCS) {
     expect(nameLink(doc.filename), doc.filename).not.toBeNull();
   }
+});
+
+test('creating a folder lists it in the library', async () => {
+  state.documents = DOCS;
+  vi.mocked(createFolder).mockResolvedValue({
+    id: 'folder-1',
+    name: 'Receipts',
+    created_at: null,
+  });
+  render(<DocumentLibrary />);
+  fireEvent.click(screen.getByRole('button', { name: 'New folder' }));
+  fireEvent.change(screen.getByLabelText('Folder name'), {
+    target: { value: 'Receipts' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  await waitFor(() => expect(createFolder).toHaveBeenCalledWith('Receipts'));
+  expect(screen.getByRole('button', { name: 'Receipts' })).toBeTruthy();
+});
+
+test('opening a folder shows only documents in that folder', async () => {
+  const filed = { ...makeDoc('a', 'filed.pdf', 'completed'), folder_id: 'f1' };
+  const loose = makeDoc('b', 'loose.pdf', 'completed');
+  state.documents = [filed, loose];
+  vi.mocked(listFolders).mockResolvedValue([
+    { id: 'f1', name: 'Receipts', created_at: null },
+  ]);
+  render(<DocumentLibrary />);
+  await screen.findByRole('button', { name: 'Receipts' });
+  fireEvent.click(screen.getByRole('button', { name: 'Receipts' }));
+  expect(nameLink('filed.pdf')).not.toBeNull();
+  expect(nameLink('loose.pdf')).toBeNull();
+});
+
+test('unfiled hides documents that were moved into a folder', async () => {
+  const filed = { ...makeDoc('a', 'filed.pdf', 'completed'), folder_id: 'f1' };
+  const loose = makeDoc('b', 'loose.pdf', 'completed');
+  state.documents = [filed, loose];
+  vi.mocked(listFolders).mockResolvedValue([
+    { id: 'f1', name: 'Receipts', created_at: null },
+  ]);
+  render(<DocumentLibrary />);
+  await screen.findByRole('button', { name: 'Receipts' });
+  fireEvent.click(screen.getByRole('button', { name: 'Unfiled' }));
+  expect(nameLink('loose.pdf')).not.toBeNull();
+  expect(nameLink('filed.pdf')).toBeNull();
+});
+
+test('move to folder sends the selected folder id', async () => {
+  state.documents = DOCS;
+  vi.mocked(listFolders).mockResolvedValue([
+    { id: 'f1', name: 'Receipts', created_at: null },
+  ]);
+  vi.mocked(moveDocumentToFolder).mockResolvedValue({
+    ...DOCS[0],
+    folder_id: 'f1',
+  });
+  render(<DocumentLibrary />);
+  await screen.findByRole('button', { name: 'Receipts' });
+  fireEvent.click(
+    screen.getByRole('button', { name: 'More actions for report-a.pdf' })
+  );
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Move to folder' }));
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.click(within(dialog).getByRole('radio', { name: 'Receipts' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Move' }));
+  await waitFor(() =>
+    expect(moveDocumentToFolder).toHaveBeenCalledWith('a', 'f1')
+  );
 });

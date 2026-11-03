@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.models import Document, Job, Page
 
 from app.core.config import settings
+from app.core.queue import job_priority
 from app.schemas.document import DocumentOut, ReprocessInfo
 from app.services.failure_messages import INTERRUPTED_MESSAGE, QUEUE_FAILED_MESSAGE
 
@@ -168,7 +169,7 @@ class ReprocessOutcome:
 async def reprocess_document(
     db: AsyncSession,
     document_id: UUID,
-    enqueue: Callable[[UUID, Sequence[int] | None], str],
+    enqueue: Callable[..., str],
 ) -> ReprocessOutcome:
     """Queue a job that reprocesses the document; see the module docstring
     for which pages it covers
@@ -223,12 +224,18 @@ async def reprocess_document(
     db.add(new_job)
     document.status = "queued"
     document.error_message = None
-    
+    size_bytes = document.file_size_bytes
+
     await db.commit()
 
     try:
         # Enqueue the reprocess job in the background worker
-        task_id = await run_in_threadpool(enqueue, new_job.id, pages)
+        task_id = await run_in_threadpool(
+            enqueue,
+            new_job.id,
+            pages,
+            priority=job_priority(size_bytes),
+        )
     except Exception:
         logger.exception(f"Queueing reprocess job {new_job.id} failed")
         new_job.status = "failed"

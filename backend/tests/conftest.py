@@ -297,11 +297,13 @@ def fake_storage(monkeypatch: pytest.MonkeyPatch) -> FakeStorage:
 
 class EnqueuedJobs(list):
     """Job ids in the order they were queued. pages maps each job id to
-    the page numbers it was limited to, or None for the whole document."""
+    the page numbers it was limited to, or None for the whole document.
+    priorities maps each job id to the celery priority that was sent."""
 
     def __init__(self) -> None:
         super().__init__()
         self.pages: dict = {}
+        self.priorities: dict = {}
 
 
 @pytest.fixture
@@ -312,9 +314,10 @@ def fake_queue(monkeypatch: pytest.MonkeyPatch) -> EnqueuedJobs:
 
     enqueued = EnqueuedJobs()
 
-    def _enqueue(job_id, pages=None):
+    def _enqueue(job_id, pages=None, priority=None):
         enqueued.append(job_id)
         enqueued.pages[job_id] = None if pages is None else list(pages)
+        enqueued.priorities[job_id] = priority
         return f"task-{len(enqueued)}"
 
     monkeypatch.setattr(documents, "enqueue_document_processing", _enqueue)

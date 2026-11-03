@@ -9,6 +9,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Response,
     UploadFile,
     status,
@@ -19,13 +20,17 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
-from yarrow_db.models import Document, DocumentShare, Job, Page, Region, User
+from yarrow_db.models import Document, DocumentShare, Folder, Job, Page, Region, User
 from yarrow_db.models.region import RegionImage
 from yarrow_storage import ObjectNotFoundError, get_storage
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.queue import enqueue_document_processing, revoke_document_processing
+from app.core.queue import (
+    enqueue_document_processing,
+    job_priority,
+    revoke_document_processing,
+)
 from app.core.security import get_current_user
 from app.deps import (
     DocumentAccess,
@@ -38,6 +43,7 @@ from app.schemas import (
     BulkDocumentRequest,
     BulkItemResult,
     DocumentDetail,
+    DocumentFolderUpdate,
     DocumentOut,
     DocumentRename,
     JobOut,
@@ -365,7 +371,9 @@ async def upload_documents(
             # Re-reported from an earlier upload; it was queued back then.
             continue
         try:
-            item.task_id = enqueue_document_processing(item.job_id)
+            item.task_id = enqueue_document_processing(
+                item.job_id, priority=job_priority(item.file_size_bytes)
+            )
         except Exception:
             # The file is already stored and counted, so the upload itself
             # succeeded; only starting processing failed. Record that on the
@@ -396,24 +404,60 @@ async def upload_documents(
 
 @router.get("/", response_model=list[DocumentOut])
 async def list_documents(
+    folder_id: str | None = Query(
+        default=None,
+        description=(
+            "Filter owned documents by folder. Pass a folder UUID, or the "
+            "string 'null' for unfiled documents. Omit to list all documents "
+            "the caller can see, including shares."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     await _cleanup_expired_trash(db)
-    shared_subquery = select(DocumentShare.document_id).where(
-        DocumentShare.shared_with_user_id == current_user.id
-    )
-    result = await db.execute(
-        select(Document)
-        .where(
-            Document.deleted_at.is_(None),
-            or_(
-                Document.owner_id == current_user.id,
-                Document.id.in_(shared_subquery),
-            ),
+    if folder_id is None or folder_id == "":
+        shared_subquery = select(DocumentShare.document_id).where(
+            DocumentShare.shared_with_user_id == current_user.id
         )
-        .order_by(Document.created_at.desc())
+        result = await db.execute(
+            select(Document)
+            .where(
+                Document.deleted_at.is_(None),
+                or_(
+                    Document.owner_id == current_user.id,
+                    Document.id.in_(shared_subquery),
+                ),
+            )
+            .order_by(Document.created_at.desc())
+        )
+        return await documents_out(db, list(result.scalars().all()))
+
+    # folder filters are for the owner's docs only; shares stay in the
+    # unfiltered list.
+    query = select(Document).where(
+        Document.owner_id == current_user.id,
+        Document.deleted_at.is_(None),
     )
+    if folder_id.lower() == "null":
+        query = query.where(Document.folder_id.is_(None))
+    else:
+        try:
+            folder_uuid = UUID(folder_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="folder_id must be a UUID or the string 'null'",
+            ) from None
+        folder = await db.get(Folder, folder_uuid)
+        if folder is None or folder.owner_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Folder not found",
+            )
+        query = query.where(Document.folder_id == folder_uuid)
+
+    result = await db.execute(query.order_by(Document.created_at.desc()))
     return await documents_out(db, list(result.scalars().all()))
 
 
@@ -485,6 +529,37 @@ async def rename_document(
     """
     document = access.document
     document.filename = body.filename
+    await db.commit()
+    await db.refresh(document)
+    return (await documents_out(db, [document]))[0]
+
+
+@router.patch("/{document_id}/folder", response_model=DocumentOut)
+async def move_document_to_folder(
+    body: DocumentFolderUpdate,
+    access: DocumentAccess = Depends(get_document_access),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Move an owned document into a folder, or unfile it with null.
+
+    A folder that is missing or belongs to someone else is a 404, so a
+    caller cannot tell other people's folders apart from missing ones.
+    """
+    if access.document.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner can move this document",
+        )
+    document = access.document
+    if body.folder_id is not None:
+        folder = await db.get(Folder, body.folder_id)
+        if folder is None or folder.owner_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Folder not found",
+            )
+    document.folder_id = body.folder_id
     await db.commit()
     await db.refresh(document)
     return (await documents_out(db, [document]))[0]

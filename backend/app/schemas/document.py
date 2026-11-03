@@ -77,6 +77,8 @@ class DocumentOut(BaseModel):
     created_at: datetime | None = None
     # Set while the document is in trash; null in the normal library.
     deleted_at: datetime | None = None
+    # null means unfiled (US-103).
+    folder_id: UUID | None = None
     # Filled in by the endpoint (see app.services.reprocess); not a column.
     reprocess: ReprocessInfo | None = None
 

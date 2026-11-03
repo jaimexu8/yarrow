@@ -1,7 +1,7 @@
 """soft-delete documents with a 7-day trash window
 
 Revision ID: 0013
-Revises: 0012
+Revises: 0014_folders
 Create Date: 2026-11-03 00:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0013"
-down_revision = "0012"
+down_revision = "0014_folders"
 branch_labels = None
 depends_on = None
 
