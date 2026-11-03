@@ -36,6 +36,7 @@ function doc(
     status: 'completed',
     error_message: null,
     created_at: null,
+    folder_id: null,
     tags,
   };
 }
