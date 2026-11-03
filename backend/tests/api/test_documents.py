@@ -87,6 +87,28 @@ class TestUpload:
         assert job.celery_task_id == "task-1"
         assert job.status == "queued"
 
+    async def test_smaller_file_is_queued_with_higher_priority(
+        self, client, auth_headers, fake_storage, fake_queue
+    ):
+        from app.core.queue import job_priority
+
+        small = (FIXTURES_DIR / "sample.pdf").read_bytes()
+        large = small + b"\0" * (1_000_000 - len(small) + 1)
+        files = [
+            ("files", ("small.pdf", small, "application/pdf")),
+            ("files", ("large.pdf", large, "application/pdf")),
+        ]
+
+        response = await client.post(UPLOAD, headers=auth_headers, files=files)
+
+        assert response.status_code == 200, response.text
+        assert len(fake_queue) == 2
+        small_priority = fake_queue.priorities[fake_queue[0]]
+        large_priority = fake_queue.priorities[fake_queue[1]]
+        assert small_priority == job_priority(len(small))
+        assert large_priority == job_priority(len(large))
+        assert small_priority < large_priority
+
     async def test_unsupported_type_is_rejected_with_reason(
         self, client, auth_headers, fake_storage, fake_queue
     ):
@@ -308,7 +330,7 @@ class TestQueueOutage:
         and the document shows as failed with a reason instead."""
         from app.api.v1.endpoints import documents
 
-        def broker_down(_job_id):
+        def broker_down(_job_id, **_kwargs):
             raise ConnectionError("broker unreachable")
 
         monkeypatch.setattr(documents, "enqueue_document_processing", broker_down)
@@ -333,7 +355,7 @@ class TestQueueOutage:
 
         calls = []
 
-        def flaky(job_id):
+        def flaky(job_id, **_kwargs):
             calls.append(job_id)
             if len(calls) == 1:
                 raise ConnectionError("broker hiccup")
