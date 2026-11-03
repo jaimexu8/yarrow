@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.queue import job_priority
 from app.schemas.document import DocumentOut, ReprocessInfo
 from app.services.failure_messages import INTERRUPTED_MESSAGE, QUEUE_FAILED_MESSAGE
+from app.services.tags import tags_for_documents
 
 logger = logging.getLogger(__name__)
 
@@ -140,10 +141,12 @@ async def reprocess_info_for(db: AsyncSession, documents: Sequence[Document]) ->
 async def documents_out(db: AsyncSession, documents: Sequence[Document]) -> list[DocumentOut]:
     """DocumentOut for each document, with its reprocess info filled in."""
     info = await reprocess_info_for(db, documents)
+    tags = await tags_for_documents(db, [document.id for document in documents])
     out = []
     for document in documents:
         item = DocumentOut.model_validate(document)
         item.reprocess = info[document.id]
+        item.tags = tags.get(document.id, [])
         out.append(item)
     return out
 

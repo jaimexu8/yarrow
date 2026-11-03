@@ -29,6 +29,11 @@ export type ReprocessInfo = {
   page_numbers: number[];
 };
 
+export type DocumentTag = {
+  id: string;
+  name: string;
+};
+
 export type DocumentSummary = {
   id: string;
   filename: string;
@@ -41,6 +46,7 @@ export type DocumentSummary = {
   deleted_at?: string | null;
   folder_id: string | null;
   reprocess?: ReprocessInfo | null;
+  tags?: DocumentTag[];
 };
 
 /** Keep in sync with backend TRASH_RETENTION_DAYS. Not a user setting. */

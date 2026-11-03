@@ -20,7 +20,17 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
-from yarrow_db.models import Document, DocumentShare, Folder, Job, Page, Region, User
+from yarrow_db.models import (
+    Document,
+    DocumentShare,
+    DocumentTag,
+    Folder,
+    Job,
+    Page,
+    Region,
+    Tag,
+    User,
+)
 from yarrow_db.models.region import RegionImage
 from yarrow_storage import ObjectNotFoundError, get_storage
 
@@ -72,7 +82,6 @@ from app.services.reprocess import (
     ReprocessError,
     documents_out,
     reprocess_document,
-    reprocess_info_for,
 )
 
 router = APIRouter()
@@ -412,10 +421,43 @@ async def list_documents(
             "the caller can see, including shares."
         ),
     ),
+    tag_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     await _cleanup_expired_trash(db)
+    if tag_id is not None:
+        query = (
+            select(Document)
+            .join(DocumentTag, DocumentTag.document_id == Document.id)
+            .join(Tag, Tag.id == DocumentTag.tag_id)
+            .where(
+                Document.owner_id == current_user.id,
+                Document.deleted_at.is_(None),
+                DocumentTag.tag_id == tag_id,
+                Tag.owner_id == current_user.id,
+            )
+        )
+        if folder_id and folder_id.lower() == "null":
+            query = query.where(Document.folder_id.is_(None))
+        elif folder_id:
+            try:
+                folder_uuid = UUID(folder_id)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="folder_id must be a UUID or the string 'null'",
+                ) from None
+            folder = await db.get(Folder, folder_uuid)
+            if folder is None or folder.owner_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Folder not found",
+                )
+            query = query.where(Document.folder_id == folder_uuid)
+        result = await db.execute(query.order_by(Document.created_at.desc()))
+        return await documents_out(db, list(result.scalars().all()))
+
     if folder_id is None or folder_id == "":
         shared_subquery = select(DocumentShare.document_id).where(
             DocumentShare.shared_with_user_id == current_user.id
@@ -507,12 +549,13 @@ async def get_document(
     pages = await db.execute(
         select(Page).where(Page.document_id == document_id).order_by(Page.page_number)
     )
-    detail = DocumentDetail.model_validate(document)
-    detail.reprocess = (await reprocess_info_for(db, [document]))[document.id]
+    base = (await documents_out(db, [document]))[0]
     # Validated one by one so each gets the user-facing error filter (US-11).
-    detail.jobs = [JobOut.model_validate(job) for job in jobs.scalars()]
-    detail.pages = [PageOut.model_validate(page) for page in pages.scalars()]
-    return detail
+    return DocumentDetail(
+        **base.model_dump(),
+        jobs=[JobOut.model_validate(job) for job in jobs.scalars()],
+        pages=[PageOut.model_validate(page) for page in pages.scalars()],
+    )
 
 
 @router.patch("/{document_id}", response_model=DocumentOut)

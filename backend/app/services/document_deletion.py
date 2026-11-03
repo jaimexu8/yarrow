@@ -14,6 +14,7 @@ from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
 from yarrow_db.models import (
     Document,
     DocumentShare,
+    DocumentTag,
     Job,
     Page,
     Region,
@@ -146,6 +147,7 @@ async def delete_document_rows(
         delete(Table).where(Table.id.in_(table_ids)),
         delete(Job).where(Job.document_id.in_(document_ids)),
         delete(DocumentShare).where(DocumentShare.document_id.in_(document_ids)),
+        delete(DocumentTag).where(DocumentTag.document_id.in_(document_ids)),
         delete(Document).where(Document.id.in_(document_ids)),
     ):
         await db.execute(statement)

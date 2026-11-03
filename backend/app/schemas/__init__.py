@@ -64,6 +64,7 @@ from .table import (
     TableNode,
     TablePart,
 )
+from .tag import TagCreate, TagListItem, TagOut
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -106,6 +107,9 @@ __all__ = [
     "TableMutationResult",
     "TableNode",
     "TablePart",
+    "TagCreate",
+    "TagListItem",
+    "TagOut",
     "Token",
     "UpdateShareRequest",
     "UploadAccepted",
