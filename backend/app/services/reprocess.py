@@ -12,8 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.models import Document, Job, Page
 
 from app.core.config import settings
+from app.core.queue import job_priority
 from app.schemas.document import DocumentOut, ReprocessInfo
 from app.services.failure_messages import INTERRUPTED_MESSAGE, QUEUE_FAILED_MESSAGE
+from app.services.tags import tags_for_documents
 
 logger = logging.getLogger(__name__)
 
@@ -139,10 +141,12 @@ async def reprocess_info_for(db: AsyncSession, documents: Sequence[Document]) ->
 async def documents_out(db: AsyncSession, documents: Sequence[Document]) -> list[DocumentOut]:
     """DocumentOut for each document, with its reprocess info filled in."""
     info = await reprocess_info_for(db, documents)
+    tags = await tags_for_documents(db, [document.id for document in documents])
     out = []
     for document in documents:
         item = DocumentOut.model_validate(document)
         item.reprocess = info[document.id]
+        item.tags = tags.get(document.id, [])
         out.append(item)
     return out
 
@@ -168,7 +172,7 @@ class ReprocessOutcome:
 async def reprocess_document(
     db: AsyncSession,
     document_id: UUID,
-    enqueue: Callable[[UUID, Sequence[int] | None], str],
+    enqueue: Callable[..., str],
 ) -> ReprocessOutcome:
     """Queue a job that reprocesses the document; see the module docstring
     for which pages it covers
@@ -223,12 +227,18 @@ async def reprocess_document(
     db.add(new_job)
     document.status = "queued"
     document.error_message = None
-    
+    size_bytes = document.file_size_bytes
+
     await db.commit()
 
     try:
         # Enqueue the reprocess job in the background worker
-        task_id = await run_in_threadpool(enqueue, new_job.id, pages)
+        task_id = await run_in_threadpool(
+            enqueue,
+            new_job.id,
+            pages,
+            priority=job_priority(size_bytes),
+        )
     except Exception:
         logger.exception(f"Queueing reprocess job {new_job.id} failed")
         new_job.status = "failed"

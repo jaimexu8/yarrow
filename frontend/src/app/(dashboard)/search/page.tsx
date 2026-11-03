@@ -28,6 +28,7 @@ export default function SearchPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [fileType, setFileType] = useState('');
+  const [sort, setSort] = useState<'date' | 'name'>('date');
   const [results, setResults] = useState<SearchHit[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +46,7 @@ export default function SearchPage() {
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
           fileType: fileType || undefined,
+          sort,
         })
       );
     } catch (err) {
@@ -88,7 +90,7 @@ export default function SearchPage() {
             Search
           </Button>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Input
             id="search-date-from"
             label="From date"
@@ -119,6 +121,17 @@ export default function SearchPage() {
                 {type.label}
               </option>
             ))}
+          </Select>
+          <Select
+            id="search-sort"
+            label="Sort"
+            value={sort}
+            onChange={(event) =>
+              setSort(event.target.value === 'name' ? 'name' : 'date')
+            }
+          >
+            <option value="date">Date</option>
+            <option value="name">Name</option>
           </Select>
         </div>
       </form>

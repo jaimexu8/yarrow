@@ -9,6 +9,7 @@ import {
   Search,
   Settings,
   Shield,
+  Trash2,
   Upload,
   type LucideIcon,
 } from 'lucide-react';
@@ -36,6 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/jobs', label: 'Jobs', icon: ListChecks },
   { href: '/warnings', label: 'Warnings', icon: AlertTriangle },
   { href: '/search', label: 'Search', icon: Search },
+  { href: '/trash', label: 'Trash', icon: Trash2 },
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/admin', label: 'Admin', icon: Shield, adminOnly: true },
 ];

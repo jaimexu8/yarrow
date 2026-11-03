@@ -1,8 +1,9 @@
 from datetime import date, datetime, time, timedelta
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import nulls_last, select
+from sqlalchemy import func, nulls_last, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.models import Document, Page, Region, RegionText, User
 
@@ -54,12 +55,20 @@ def _filter_clauses(
     return clauses
 
 
+def _document_order(sort: Literal["date", "name"]):
+    # date: newest first. name: a-z, case-insensitive.
+    if sort == "name":
+        return (nulls_last(func.lower(Document.filename)), Document.id)
+    return (nulls_last(Document.created_at.desc()), Document.id)
+
+
 @router.get("/", response_model=list[SearchHit])
 async def search_documents(
     q: str = Query(default=""),
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     file_type: str | None = Query(default=None),
+    sort: Literal["date", "name"] = Query(default="date"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -90,10 +99,11 @@ async def search_documents(
             .join(RegionText, RegionText.region_id == Region.id)
             .where(
                 Document.owner_id == current_user.id,
+                Document.deleted_at.is_(None),
                 *clauses,
             )
             .order_by(
-                Document.created_at.desc(),
+                *_document_order(sort),
                 Page.page_number,
                 nulls_last(Region.reading_order),
             )
@@ -142,8 +152,12 @@ async def search_documents(
     # the filters.
     result = await db.execute(
         select(Document)
-        .where(Document.owner_id == current_user.id, *clauses)
-        .order_by(Document.created_at.desc())
+        .where(
+            Document.owner_id == current_user.id,
+            Document.deleted_at.is_(None),
+            *clauses,
+        )
+        .order_by(*_document_order(sort))
     )
     return [
         SearchHit(id=document.id, filename=document.filename, snippets=[])

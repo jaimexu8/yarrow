@@ -26,6 +26,7 @@ function documentWith(status: DocumentSummary['status']): DocumentSummary {
     status,
     error_message: null,
     created_at: null,
+    folder_id: null,
   };
 }
 
@@ -59,7 +60,7 @@ test('is enabled for a completed document', () => {
   ).toBe(false);
 });
 
-test('offers markdown and plain text, and exports the chosen format', async () => {
+test('offers markdown, text, json, and csv, and exports the chosen format', async () => {
   viewer.document = documentWith('completed');
   render(<ExportMenu />);
 
@@ -72,6 +73,11 @@ test('offers markdown and plain text, and exports the chosen format', async () =
   expect(
     screen
       .getByRole('menuitem', { name: 'Structured JSON (.json)' })
+      .hasAttribute('disabled')
+  ).toBe(false);
+  expect(
+    screen
+      .getByRole('menuitem', { name: 'Tables (.csv)' })
       .hasAttribute('disabled')
   ).toBe(false);
 
@@ -96,6 +102,12 @@ test('offers markdown and plain text, and exports the chosen format', async () =
     screen.getByRole('menuitem', { name: 'Structured JSON (.json)' })
   );
   expect(exportDocument).toHaveBeenCalledWith('doc-1', 'json', 'report.pdf');
+
+  vi.mocked(exportDocument).mockClear();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  fireEvent.click(screen.getByRole('button', { name: /export/i }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Tables (.csv)' }));
+  expect(exportDocument).toHaveBeenCalledWith('doc-1', 'csv', 'report.pdf');
 });
 
 test('shows the server message when the export fails', async () => {

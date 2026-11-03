@@ -19,4 +19,10 @@ celery_app.conf.update(
     enable_utc=True,
     task_time_limit=3600,
     task_soft_time_limit=3300,
+    # redis ignores send_task priority unless these are set. 0 is highest.
+    broker_transport_options={
+        "priority_steps": list(range(10)),
+        "sep": ":",
+        "queue_order_strategy": "priority",
+    },
 )

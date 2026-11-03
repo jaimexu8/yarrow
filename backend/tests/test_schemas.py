@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.schemas import UserCreate, UserOut
+from app.schemas import TagCreate, UserCreate, UserOut
 
 
 def _user_out(email: str) -> UserOut:
@@ -37,3 +37,17 @@ def test_registration_still_rejects_reserved_domains():
     """Only output is relaxed: new sign-ups are still strictly validated."""
     with pytest.raises(ValidationError):
         UserCreate(email="new@yarrow.local", password="long-enough-password")
+
+
+def test_tag_name_is_trimmed():
+    assert TagCreate(name="  Invoice  ").name == "Invoice"
+
+
+def test_empty_tag_name_is_rejected():
+    with pytest.raises(ValidationError):
+        TagCreate(name="   ")
+
+
+def test_long_tag_name_is_rejected():
+    with pytest.raises(ValidationError):
+        TagCreate(name="x" * 41)

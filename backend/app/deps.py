@@ -33,7 +33,11 @@ async def get_document_access(
     current_user: User = Depends(get_current_user),
 ) -> DocumentAccess:
     """Resolve the document, checking ownership and shared ACLs."""
-    result = await db.execute(select(Document).where(Document.id == document_id))
+    result = await db.execute(
+        select(Document).where(
+            Document.id == document_id, Document.deleted_at.is_(None)
+        )
+    )
     document = result.scalars().first()
     if document is None:
         raise _NO_ACCESS

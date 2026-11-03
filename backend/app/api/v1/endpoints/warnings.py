@@ -25,7 +25,10 @@ async def list_warnings(
         )
         .join(Page, Page.document_id == Document.id)
         .join(Warning, Warning.page_id == Page.id)
-        .where(Document.owner_id == current_user.id)
+        .where(
+            Document.owner_id == current_user.id,
+            Document.deleted_at.is_(None),
+        )
         .order_by(
             Document.created_at.desc(),
             Document.id,

@@ -15,6 +15,8 @@ export type SearchHit = {
   snippets: SearchSnippet[];
 };
 
+export type SearchSort = 'date' | 'name';
+
 export type SearchFilters = {
   /** UTC calendar date, YYYY-MM-DD. Documents uploaded on or after this day. */
   dateFrom?: string;
@@ -22,6 +24,8 @@ export type SearchFilters = {
   dateTo?: string;
   /** MIME type stored on the document, e.g. application/pdf. */
   fileType?: string;
+  /** date = newest first. name = a-z. omitted means date. */
+  sort?: SearchSort;
 };
 
 export async function searchDocuments(
@@ -32,6 +36,7 @@ export async function searchDocuments(
   if (filters?.dateFrom) params.date_from = filters.dateFrom;
   if (filters?.dateTo) params.date_to = filters.dateTo;
   if (filters?.fileType) params.file_type = filters.fileType;
+  if (filters?.sort) params.sort = filters.sort;
   const res = await api.get<SearchHit[]>('/api/v1/search/', { params });
   return res.data;
 }

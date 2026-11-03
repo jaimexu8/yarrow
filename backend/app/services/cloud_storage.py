@@ -10,7 +10,7 @@ from yarrow_db.models import CloudCredential, Document, Job, User
 from yarrow_storage import get_storage
 
 from app.core.config import settings
-from app.core.queue import enqueue_document_processing
+from app.core.queue import enqueue_document_processing, job_priority
 
 logger = logging.getLogger(__name__)
 
@@ -345,7 +345,7 @@ async def sync_credential_documents(
 
     used_bytes = user.storage_used_bytes or 0
     imported_names: list[str] = []
-    jobs_to_enqueue: list[UUID] = []
+    jobs_to_enqueue: list[tuple[UUID, int]] = []
 
     for remote_file_id, filename, content in files:
         # Use remote file identifier to ensure idempotent syncing (no duplicate imports)
@@ -354,6 +354,7 @@ async def sync_credential_documents(
             select(Document.id).where(
                 Document.owner_id == user.id,
                 Document.client_upload_id == client_upload_id,
+                Document.deleted_at.is_(None),
             )
         )
         if existing is not None:
@@ -394,15 +395,15 @@ async def sync_credential_documents(
         db.add_all([doc, job])
         used_bytes += size
         imported_names.append(filename)
-        jobs_to_enqueue.append(job.id)
+        jobs_to_enqueue.append((job.id, size))
 
     user.storage_used_bytes = used_bytes
     credential.last_synced_at = _utcnow()
     await db.commit()
 
-    for job_id in jobs_to_enqueue:
+    for job_id, size in jobs_to_enqueue:
         try:
-            enqueue_document_processing(job_id)
+            enqueue_document_processing(job_id, priority=job_priority(size))
         except Exception:
             logger.exception("Enqueueing imported job %s failed", job_id)
 

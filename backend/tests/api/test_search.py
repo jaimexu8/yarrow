@@ -358,6 +358,21 @@ class TestSearch:
         assert response.status_code == 200
         assert response.json() == []
 
+    async def test_trashed_document_is_hidden(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        document_id = await _upload(client, auth_headers, "notes.pdf")
+        await _add_text(db_session, document_id, "the quarterly summary is ready")
+        document = await db_session.get(Document, document_id)
+        document.deleted_at = datetime.now(UTC).replace(tzinfo=None)
+        await db_session.flush()
+
+        response = await client.get(
+            SEARCH, params={"q": "quarterly"}, headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert response.json() == []
+
     async def test_snippets_point_at_each_matching_region(
         self, client, auth_headers, fake_storage, fake_queue, db_session
     ):
@@ -599,6 +614,102 @@ class TestSearchFilters:
         response = await client.get(
             SEARCH,
             params={"q": "quarterly", "date_from": "not-a-date"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
+
+
+class TestSearchSort:
+    """us-59: sort hits by upload date or filename."""
+
+    async def _named_docs(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        """alpha.pdf older, zeta.pdf newer, so date and name orders differ."""
+        older_id = await _upload(client, auth_headers, "alpha.pdf")
+        await _add_text(db_session, older_id, "the quarterly summary is ready")
+        newer_id = await _upload(client, auth_headers, "zeta.pdf")
+        await _add_text(db_session, newer_id, "the quarterly summary is ready")
+        await _set_meta(
+            db_session,
+            older_id,
+            created_at=datetime(2025, 6, 1, 12, 0, tzinfo=UTC).replace(tzinfo=None),
+        )
+        await _set_meta(
+            db_session,
+            newer_id,
+            created_at=datetime(2025, 6, 3, 12, 0, tzinfo=UTC).replace(tzinfo=None),
+        )
+        return older_id, newer_id
+
+    async def test_default_and_date_sort_newest_first(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        older_id, newer_id = await self._named_docs(
+            client, auth_headers, fake_storage, fake_queue, db_session
+        )
+
+        default = await client.get(
+            SEARCH, params={"q": "quarterly"}, headers=auth_headers
+        )
+        by_date = await client.get(
+            SEARCH,
+            params={"q": "quarterly", "sort": "date"},
+            headers=auth_headers,
+        )
+        newest_first = [str(newer_id), str(older_id)]
+        assert [hit["id"] for hit in default.json()] == newest_first
+        assert [hit["id"] for hit in by_date.json()] == newest_first
+
+    async def test_name_sort_is_alphabetical(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        older_id, newer_id = await self._named_docs(
+            client, auth_headers, fake_storage, fake_queue, db_session
+        )
+
+        response = await client.get(
+            SEARCH,
+            params={"q": "quarterly", "sort": "name"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        # alpha.pdf then zeta.pdf
+        assert [hit["id"] for hit in response.json()] == [
+            str(older_id),
+            str(newer_id),
+        ]
+
+    async def test_browse_mode_uses_the_same_sort(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        older_id, newer_id = await self._named_docs(
+            client, auth_headers, fake_storage, fake_queue, db_session
+        )
+
+        by_date = await client.get(
+            SEARCH,
+            params={"q": "", "date_from": "2025-01-01", "sort": "date"},
+            headers=auth_headers,
+        )
+        by_name = await client.get(
+            SEARCH,
+            params={"q": "", "date_from": "2025-01-01", "sort": "name"},
+            headers=auth_headers,
+        )
+        assert [hit["id"] for hit in by_date.json()] == [
+            str(newer_id),
+            str(older_id),
+        ]
+        assert [hit["id"] for hit in by_name.json()] == [
+            str(older_id),
+            str(newer_id),
+        ]
+
+    async def test_unknown_sort_is_422(self, client, auth_headers):
+        response = await client.get(
+            SEARCH,
+            params={"q": "quarterly", "sort": "relevance"},
             headers=auth_headers,
         )
         assert response.status_code == 422
