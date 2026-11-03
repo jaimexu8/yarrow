@@ -59,6 +59,7 @@ from app.schemas import (
     DocumentFolderUpdate,
     DocumentOut,
     DocumentRename,
+    DuplicateOf,
     JobOut,
     PageOut,
     UploadAccepted,
@@ -132,6 +133,44 @@ async def _earlier_upload(
     return result.scalars().first()
 
 
+async def _identical_document(
+    db: AsyncSession, owner_id: UUID, content_sha256: str
+) -> Document | None:
+    """This user's earliest document with exactly these bytes, if any (US-79).
+
+    Only the caller's own documents are searched, so another user's identical
+    file is never found, let alone named. Trashed documents do not count:
+    they are not in the library, and the user threw them away on purpose.
+    Documents from before the fingerprint existed have NULL and never match.
+    """
+    result = await db.execute(
+        select(Document)
+        .where(
+            Document.owner_id == owner_id,
+            Document.content_sha256 == content_sha256,
+            Document.deleted_at.is_(None),
+        )
+        .order_by(Document.created_at, Document.id)
+        .limit(1)
+    )
+    return result.scalars().first()
+
+
+def _duplicate_rejection(filename: str, existing: Document) -> UploadRejected:
+    return UploadRejected(
+        filename=filename,
+        reason=(
+            "You already have an identical document in your library: "
+            f"{existing.filename}."
+        ),
+        duplicate_of=DuplicateOf(
+            document_id=existing.id,
+            filename=existing.filename,
+            status=existing.status,
+        ),
+    )
+
+
 async def _accepted_for(db: AsyncSession, document: Document) -> UploadAccepted:
     """The upload result of a document that was stored earlier."""
     job = (
@@ -169,9 +208,7 @@ async def _revoke_tasks(task_ids: list[str]) -> None:
 async def _delete_storage(keys: list[str], context: str) -> None:
     if not keys:
         return
-    orphaned = await run_in_threadpool(
-        delete_stored_objects, get_storage(), keys
-    )
+    orphaned = await run_in_threadpool(delete_stored_objects, get_storage(), keys)
     if orphaned:
         logger.error(
             f"{context} left {len(orphaned)} stored object(s) behind: {orphaned}"
@@ -251,6 +288,7 @@ async def upload_documents(
     files: list[UploadFile] = File(...),
     client_upload_ids: list[str] | None = Form(None),
     batch_id: UUID | None = Form(None),
+    allow_duplicate: bool = Form(False),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -266,6 +304,12 @@ async def upload_documents(
 
     ``batch_id`` (optional) groups every file of one upload run so their
     progress can be reported together (US-31). Jobs stay one per file.
+
+    A file with exactly the same bytes as one of the caller's own documents
+    is refused with ``duplicate_of`` naming that document, and nothing is
+    stored (US-79). Sending it again with ``allow_duplicate`` (applies to
+    every file of the request; the Upload page sends one file per request)
+    stores a separate copy, subject to the usual size and quota checks.
     """
     if client_upload_ids is not None:
         if len(client_upload_ids) != len(files):
@@ -304,6 +348,9 @@ async def upload_documents(
     # Running total, so that several files in one request cannot each pass a
     # quota check that they only collectively exceed.
     used_bytes = current_user.storage_used_bytes or 0
+    # Files kept earlier in this same request, by fingerprint, so two
+    # identical files sent together are caught as well (US-79).
+    kept_by_sha256: dict[str, Document] = {}
 
     for index, upload in enumerate(files):
         filename = upload.filename or "unnamed"
@@ -325,7 +372,7 @@ async def upload_documents(
                 accepted.append(await _accepted_for(db, earlier))
                 continue
 
-        size, _sha256, extension = await _measure(upload)
+        size, content_sha256, extension = await _measure(upload)
 
         if size == 0:
             rejected.append(UploadRejected(filename=filename, reason="File is empty"))
@@ -354,6 +401,19 @@ async def upload_documents(
                 )
             )
             continue
+        if not allow_duplicate:
+            # After the checks on the file itself (a file that could never be
+            # stored is not worth a duplicate warning) and before quota: when
+            # the user is near their limit, "you already have this" is the
+            # more useful answer, and Skip costs nothing. The user row lock
+            # above means a concurrent upload of the same bytes has either
+            # committed (and is found here) or not started its checks yet.
+            existing = kept_by_sha256.get(content_sha256) or await _identical_document(
+                db, current_user.id, content_sha256
+            )
+            if existing is not None:
+                rejected.append(_duplicate_rejection(filename, existing))
+                continue
         if used_bytes + size > settings.STORAGE_QUOTA_BYTES:
             rejected.append(
                 UploadRejected(
@@ -403,6 +463,7 @@ async def upload_documents(
             status="queued",
             client_upload_id=upload_id,
             batch_id=batch.id if batch else None,
+            content_sha256=content_sha256,
         )
         job = Job(
             id=uuid4(),
@@ -413,6 +474,7 @@ async def upload_documents(
             total_pages=0,
         )
         db.add_all([document, job])
+        kept_by_sha256.setdefault(content_sha256, document)
         jobs_by_id[job.id] = job
         documents_by_job[job.id] = document
         used_bytes += size
@@ -465,7 +527,9 @@ async def upload_documents(
         # Nothing was stored, so the request as a whole did not succeed.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=[item.model_dump() for item in rejected],
+            # mode="json": duplicate_of carries a UUID, which the plain
+            # JSONResponse behind HTTPException cannot serialise.
+            detail=[item.model_dump(mode="json") for item in rejected],
         )
     return UploadResponse(accepted=accepted, rejected=rejected)
 
@@ -900,9 +964,7 @@ async def permanently_delete_document_endpoint(
         )
 
     await _revoke_tasks(outcome.task_ids)
-    await _delete_storage(
-        outcome.storage_keys, f"Deleted document {document_id}"
-    )
+    await _delete_storage(outcome.storage_keys, f"Deleted document {document_id}")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

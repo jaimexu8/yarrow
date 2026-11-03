@@ -25,6 +25,8 @@ async def _upload(client, headers, name="sample.pdf"):
     response = await client.post(
         UPLOAD,
         headers=headers,
+        # The same fixture bytes are uploaded many times; not a duplicate test.
+        data={"allow_duplicate": "true"},
         files=[("files", (name, pdf, "application/pdf"))],
     )
     return uuid.UUID(response.json()["accepted"][0]["document_id"])
@@ -82,13 +84,13 @@ async def _shared_reader(
     await verify(payload["email"])
     token = (await login(payload["email"], payload["password"])).json()
     reader_id = (
-        await db_session.execute(
-            select(User.id).where(User.email == payload["email"])
-        )
+        await db_session.execute(select(User.id).where(User.email == payload["email"]))
     ).scalar_one()
     db_session.add(
         DocumentShare(
-            document_id=document_id, shared_with_user_id=reader_id, permission=permission
+            document_id=document_id,
+            shared_with_user_id=reader_id,
+            permission=permission,
         )
     )
     await db_session.flush()
@@ -225,9 +227,13 @@ class TestCorrectRegionText:
         theirs = await _upload(client, auth_headers, "secret.pdf")
         await _add_text(db_session, theirs, "not yours")
         leaked_region_id = (
-            await db_session.execute(select(Region.id).where(Region.page_id.in_(
-                select(Page.id).where(Page.document_id == theirs)
-            )))
+            await db_session.execute(
+                select(Region.id).where(
+                    Region.page_id.in_(
+                        select(Page.id).where(Page.document_id == theirs)
+                    )
+                )
+            )
         ).scalar_one()
 
         mine = await _upload(client, auth_headers)
@@ -336,7 +342,13 @@ class TestCorrectRegionText:
         document_id = await _upload(client, auth_headers)
         region_id = await _add_text(db_session, document_id, "please fix me")
         reader = await _shared_reader(
-            client, db_session, register, verify, login, document_id, permission="review"
+            client,
+            db_session,
+            register,
+            verify,
+            login,
+            document_id,
+            permission="review",
         )
 
         response = await client.put(
@@ -370,7 +382,13 @@ class TestCorrectRegionText:
         )
 
         reader = await _shared_reader(
-            client, db_session, register, verify, login, document_id, permission="review"
+            client,
+            db_session,
+            register,
+            verify,
+            login,
+            document_id,
+            permission="review",
         )
         response = await client.delete(
             _revert_url(document_id, region_id), headers=reader
@@ -398,7 +416,9 @@ class TestUndoRegionCorrection:
         url = _text_url(document_id, region_id)
         await client.put(url, json={"text": "the raw text"}, headers=auth_headers)
 
-        response = await client.delete(_revert_url(document_id, region_id), headers=auth_headers)
+        response = await client.delete(
+            _revert_url(document_id, region_id), headers=auth_headers
+        )
         assert response.status_code == 200
         assert response.json()["changed"] is True
 
@@ -470,8 +490,12 @@ class TestSearchReflectsCorrections:
         region_id = await _add_text(db_session, document_id, "the quatrly summary")
         url = _text_url(document_id, region_id)
 
-        await client.put(url, json={"text": "the quarterly summary"}, headers=auth_headers)
-        response = await client.delete(_revert_url(document_id, region_id), headers=auth_headers)
+        await client.put(
+            url, json={"text": "the quarterly summary"}, headers=auth_headers
+        )
+        response = await client.delete(
+            _revert_url(document_id, region_id), headers=auth_headers
+        )
         assert response.status_code == 200
         assert response.json()["changed"] is True
 

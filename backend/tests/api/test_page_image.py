@@ -22,12 +22,16 @@ async def _upload(client, headers) -> uuid.UUID:
     response = await client.post(
         UPLOAD,
         headers=headers,
+        # The same fixture bytes are uploaded many times; not a duplicate test.
+        data={"allow_duplicate": "true"},
         files=[("files", ("sample.pdf", pdf, "application/pdf"))],
     )
     return uuid.UUID(response.json()["accepted"][0]["document_id"])
 
 
-async def _add_page(db_session, document_id, page_number, image_key: str | None) -> uuid.UUID:
+async def _add_page(
+    db_session, document_id, page_number, image_key: str | None
+) -> uuid.UUID:
     """A page of the document, with a stored upright image when given a key"""
     result = await db_session.execute(
         select(Page).where(
@@ -36,9 +40,7 @@ async def _add_page(db_session, document_id, page_number, image_key: str | None)
     )
     page = result.scalar_one_or_none()
     if page is None:
-        page = Page(
-            id=uuid.uuid4(), document_id=document_id, page_number=page_number
-        )
+        page = Page(id=uuid.uuid4(), document_id=document_id, page_number=page_number)
         db_session.add(page)
     page.page_image_key = image_key
     await db_session.flush()
@@ -55,9 +57,7 @@ class TestPageImage:
         fake_storage.objects[key] = PNG
         await _add_page(db_session, document_id, 1, key)
 
-        response = await client.get(
-            _image_url(document_id, 1), headers=auth_headers
-        )
+        response = await client.get(_image_url(document_id, 1), headers=auth_headers)
 
         assert response.status_code == 200
         assert response.content == PNG
@@ -70,9 +70,7 @@ class TestPageImage:
         document_id = await _upload(client, auth_headers)
         await _add_page(db_session, document_id, 1, None)
 
-        response = await client.get(
-            _image_url(document_id, 1), headers=auth_headers
-        )
+        response = await client.get(_image_url(document_id, 1), headers=auth_headers)
 
         assert response.status_code == 404
 
@@ -89,9 +87,7 @@ class TestPageImage:
         token = (await login(payload["email"], payload["password"])).json()
         other_headers = {"Authorization": f"Bearer {token['access_token']}"}
 
-        response = await client.get(
-            _image_url(document_id, 1), headers=other_headers
-        )
+        response = await client.get(_image_url(document_id, 1), headers=other_headers)
 
         assert response.status_code == 404
 
@@ -102,9 +98,7 @@ class TestPageImage:
         key = f"documents/{document_id}/pages/gone.png"
         await _add_page(db_session, document_id, 1, key)
 
-        response = await client.get(
-            _image_url(document_id, 1), headers=auth_headers
-        )
+        response = await client.get(_image_url(document_id, 1), headers=auth_headers)
 
         assert response.status_code == 404
 
@@ -118,9 +112,7 @@ class TestPageImage:
         fake_storage.objects[key] = PNG
         await _add_page(db_session, other_id, 1, key)
 
-        response = await client.get(
-            _image_url(document_id, 1), headers=auth_headers
-        )
+        response = await client.get(_image_url(document_id, 1), headers=auth_headers)
 
         assert response.status_code == 404
 

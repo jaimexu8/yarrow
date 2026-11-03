@@ -7,7 +7,12 @@ import { DocumentList } from '@/components/documents/DocumentList';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
-import { newBatchId, newUploadId, uploadDocument } from '@/lib/documents';
+import {
+  newBatchId,
+  newUploadId,
+  uploadDocument,
+  type DuplicateOf,
+} from '@/lib/documents';
 import { storeBatchId, useStoredBatchId } from '@/lib/useBatchProgress';
 import {
   ACCEPT_ATTRIBUTE,
@@ -25,6 +30,8 @@ type ItemStatus =
   | 'accepted' // stored and queued for processing
   | 'stored' // stored, but processing could not be started
   | 'rejected' // the server refused it, with a reason
+  | 'duplicate' // identical to a document already in the library (US-79)
+  | 'skipped' // a duplicate the user chose not to upload
   | 'failed'; // the upload itself broke; can be retried
 
 type Item = {
@@ -38,6 +45,14 @@ type Item = {
   progress: number;
   message?: string;
   documentId?: string;
+  /** The user's own identical document, when the server warned (US-79). */
+  duplicateOf?: DuplicateOf;
+  /**
+   * The user chose "Upload anyway" for this file (US-79). Kept on the item so
+   * a Retry after a failed attempt still asks for a copy rather than being
+   * warned about the duplicate again; it goes away only with the row.
+   */
+  allowDuplicate?: boolean;
 };
 
 function keyFor(file: File) {
@@ -46,13 +61,17 @@ function keyFor(file: File) {
 
 /**
  * US-7 Upload PDF, US-8 Bulk upload, US-37 Reject unsupported types,
- * US-31 Batch upload progress.
+ * US-31 Batch upload progress, US-79 Detect duplicate uploads.
  *
  * Files are uploaded one at a time, each with its own progress and result,
  * so one bad file never affects the others and a failed one can be retried
  * on its own. Every file of one "Upload" click carries the same batch id, so
  * the server can report how far the run as a whole has got; the id is kept
  * for the tab so coming back to this page picks the run up again.
+ *
+ * A file identical to one already in the library is not stored; its row
+ * names the existing document and offers Skip (nothing is sent) or Upload
+ * anyway (sent again, into the same run, as a deliberate extra copy).
  */
 export default function UploadPage() {
   const inputId = useId();
@@ -106,8 +125,15 @@ export default function UploadPage() {
    * Upload the given files. ``newRun`` starts a fresh batch (the Upload
    * button); a Retry of one file rejoins the run that file was sent in, even
    * if a later run is the one on screen, so every run's counts stay right.
+   * ``allowDuplicate`` is "Upload anyway" for a file the server warned is
+   * already in the library (US-79); it rejoins its run the same way, and is
+   * remembered on the item so every later Retry of it sends the flag too.
    */
-  async function uploadAll(keys: string[], newRun: boolean) {
+  async function uploadAll(
+    keys: string[],
+    newRun: boolean,
+    allowDuplicate = false
+  ) {
     if (keys.length === 0) return;
     const freshRun = newBatchId();
     // The server only knows a batch once a file has been accepted, so the
@@ -117,7 +143,14 @@ export default function UploadPage() {
     setItems((current) =>
       current.map((item) =>
         keys.includes(item.key)
-          ? { ...item, status: 'waiting', progress: 0, message: undefined }
+          ? {
+              ...item,
+              status: 'waiting',
+              progress: 0,
+              message: undefined,
+              duplicateOf: undefined,
+              allowDuplicate: item.allowDuplicate || allowDuplicate,
+            }
           : item
       )
     );
@@ -127,12 +160,14 @@ export default function UploadPage() {
       const item = items.find((candidate) => candidate.key === key);
       if (!item) continue;
       const runId = newRun ? freshRun : (item.batchId ?? batchId ?? freshRun);
+      const askForCopy = allowDuplicate || item.allowDuplicate === true;
       update(key, { status: 'uploading', progress: 0, batchId: runId });
       const outcome = await uploadDocument(
         item.file,
         item.uploadId,
         (progress) => update(key, { progress }),
-        runId
+        runId,
+        askForCopy
       );
       if (outcome.kind === 'accepted') {
         update(key, {
@@ -151,6 +186,8 @@ export default function UploadPage() {
         setRefreshKey((n) => n + 1);
       } else if (outcome.kind === 'rejected') {
         update(key, { status: 'rejected', message: outcome.reason });
+      } else if (outcome.kind === 'duplicate') {
+        update(key, { status: 'duplicate', duplicateOf: outcome.duplicateOf });
       } else {
         update(key, { status: 'failed', message: outcome.message });
       }
@@ -169,7 +206,14 @@ export default function UploadPage() {
 
   const ready = items.filter((item) => item.status === 'ready');
   const finished = items.filter((item) =>
-    ['accepted', 'stored', 'rejected', 'failed'].includes(item.status)
+    [
+      'accepted',
+      'stored',
+      'rejected',
+      'duplicate',
+      'skipped',
+      'failed',
+    ].includes(item.status)
   );
   const counts = {
     accepted: items.filter((item) => item.status === 'accepted').length,
@@ -178,6 +222,8 @@ export default function UploadPage() {
       ['rejected', 'invalid'].includes(item.status)
     ).length,
     failed: items.filter((item) => item.status === 'failed').length,
+    duplicate: items.filter((item) => item.status === 'duplicate').length,
+    skipped: items.filter((item) => item.status === 'skipped').length,
   };
   const runDone = !uploading && finished.length > 0 && ready.length === 0;
 
@@ -254,6 +300,10 @@ export default function UploadPage() {
                   )
                 }
                 onRetry={() => uploadAll([item.key], false)}
+                onSkip={() =>
+                  update(item.key, { status: 'skipped', progress: 0 })
+                }
+                onUploadAnyway={() => uploadAll([item.key], false, true)}
               />
             ))}
           </ul>
@@ -264,7 +314,11 @@ export default function UploadPage() {
           {runDone && (
             <Alert
               tone={
-                counts.failed || counts.rejected || counts.stored
+                counts.failed ||
+                counts.rejected ||
+                counts.stored ||
+                counts.duplicate ||
+                counts.skipped
                   ? 'info'
                   : 'success'
               }
@@ -341,6 +395,8 @@ function summaryText(counts: {
   stored: number;
   rejected: number;
   failed: number;
+  duplicate: number;
+  skipped: number;
 }): string {
   const parts = [
     `${counts.accepted} ${counts.accepted === 1 ? 'file' : 'files'} uploaded and queued for processing`,
@@ -349,6 +405,10 @@ function summaryText(counts: {
     parts.push(`${counts.stored} uploaded but not yet processing`);
   }
   if (counts.rejected) parts.push(`${counts.rejected} not accepted`);
+  if (counts.duplicate) {
+    parts.push(`${counts.duplicate} already in your library`);
+  }
+  if (counts.skipped) parts.push(`${counts.skipped} skipped`);
   if (counts.failed) parts.push(`${counts.failed} failed to upload`);
   return `${parts.join(', ')}.`;
 }
@@ -361,6 +421,8 @@ const STATUS_TEXT: Record<ItemStatus, string> = {
   accepted: 'Uploaded, queued for processing',
   stored: 'Uploaded, but processing could not start',
   rejected: 'Not accepted',
+  duplicate: 'Already in your library',
+  skipped: 'Skipped',
   failed: 'Upload failed',
 };
 
@@ -369,11 +431,15 @@ function FileRow({
   disabled,
   onRemove,
   onRetry,
+  onSkip,
+  onUploadAnyway,
 }: {
   item: Item;
   disabled: boolean;
   onRemove: () => void;
   onRetry: () => void;
+  onSkip: () => void;
+  onUploadAnyway: () => void;
 }) {
   const problem = ['invalid', 'stored', 'rejected', 'failed'].includes(
     item.status
@@ -403,8 +469,52 @@ function FileRow({
             {formatBytes(item.file.size)} · {STATUS_TEXT[item.status]}
             {item.message && <>: {item.message}</>}
           </p>
+          {item.status === 'duplicate' && item.duplicateOf && (
+            <p className="text-xs text-amber-800">
+              This file is identical to{' '}
+              <Link
+                href={`/documents/${item.duplicateOf.documentId}`}
+                className="font-medium underline underline-offset-4"
+              >
+                {item.duplicateOf.filename}
+              </Link>
+              , already in your library. Skip it, or upload another copy.
+            </p>
+          )}
+          {item.status === 'skipped' && item.duplicateOf && (
+            <p className="text-xs text-slate-500">
+              Not uploaded; you already have{' '}
+              <Link
+                href={`/documents/${item.duplicateOf.documentId}`}
+                className="underline underline-offset-4"
+              >
+                {item.duplicateOf.filename}
+              </Link>
+              .
+            </p>
+          )}
         </div>
         <div className="flex gap-3">
+          {item.status === 'duplicate' && (
+            <>
+              <Button
+                variant="link"
+                onClick={onSkip}
+                disabled={disabled}
+                aria-label={`Skip ${item.file.name}`}
+              >
+                Skip
+              </Button>
+              <Button
+                variant="link"
+                onClick={onUploadAnyway}
+                disabled={disabled}
+                aria-label={`Upload ${item.file.name} anyway`}
+              >
+                Upload anyway
+              </Button>
+            </>
+          )}
           {item.status === 'failed' && (
             <Button
               variant="link"
@@ -415,7 +525,9 @@ function FileRow({
               Retry
             </Button>
           )}
-          {['ready', 'invalid', 'rejected', 'failed'].includes(item.status) && (
+          {['ready', 'invalid', 'rejected', 'skipped', 'failed'].includes(
+            item.status
+          ) && (
             <Button
               variant="link"
               onClick={onRemove}

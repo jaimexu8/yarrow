@@ -34,6 +34,8 @@ async def _upload(client, headers, filename="notes.pdf"):
     uploaded = await client.post(
         UPLOAD,
         headers=headers,
+        # The same fixture bytes are uploaded many times; not a duplicate test.
+        data={"allow_duplicate": "true"},
         files=[("files", (filename, pdf, "application/pdf"))],
     )
     assert uploaded.status_code == 200, uploaded.text

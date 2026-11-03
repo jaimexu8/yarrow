@@ -207,7 +207,28 @@ type UploadResponse = {
     status?: string;
     message?: string | null;
   }[];
-  rejected: { filename: string; reason: string; retryable?: boolean }[];
+  rejected: UploadRejection[];
+};
+
+/** The caller's own document an upload was identical to (US-79). */
+type DuplicateOfResponse = {
+  document_id: string;
+  filename: string;
+  status?: string | null;
+};
+
+type UploadRejection = {
+  filename?: string;
+  reason: string;
+  retryable?: boolean;
+  duplicate_of?: DuplicateOfResponse | null;
+};
+
+/** An existing document in the user's own library (US-79). */
+export type DuplicateOf = {
+  documentId: string;
+  filename: string;
+  status?: string;
 };
 
 /**
@@ -217,6 +238,9 @@ type UploadResponse = {
  * - rejected: the server refused this file, with a reason (type, size, quota)
  * - failed: the upload itself went wrong (network, server error). Retrying
  *   with the same upload id is always safe.
+ * - duplicate: nothing was stored because the user already has a document
+ *   with identical contents (US-79). Sending it again with
+ *   ``allowDuplicate`` keeps a second copy.
  */
 export type UploadOutcome =
   | {
@@ -226,24 +250,29 @@ export type UploadOutcome =
       message?: string;
     }
   | { kind: 'rejected'; reason: string }
+  | { kind: 'duplicate'; reason: string; duplicateOf: DuplicateOf }
   | { kind: 'failed'; message: string };
 
 /**
  * Upload a single file (US-7). The page sends files one at a time so each has
  * its own progress and result, and one failure can't affect the rest (US-8).
- * ``batchId`` ties the file to its upload run (US-31).
+ * ``batchId`` ties the file to its upload run (US-31). ``allowDuplicate``
+ * stores the file even if the user already has an identical one (US-79,
+ * "Upload anyway"); without it such a file comes back as ``duplicate``.
  */
 export async function uploadDocument(
   file: File,
   uploadId: string,
   onProgress: (percent: number) => void,
-  batchId?: string
+  batchId?: string,
+  allowDuplicate = false
 ): Promise<UploadOutcome> {
   const form = new FormData();
   form.append('files', file);
   form.append('client_upload_ids', uploadId);
   // Groups this file with the others of the same run (US-31).
   if (batchId) form.append('batch_id', batchId);
+  if (allowDuplicate) form.append('allow_duplicate', 'true');
   try {
     const res = await api.post<UploadResponse>(
       '/api/v1/documents/upload',
@@ -354,12 +383,23 @@ export async function bulkDelete(documentIds: string[]): Promise<BulkResult[]> {
 /**
  * A server-side rejection. When the server marks it retryable (a problem on
  * its side, like storage being briefly down), it is reported as a failure so
- * the page offers Retry; otherwise the file itself is the problem.
+ * the page offers Retry; otherwise the file itself is the problem. A
+ * rejection carrying ``duplicate_of`` is a duplicate warning (US-79).
  */
-function fromRejection(
-  rejected: { reason: string; retryable?: boolean } | undefined
-): UploadOutcome {
+function fromRejection(rejected: UploadRejection | undefined): UploadOutcome {
   const reason = rejected?.reason ?? 'The file was not accepted.';
+  const duplicate = rejected?.duplicate_of;
+  if (duplicate) {
+    return {
+      kind: 'duplicate',
+      reason,
+      duplicateOf: {
+        documentId: duplicate.document_id,
+        filename: duplicate.filename,
+        status: duplicate.status ?? undefined,
+      },
+    };
+  }
   return rejected?.retryable
     ? { kind: 'failed', message: reason }
     : { kind: 'rejected', reason };

@@ -1,4 +1,7 @@
-/** US-31: how the Upload page ties each file to its run (batch). */
+/**
+ * US-31: how the Upload page ties each file to its run (batch).
+ * US-79: the duplicate warning, Skip and Upload anyway.
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   act,
@@ -14,7 +17,7 @@ import UploadPage from './page';
 
 const api = vi.hoisted(() => ({
   batchIds: [] as string[],
-  calls: [] as { name: string; batchId?: string }[],
+  calls: [] as { name: string; batchId?: string; allowDuplicate?: true }[],
   // Each upload waits for the test to settle it with an outcome.
   pending: [] as ((outcome: UploadOutcome) => void)[],
 }));
@@ -26,9 +29,15 @@ vi.mock('@/lib/documents', async (importOriginal) => ({
     file: File,
     _uploadId: string,
     _onProgress: (n: number) => void,
-    batchId?: string
+    batchId?: string,
+    allowDuplicate?: boolean
   ) => {
-    api.calls.push({ name: file.name, batchId });
+    api.calls.push({
+      name: file.name,
+      batchId,
+      // Only recorded when set, so the batch tests' expectations stay short.
+      ...(allowDuplicate ? { allowDuplicate: true as const } : {}),
+    });
     return new Promise<UploadOutcome>((resolve) => api.pending.push(resolve));
   },
 }));
@@ -53,6 +62,11 @@ const accepted: UploadOutcome = {
   processingStarted: true,
 };
 const failed: UploadOutcome = { kind: 'failed', message: 'Network error' };
+const duplicate: UploadOutcome = {
+  kind: 'duplicate',
+  reason: 'You already have an identical document in your library: Lease.pdf.',
+  duplicateOf: { documentId: 'existing-doc', filename: 'Lease.pdf' },
+};
 
 function pdf(name: string) {
   return new File(['%PDF-1.4'], name, { type: 'application/pdf' });
@@ -130,5 +144,128 @@ describe('Upload page batches', () => {
     ]);
     // The panel keeps showing the run on screen.
     expect(screen.getByTestId('panel').textContent).toContain('batch-2');
+  });
+});
+
+describe('Upload page duplicates (US-79)', () => {
+  async function uploadOneDuplicate(name = 'lease-copy.pdf') {
+    render(<UploadPage />);
+    choose(pdf(name));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 1 file' }));
+    await settleNext(duplicate);
+  }
+
+  it('warns on the file row and names my existing document', async () => {
+    await uploadOneDuplicate();
+
+    expect(await screen.findByText(/Already in your library/)).toBeTruthy();
+    const existing = screen.getByRole('link', { name: 'Lease.pdf' });
+    expect(existing.getAttribute('href')).toBe('/documents/existing-doc');
+    expect(
+      screen.getByRole('button', { name: 'Skip lease-copy.pdf' })
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Upload lease-copy.pdf anyway' })
+    ).toBeTruthy();
+    // The warning is not a Retry: retrying would only be warned again.
+    expect(
+      screen.queryByRole('button', { name: 'Retry lease-copy.pdf' })
+    ).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain(
+      '1 already in your library'
+    );
+  });
+
+  it('Skip sends nothing and marks the file skipped', async () => {
+    await uploadOneDuplicate();
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Skip lease-copy.pdf' })
+    );
+
+    expect(await screen.findByText(/Skipped/)).toBeTruthy();
+    expect(api.calls).toHaveLength(1);
+    expect(api.pending).toHaveLength(0);
+    expect(
+      screen.queryByRole('button', { name: 'Upload lease-copy.pdf anyway' })
+    ).toBeNull();
+    // A skipped file can still be taken off the list.
+    expect(
+      screen.getByRole('button', { name: 'Remove lease-copy.pdf' })
+    ).toBeTruthy();
+  });
+
+  it('Upload anyway re-sends the file with the flag into the same run', async () => {
+    await uploadOneDuplicate();
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Upload lease-copy.pdf anyway',
+      })
+    );
+    await settleNext(accepted);
+
+    expect(api.calls).toEqual([
+      { name: 'lease-copy.pdf', batchId: 'batch-1' },
+      { name: 'lease-copy.pdf', batchId: 'batch-1', allowDuplicate: true },
+    ]);
+    expect(
+      await screen.findByText(/Uploaded, queued for processing/)
+    ).toBeTruthy();
+    // The copy is now part of the run, so its progress is shown.
+    expect(screen.getByTestId('panel').textContent).toContain('batch-1');
+  });
+
+  it('a Retry after a failed Upload anyway still asks for a copy', async () => {
+    await uploadOneDuplicate();
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Upload lease-copy.pdf anyway',
+      })
+    );
+    await settleNext(failed);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Retry lease-copy.pdf' })
+    );
+    await settleNext(accepted);
+
+    expect(api.calls).toEqual([
+      { name: 'lease-copy.pdf', batchId: 'batch-1' },
+      { name: 'lease-copy.pdf', batchId: 'batch-1', allowDuplicate: true },
+      { name: 'lease-copy.pdf', batchId: 'batch-1', allowDuplicate: true },
+    ]);
+    expect(
+      await screen.findByText(/Uploaded, queued for processing/)
+    ).toBeTruthy();
+  });
+
+  it('a plain Retry of a file never warned about is not a copy', async () => {
+    render(<UploadPage />);
+    choose(pdf('a.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 1 file' }));
+    await settleNext(failed);
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry a.pdf' }));
+    await settleNext(accepted);
+
+    expect(api.calls).toEqual([
+      { name: 'a.pdf', batchId: 'batch-1' },
+      { name: 'a.pdf', batchId: 'batch-1' },
+    ]);
+  });
+
+  it('a duplicate in a run does not hold up the other files', async () => {
+    render(<UploadPage />);
+    choose(pdf('a.pdf'), pdf('b.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 2 files' }));
+    await settleNext(duplicate); // a.pdf
+    await settleNext(accepted); // b.pdf
+
+    expect(api.calls).toEqual([
+      { name: 'a.pdf', batchId: 'batch-1' },
+      { name: 'b.pdf', batchId: 'batch-1' },
+    ]);
+    expect(screen.getByRole('button', { name: 'Skip a.pdf' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Skip b.pdf' })).toBeNull();
   });
 });
