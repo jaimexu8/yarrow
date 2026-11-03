@@ -10,13 +10,17 @@ import { useAuth } from '@/context/AuthContext';
 import {
   deleteAdminAccount,
   getAdminStats,
+  jobQueuePlace,
+  jobStage,
   listAccounts,
+  listAdminJobs,
   setAccountActive,
   type AdminAccount,
+  type AdminJob,
   type AdminStats,
   type JobStatusCounts,
 } from '@/lib/admin';
-import { parseApiDate } from '@/lib/documents';
+import { parseApiDate, STATUS_LABELS } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
 import { formatBytes } from '@/lib/uploads';
 import { cn } from '@/lib/cn';
@@ -202,6 +206,74 @@ function AccountTable({
   );
 }
 
+function jobStatusLabel(status: AdminJob['status']): string {
+  if (!status) return '—';
+  return STATUS_LABELS[status] ?? status;
+}
+
+function JobTableRow({ job }: { job: AdminJob }) {
+  return (
+    <tr>
+      <td className={CELL}>
+        <span className="font-medium text-slate-900">
+          {job.owner_name || job.owner_email}
+        </span>
+        {job.owner_name && (
+          <p className="text-xs text-slate-500">{job.owner_email}</p>
+        )}
+      </td>
+      <td className={cn(CELL, 'text-slate-700')}>{job.filename}</td>
+      <td className={cn(CELL, 'text-slate-700')}>
+        {jobStatusLabel(job.status)}
+      </td>
+      <td className={cn(CELL, 'tabular-nums text-slate-700')}>
+        {jobQueuePlace(job)}
+      </td>
+      <td className={cn(CELL, 'text-slate-700')}>{jobStage(job)}</td>
+      <td className={cn(CELL, 'text-slate-600')}>{job.error_message || '—'}</td>
+    </tr>
+  );
+}
+
+function JobTable({ jobs }: { jobs: AdminJob[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[48rem] border-separate border-spacing-y-2 text-sm">
+        <thead>
+          <tr>
+            <th className={HEAD}>Owner</th>
+            <th className={HEAD}>Document</th>
+            <th className={HEAD}>Status</th>
+            <th className={HEAD}>Queue</th>
+            <th className={HEAD}>Stage</th>
+            <th className={HEAD}>Failure reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {jobs.map((job) => (
+            <JobTableRow job={job} key={job.id} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function JobsSection({ jobs }: { jobs: AdminJob[] }) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-slate-900">Jobs</h2>
+      {jobs.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600">
+          No processing jobs yet.
+        </p>
+      ) : (
+        <JobTable jobs={jobs} />
+      )}
+    </section>
+  );
+}
+
 function AccountsSection({
   accounts,
   onStatusChange,
@@ -239,6 +311,7 @@ function AdminBody() {
   const { user } = useAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [accounts, setAccounts] = useState<AdminAccount[] | null>(null);
+  const [jobs, setJobs] = useState<AdminJob[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
@@ -290,11 +363,12 @@ function AdminBody() {
 
   useEffect(() => {
     let current = true;
-    Promise.all([getAdminStats(), listAccounts()])
-      .then(([nextStats, nextAccounts]) => {
+    Promise.all([getAdminStats(), listAccounts(), listAdminJobs()])
+      .then(([nextStats, nextAccounts, nextJobs]) => {
         if (!current) return;
         setStats(nextStats);
         setAccounts(nextAccounts);
+        setJobs(nextJobs);
       })
       .catch((err) => {
         if (!current) return;
@@ -311,7 +385,7 @@ function AdminBody() {
   }, []);
 
   if (error) return <Alert>{error}</Alert>;
-  if (!stats || !accounts) {
+  if (!stats || !accounts || !jobs) {
     return (
       <div className="flex justify-center py-12 text-slate-500">
         <Spinner label="Loading admin dashboard" />
@@ -326,6 +400,7 @@ function AdminBody() {
   return (
     <>
       <StatsSection stats={stats} />
+      <JobsSection jobs={jobs} />
       <div className="space-y-3">
         {actionError && <Alert>{actionError}</Alert>}
         <AccountsSection
@@ -391,7 +466,7 @@ export default function AdminPage() {
             Admin
           </h1>
           <p className="text-sm text-slate-600">
-            System totals and every user account.
+            System totals, every user account, and processing jobs.
           </p>
         </div>
         <AdminBody />
