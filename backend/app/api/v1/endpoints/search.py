@@ -99,6 +99,7 @@ async def search_documents(
             .join(RegionText, RegionText.region_id == Region.id)
             .where(
                 Document.owner_id == current_user.id,
+                Document.deleted_at.is_(None),
                 *clauses,
             )
             .order_by(
@@ -151,7 +152,11 @@ async def search_documents(
     # the filters.
     result = await db.execute(
         select(Document)
-        .where(Document.owner_id == current_user.id, *clauses)
+        .where(
+            Document.owner_id == current_user.id,
+            Document.deleted_at.is_(None),
+            *clauses,
+        )
         .order_by(*_document_order(sort))
     )
     return [

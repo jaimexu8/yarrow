@@ -358,6 +358,21 @@ class TestSearch:
         assert response.status_code == 200
         assert response.json() == []
 
+    async def test_trashed_document_is_hidden(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        document_id = await _upload(client, auth_headers, "notes.pdf")
+        await _add_text(db_session, document_id, "the quarterly summary is ready")
+        document = await db_session.get(Document, document_id)
+        document.deleted_at = datetime.now(UTC).replace(tzinfo=None)
+        await db_session.flush()
+
+        response = await client.get(
+            SEARCH, params={"q": "quarterly"}, headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert response.json() == []
+
     async def test_snippets_point_at_each_matching_region(
         self, client, auth_headers, fake_storage, fake_queue, db_session
     ):

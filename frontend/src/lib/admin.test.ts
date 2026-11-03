@@ -1,8 +1,14 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import api from './api';
-import { jobQueuePlace, jobStage, listAdminJobs, type AdminJob } from './admin';
+import {
+  deleteAdminAccount,
+  jobQueuePlace,
+  jobStage,
+  listAdminJobs,
+  type AdminJob,
+} from './admin';
 
-vi.mock('./api', () => ({ default: { get: vi.fn() } }));
+vi.mock('./api', () => ({ default: { get: vi.fn(), delete: vi.fn() } }));
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -46,4 +52,10 @@ it('shows queue place for a queued job', () => {
 
 it('capitalizes the current stage', () => {
   expect(jobStage(job({ current_stage: 'parsing' }))).toBe('Parsing');
+});
+
+it('deletes an account by id', async () => {
+  vi.mocked(api.delete).mockResolvedValue({});
+  await deleteAdminAccount('user-1');
+  expect(api.delete).toHaveBeenCalledWith('/api/v1/admin/accounts/user-1');
 });

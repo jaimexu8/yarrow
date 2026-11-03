@@ -1,7 +1,7 @@
 """per-user document tags
 
 Revision ID: 0015
-Revises: 0014_folders
+Revises: 0013
 Create Date: 2026-11-03 00:00:00.000000
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision = "0015"
-down_revision = "0014_folders"
+down_revision = "0013"
 branch_labels = None
 depends_on = None
 

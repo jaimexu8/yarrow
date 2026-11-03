@@ -71,7 +71,7 @@ class TestBulkDelete:
         # The deleted documents' queued tasks are revoked; the kept one is not.
         assert sorted(revoked) == ["task-2", "task-3"]
 
-    async def test_storage_quota_is_refunded_for_each_document(
+    async def test_storage_quota_is_not_refunded_for_each_document(
         self, client, auth_headers, fake_storage, fake_queue, revoked, db_session
     ):
         from yarrow_db.models import User
@@ -80,9 +80,6 @@ class TestBulkDelete:
         owner_id = (await db_session.get(Document, first_id)).owner_id
         owner = await db_session.get(User, owner_id)
         await db_session.refresh(owner)
-        sizes = 0
-        for doc_id in (first_id, second_id):
-            sizes += (await db_session.get(Document, doc_id)).file_size_bytes
         used_before = owner.storage_used_bytes
 
         await client.post(
@@ -92,7 +89,9 @@ class TestBulkDelete:
         )
 
         await db_session.refresh(owner)
-        assert owner.storage_used_bytes == used_before - sizes
+        assert owner.storage_used_bytes == used_before
+        trash = (await client.get(DOCUMENTS + "trash", headers=auth_headers)).json()
+        assert {doc["id"] for doc in trash} == {str(first_id), str(second_id)}
 
     async def test_a_busy_document_is_reported_and_the_rest_are_deleted(
         self,
@@ -113,9 +112,9 @@ class TestBulkDelete:
                 return DocumentDeletionOutcome(
                     error=DocumentDeletionError.BUSY, detail="try again shortly"
                 )
-            return await document_deletion.delete_document(db, document_id)
+            return await document_deletion.soft_delete_document(db, document_id)
 
-        monkeypatch.setattr(documents, "delete_document", _busy)
+        monkeypatch.setattr(documents, "soft_delete_document", _busy)
 
         response = await client.post(
             BULK_DELETE,
