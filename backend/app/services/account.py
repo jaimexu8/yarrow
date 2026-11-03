@@ -13,6 +13,7 @@ from yarrow_db.models import (
     Document,
     DocumentShare,
     DocumentTag,
+    Folder,
     Job,
     Page,
     Region,
@@ -140,9 +141,10 @@ async def _delete_rows(db: AsyncSession, user_id: UUID) -> tuple[int, list[str]]
     # Delete cloud credentials for the user
     await db.execute(delete(CloudCredential).where(CloudCredential.user_id == user_id))
 
-    # Finally, delete the user's documents and the user account itself.
+    # Finally, delete the user's documents, folders, and the user account itself.
     if document_ids:
         await db.execute(delete(Document).where(Document.id.in_(document_ids)))
+    await db.execute(delete(Folder).where(Folder.owner_id == user_id))
     await db.execute(delete(User).where(User.id == user_id))
     return len(document_ids), keys
 

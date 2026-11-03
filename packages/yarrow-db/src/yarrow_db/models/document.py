@@ -27,7 +27,15 @@ class Document(Base):
     # document already stored instead of creating a duplicate. Unique per
     # owner (index in migration 0006).
     client_upload_id = Column(String)
+    # null means unfiled. deleting the folder leaves the document in place.
+    folder_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("folders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     owner = relationship("User")
+    folder = relationship("Folder", back_populates="documents")

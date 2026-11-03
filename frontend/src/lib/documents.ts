@@ -43,6 +43,7 @@ export type DocumentSummary = {
   status: DocumentStatus | null;
   error_message: string | null;
   created_at: string | null;
+  folder_id: string | null;
   reprocess?: ReprocessInfo | null;
   tags?: DocumentTag[];
 };
@@ -71,12 +72,37 @@ export async function reprocessDocument(id: string): Promise<DocumentSummary> {
   return res.data;
 }
 
+/**
+ * List documents the caller can see.
+ *
+ * Omit ``folderId`` for the full library (owned and shared). Pass ``null``
+ * for owned unfiled documents, or a folder id for owned documents in that
+ * folder.
+ */
 export async function listDocuments(
-  tagId?: string
+  folderId?: string | null
 ): Promise<DocumentSummary[]> {
+  const params =
+    folderId === undefined
+      ? undefined
+      : { folder_id: folderId === null ? 'null' : folderId };
   const res = await api.get<DocumentSummary[]>('/api/v1/documents/', {
-    params: tagId ? { tag_id: tagId } : undefined,
+    params,
   });
+  return res.data;
+}
+
+/**
+ * Move a document into a folder, or unfile it with null (US-103).
+ */
+export async function moveDocumentToFolder(
+  id: string,
+  folderId: string | null
+): Promise<DocumentSummary> {
+  const res = await api.patch<DocumentSummary>(
+    `/api/v1/documents/${id}/folder`,
+    { folder_id: folderId }
+  );
   return res.data;
 }
 

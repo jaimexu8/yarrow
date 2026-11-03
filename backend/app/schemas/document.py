@@ -76,6 +76,8 @@ class DocumentOut(BaseModel):
     status: str | None = None
     error_message: str | None = None
     created_at: datetime | None = None
+    # null means unfiled (US-103).
+    folder_id: UUID | None = None
     # Filled in by the endpoint (see app.services.reprocess); not a column.
     reprocess: ReprocessInfo | None = None
     # filled in by documents_out from document_tags; not a column.
