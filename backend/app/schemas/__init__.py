@@ -33,6 +33,7 @@ from .document import (
     UploadRejected,
     UploadResponse,
 )
+from .folder import DocumentFolderUpdate, FolderCreate, FolderOut, FolderRename
 from .integrations import (
     CloudConnectionOut,
     OAuthAuthorizeResponse,
@@ -71,11 +72,15 @@ __all__ = [
     "BulkItemResult",
     "CloudConnectionOut",
     "DocumentDetail",
+    "DocumentFolderUpdate",
     "DocumentOut",
     "DocumentRename",
     "DocumentShareOut",
     "DocumentStats",
     "DocumentTree",
+    "FolderCreate",
+    "FolderOut",
+    "FolderRename",
     "JobOut",
     "MergeCandidate",
     "MergeCandidatesOut",
