@@ -25,7 +25,11 @@ from yarrow_storage import ObjectNotFoundError, get_storage
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.queue import enqueue_document_processing, revoke_document_processing
+from app.core.queue import (
+    enqueue_document_processing,
+    job_priority,
+    revoke_document_processing,
+)
 from app.core.security import get_current_user
 from app.deps import (
     DocumentAccess,
@@ -327,7 +331,9 @@ async def upload_documents(
             # Re-reported from an earlier upload; it was queued back then.
             continue
         try:
-            item.task_id = enqueue_document_processing(item.job_id)
+            item.task_id = enqueue_document_processing(
+                item.job_id, priority=job_priority(item.file_size_bytes)
+            )
         except Exception:
             # The file is already stored and counted, so the upload itself
             # succeeded; only starting processing failed. Record that on the

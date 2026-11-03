@@ -227,6 +227,46 @@ class TestFinishedDocumentIsReprocessedInFull:
         assert response.status_code == 200, response.text
         assert fake_queue.pages[fake_queue[-1]] is None
 
+    async def test_reprocess_uses_the_same_size_based_priority(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        from app.core.queue import job_priority
+
+        small = (FIXTURES_DIR / "sample.pdf").read_bytes()
+        large = small + b"\0" * (1_000_000 - len(small) + 1)
+
+        small_res = await client.post(
+            UPLOAD,
+            headers=auth_headers,
+            files=[("files", ("small.pdf", small, "application/pdf"))],
+        )
+        large_res = await client.post(
+            UPLOAD,
+            headers=auth_headers,
+            files=[("files", ("large.pdf", large, "application/pdf"))],
+        )
+        small_doc = uuid.UUID(small_res.json()["accepted"][0]["document_id"])
+        small_job = uuid.UUID(small_res.json()["accepted"][0]["job_id"])
+        large_doc = uuid.UUID(large_res.json()["accepted"][0]["document_id"])
+        large_job = uuid.UUID(large_res.json()["accepted"][0]["job_id"])
+        await _finish(db_session, small_doc, small_job, {1: "completed"})
+        await _finish(db_session, large_doc, large_job, {1: "completed"})
+
+        small_again = await _reprocess(client, auth_headers, small_doc)
+        large_again = await _reprocess(client, auth_headers, large_doc)
+
+        assert small_again.status_code == 200, small_again.text
+        assert large_again.status_code == 200, large_again.text
+        assert len(fake_queue) == 4
+        upload_small, upload_large, reprocess_small, reprocess_large = fake_queue
+        small_prio = fake_queue.priorities[reprocess_small]
+        large_prio = fake_queue.priorities[reprocess_large]
+        assert small_prio == job_priority(len(small))
+        assert large_prio == job_priority(len(large))
+        assert small_prio == fake_queue.priorities[upload_small]
+        assert large_prio == fake_queue.priorities[upload_large]
+        assert small_prio < large_prio
+
 
 class TestQueueOutage:
     async def test_document_is_left_as_it_was(
@@ -240,7 +280,7 @@ class TestQueueOutage:
         document.error_message = "1 of 2 page(s) failed: 2"
         await db_session.flush()
 
-        def _broker_down(job_id, pages=None):
+        def _broker_down(job_id, pages=None, **_kwargs):
             raise ConnectionError("broker unavailable")
 
         monkeypatch.setattr(documents, "enqueue_document_processing", _broker_down)
