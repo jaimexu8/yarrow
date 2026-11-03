@@ -6,6 +6,7 @@ from .page import Page
 from .region import Region, RegionImage, RegionText
 from .share import DocumentShare
 from .table import RegionTable, Table, TableCell
+from .tag import DocumentTag, Tag
 from .user import User
 from .warning import Warning
 
@@ -14,6 +15,7 @@ __all__ = [
     "CloudCredential",
     "Document",
     "DocumentShare",
+    "DocumentTag",
     "Job",
     "Page",
     "Region",
@@ -22,6 +24,7 @@ __all__ = [
     "RegionText",
     "Table",
     "TableCell",
+    "Tag",
     "User",
     "Warning",
 ]

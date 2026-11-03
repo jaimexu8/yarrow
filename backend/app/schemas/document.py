@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.tag import TagOut
 from app.services.failure_messages import (
     DOCUMENT_FAILED_MESSAGE,
     PAGE_FAILED_MESSAGE,
@@ -77,6 +78,8 @@ class DocumentOut(BaseModel):
     created_at: datetime | None = None
     # Filled in by the endpoint (see app.services.reprocess); not a column.
     reprocess: ReprocessInfo | None = None
+    # filled in by documents_out from document_tags; not a column.
+    tags: list[TagOut] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _only_user_facing_errors(self):

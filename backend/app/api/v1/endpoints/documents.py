@@ -19,7 +19,16 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
-from yarrow_db.models import Document, DocumentShare, Job, Page, Region, User
+from yarrow_db.models import (
+    Document,
+    DocumentShare,
+    DocumentTag,
+    Job,
+    Page,
+    Region,
+    Tag,
+    User,
+)
 from yarrow_db.models.region import RegionImage
 from yarrow_storage import ObjectNotFoundError, get_storage
 
@@ -57,7 +66,6 @@ from app.services.reprocess import (
     ReprocessError,
     documents_out,
     reprocess_document,
-    reprocess_info_for,
 )
 
 router = APIRouter()
@@ -358,9 +366,24 @@ async def upload_documents(
 
 @router.get("/", response_model=list[DocumentOut])
 async def list_documents(
+    tag_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if tag_id is not None:
+        result = await db.execute(
+            select(Document)
+            .join(DocumentTag, DocumentTag.document_id == Document.id)
+            .join(Tag, Tag.id == DocumentTag.tag_id)
+            .where(
+                Document.owner_id == current_user.id,
+                DocumentTag.tag_id == tag_id,
+                Tag.owner_id == current_user.id,
+            )
+            .order_by(Document.created_at.desc())
+        )
+        return await documents_out(db, list(result.scalars().all()))
+
     shared_subquery = select(DocumentShare.document_id).where(
         DocumentShare.shared_with_user_id == current_user.id
     )
@@ -393,12 +416,13 @@ async def get_document(
     pages = await db.execute(
         select(Page).where(Page.document_id == document_id).order_by(Page.page_number)
     )
-    detail = DocumentDetail.model_validate(document)
-    detail.reprocess = (await reprocess_info_for(db, [document]))[document.id]
+    base = (await documents_out(db, [document]))[0]
     # Validated one by one so each gets the user-facing error filter (US-11).
-    detail.jobs = [JobOut.model_validate(job) for job in jobs.scalars()]
-    detail.pages = [PageOut.model_validate(page) for page in pages.scalars()]
-    return detail
+    return DocumentDetail(
+        **base.model_dump(),
+        jobs=[JobOut.model_validate(job) for job in jobs.scalars()],
+        pages=[PageOut.model_validate(page) for page in pages.scalars()],
+    )
 
 
 @router.patch("/{document_id}", response_model=DocumentOut)

@@ -17,6 +17,7 @@ import {
   RotateCw,
   Search,
   SearchX,
+  Tag as TagIcon,
   Upload,
   Trash,
   X,
@@ -26,6 +27,7 @@ import { Alert } from '@/components/ui/Alert';
 import { ActionMenu, type ActionMenuItem } from '@/components/ui/ActionMenu';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
@@ -38,11 +40,20 @@ import {
   STATUS_LABELS,
   type DocumentStatus,
   type DocumentSummary,
+  type DocumentTag,
 } from '@/lib/documents';
 import { cn } from '@/lib/cn';
 import { formatBytes } from '@/lib/uploads';
 import { toApiError } from '@/lib/errors';
 import { useDocuments } from '@/lib/useDocuments';
+import {
+  addDocumentTag,
+  documentHasTag,
+  MAX_TAG_NAME_LENGTH,
+  removeDocumentTag,
+  tagNameError,
+  uniqueTags,
+} from '@/lib/tags';
 import {
   DeleteDocumentDialog,
   FailureNote,
@@ -94,6 +105,7 @@ export function DocumentLibrary() {
   const { documents, error, replace, remove, reload } = useDocuments();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | ''>('');
+  const [tagFilter, setTagFilter] = useState('');
   const [sortCol, setSortCol] = useState<SortColumn>('date');
   const [sortDir, setSortDir] = useState<SortDirection>('desc');
   const [announcement, setAnnouncement] = useState('');
@@ -114,6 +126,13 @@ export function DocumentLibrary() {
   useEffect(() => {
     if (deletions > 0) filterInput.current?.focus();
   }, [deletions]);
+
+  useEffect(() => {
+    if (!tagFilter || documents === null) return;
+    if (!uniqueTags(documents).some((tag) => tag.id === tagFilter)) {
+      setTagFilter('');
+    }
+  }, [documents, tagFilter]);
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -249,9 +268,11 @@ export function DocumentLibrary() {
   }
 
   const needle = query.trim().toLocaleLowerCase();
+  const tagChoices = uniqueTags(documents);
   const visible = documents.filter(
     (doc) =>
       (statusFilter === '' || doc.status === statusFilter) &&
+      (tagFilter === '' || documentHasTag(doc, tagFilter)) &&
       (!needle || doc.filename.toLocaleLowerCase().includes(needle))
   );
 
@@ -326,8 +347,24 @@ export function DocumentLibrary() {
             ))}
           </Select>
         </div>
+        <div className="w-44 shrink-0">
+          <Select
+            id="tag-filter"
+            label="Tag"
+            hideLabel
+            value={tagFilter}
+            onChange={(event) => setTagFilter(event.target.value)}
+          >
+            <option value="">All tags</option>
+            {tagChoices.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.name}
+              </option>
+            ))}
+          </Select>
+        </div>
         <p aria-live="polite" className="text-sm text-slate-500">
-          {needle || statusFilter !== ''
+          {needle || statusFilter !== '' || tagFilter !== ''
             ? `${visible.length} of ${documents.length} documents`
             : `${documents.length} ${documents.length === 1 ? 'document' : 'documents'}`}
         </p>
@@ -337,9 +374,15 @@ export function DocumentLibrary() {
         <NoMatches
           query={query.trim()}
           statusLabel={statusFilter ? STATUS_LABELS[statusFilter] : null}
+          tagLabel={
+            tagFilter
+              ? (tagChoices.find((tag) => tag.id === tagFilter)?.name ?? null)
+              : null
+          }
           onClear={() => {
             setQuery('');
             setStatusFilter('');
+            setTagFilter('');
           }}
         />
       ) : (
@@ -442,6 +485,7 @@ export function DocumentLibrary() {
                 <DocumentTableRow
                   key={doc.id}
                   doc={doc}
+                  availableTags={tagChoices}
                   selected={selected.has(doc.id)}
                   onToggle={(event) => toggleRow(doc.id, event)}
                   onChanged={replace}
@@ -474,6 +518,7 @@ function UploadedAt({ value }: { value: string | null }) {
 
 function DocumentTableRow({
   doc,
+  availableTags,
   selected,
   onToggle,
   onChanged,
@@ -481,6 +526,7 @@ function DocumentTableRow({
   onDeleted,
 }: {
   doc: DocumentSummary;
+  availableTags: DocumentTag[];
   selected: boolean;
   onToggle: (event: ReactMouseEvent) => void;
   onChanged: (doc: DocumentSummary) => void;
@@ -491,6 +537,8 @@ function DocumentTableRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [addingTag, setAddingTag] = useState(false);
+  const [tagError, setTagError] = useState<string | null>(null);
   const nameLink = useRef<HTMLAnchorElement>(null);
   const { cancel, canceling, cancelError } = useCancelProcessing(
     doc,
@@ -512,12 +560,31 @@ function DocumentTableRow({
     requestAnimationFrame(() => nameLink.current?.focus());
   }
 
+  async function handleRemoveTag(tag: DocumentTag) {
+    setTagError(null);
+    try {
+      await removeDocumentTag(doc.id, tag.id);
+      onChanged({
+        ...doc,
+        tags: (doc.tags ?? []).filter((item) => item.id !== tag.id),
+      });
+    } catch (err) {
+      setTagError(toApiError(err).message);
+    }
+  }
+
   const actions: ActionMenuItem[] = [
     {
       label: 'Rename',
       icon: Pencil,
       keepFocus: true,
       onSelect: () => setEditing(true),
+    },
+    {
+      label: 'Add tag',
+      icon: TagIcon,
+      keepFocus: true,
+      onSelect: () => setAddingTag(true),
     },
     // Resumes unfinished work, or processes a finished document again
     ...(reprocess.available && !reprocess.reprocessing
@@ -604,6 +671,11 @@ function DocumentTableRow({
                   </span>
                 )}
               </p>
+              <DocumentTagChips
+                filename={doc.filename}
+                tags={doc.tags ?? []}
+                onRemove={handleRemoveTag}
+              />
             </div>
           </div>
         )}
@@ -612,14 +684,25 @@ function DocumentTableRow({
         ) : (
           <FailureNote doc={doc}>{reprocessLink}</FailureNote>
         )}
-        {(cancelError || reprocess.error) && (
+        {(cancelError || reprocess.error || tagError) && (
           <p role="alert" className="mt-0.5 text-xs text-red-700">
             {reprocess.error
               ? `Couldn't reprocess: ${reprocess.error}`
-              : cancelError}
+              : (cancelError ?? tagError)}
           </p>
         )}
         {reprocess.dialog}
+        <AddTagDialog
+          doc={doc}
+          availableTags={availableTags}
+          open={addingTag}
+          onClose={() => setAddingTag(false)}
+          onAdded={(updated) => {
+            setAddingTag(false);
+            setTagError(null);
+            onChanged(updated);
+          }}
+        />
       </td>
       <td className={cn(CELL, 'hidden whitespace-nowrap md:table-cell')}>
         <UploadedAt value={doc.created_at} />
@@ -874,10 +957,12 @@ function EmptyLibrary() {
 function NoMatches({
   query,
   statusLabel,
+  tagLabel,
   onClear,
 }: {
   query: string;
   statusLabel: string | null;
+  tagLabel: string | null;
   onClear: () => void;
 }) {
   return (
@@ -890,13 +975,152 @@ function NoMatches({
           </>
         ) : query ? (
           <>No documents match &ldquo;{query}&rdquo;.</>
-        ) : (
+        ) : statusLabel ? (
           <>No documents with status {statusLabel}.</>
+        ) : (
+          <>No documents with tag {tagLabel}.</>
         )}
       </p>
       <Button variant="link" className="mt-2 text-sm" onClick={onClear}>
         Clear filters
       </Button>
     </div>
+  );
+}
+
+function DocumentTagChips({
+  filename,
+  tags,
+  onRemove,
+}: {
+  filename: string;
+  tags: DocumentTag[];
+  onRemove: (tag: DocumentTag) => void;
+}) {
+  if (tags.length === 0) return null;
+  return (
+    <ul className="mt-1.5 flex flex-wrap gap-1">
+      {tags.map((tag) => (
+        <li key={tag.id}>
+          <span className="inline-flex items-center gap-0.5 rounded-full border border-slate-200 bg-slate-50 py-0.5 pl-2 pr-0.5 text-xs font-medium text-slate-700">
+            {tag.name}
+            <button
+              type="button"
+              aria-label={`Remove tag ${tag.name} from ${filename}`}
+              onClick={() => onRemove(tag)}
+              className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            >
+              <X aria-hidden="true" className="size-3" />
+            </button>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function AddTagDialog({
+  doc,
+  availableTags,
+  open,
+  onClose,
+  onAdded,
+}: {
+  doc: DocumentSummary;
+  availableTags: DocumentTag[];
+  open: boolean;
+  onClose: () => void;
+  onAdded: (doc: DocumentSummary) => void;
+}) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const unused = availableTags.filter((tag) => !documentHasTag(doc, tag.id));
+
+  useEffect(() => {
+    if (!open) return;
+    setName('');
+    setError(null);
+  }, [open]);
+
+  async function save(value: string) {
+    const problem = tagNameError(value);
+    if (problem) return setError(problem);
+    setBusy(true);
+    setError(null);
+    try {
+      onAdded(await addDocumentTag(doc.id, value.trim()));
+      setName('');
+    } catch (err) {
+      setError(toApiError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      dismissible={!busy}
+      title={`Add a tag to ${doc.filename}`}
+      footer={
+        <>
+          <Button
+            variant="secondary"
+            className="sm:w-auto"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            className="sm:w-auto"
+            onClick={() => save(name)}
+            loading={busy}
+          >
+            Add tag
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          save(name);
+        }}
+      >
+        <Input
+          id={`add-tag-${doc.id}`}
+          label="Tag name"
+          value={name}
+          maxLength={MAX_TAG_NAME_LENGTH}
+          onChange={(event) => setName(event.target.value)}
+          error={error ?? undefined}
+          data-autofocus
+        />
+      </form>
+      {unused.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium text-slate-500">Your tags</p>
+          <ul className="mt-1.5 flex flex-wrap gap-1">
+            {unused.map((tag) => (
+              <li key={tag.id}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => save(tag.name)}
+                  className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:text-slate-400"
+                >
+                  {tag.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Modal>
   );
 }

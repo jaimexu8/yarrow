@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react';
 import type { DocumentStatus, DocumentSummary } from '@/lib/documents';
 import { bulkDelete, bulkReprocess } from '@/lib/documents';
+import { addDocumentTag, removeDocumentTag } from '@/lib/tags';
 import { DocumentLibrary } from './DocumentTable';
 
 const state = vi.hoisted(() => ({
@@ -34,6 +35,15 @@ vi.mock('@/lib/documents', async (importOriginal) => {
   };
 });
 
+vi.mock('@/lib/tags', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/tags')>();
+  return {
+    ...actual,
+    addDocumentTag: vi.fn(),
+    removeDocumentTag: vi.fn(),
+  };
+});
+
 function checkbox(filename: string) {
   return screen.getByRole('checkbox', { name: `Select ${filename}` });
 }
@@ -53,7 +63,8 @@ beforeAll(() => {
 function makeDoc(
   id: string,
   filename: string,
-  status: DocumentStatus | null
+  status: DocumentStatus | null,
+  tags: DocumentSummary['tags'] = []
 ): DocumentSummary {
   return {
     id,
@@ -64,6 +75,7 @@ function makeDoc(
     status,
     error_message: null,
     created_at: '2025-01-01T00:00:00',
+    tags,
   };
 }
 
@@ -77,6 +89,12 @@ const DOCS: DocumentSummary[] = [
 
 function selectStatus(value: string) {
   fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
+    target: { value },
+  });
+}
+
+function selectTag(value: string) {
+  fireEvent.change(screen.getByRole('combobox', { name: 'Tag' }), {
     target: { value },
   });
 }
@@ -235,4 +253,78 @@ test('shows a clear-filters empty state when a status matches nothing', () => {
   for (const doc of DOCS) {
     expect(nameLink(doc.filename), doc.filename).not.toBeNull();
   }
+});
+
+const TAGGED_DOCS: DocumentSummary[] = [
+  makeDoc('a', 'report-a.pdf', 'completed', [
+    { id: 'invoice', name: 'invoice' },
+  ]),
+  makeDoc('b', 'report-b.pdf', 'completed', [{ id: 'tax', name: 'tax' }]),
+  makeDoc('c', 'invoice-c.pdf', 'failed', [{ id: 'invoice', name: 'invoice' }]),
+];
+
+test('shows tag chips on each row', () => {
+  state.documents = TAGGED_DOCS;
+  render(<DocumentLibrary />);
+  expect(
+    screen.getAllByRole('button', { name: /Remove tag invoice/ })
+  ).toHaveLength(2);
+  expect(
+    screen.getByRole('button', {
+      name: 'Remove tag tax from report-b.pdf',
+    })
+  ).toBeTruthy();
+});
+
+test('filters to documents with the chosen tag', () => {
+  state.documents = TAGGED_DOCS;
+  render(<DocumentLibrary />);
+  selectTag('invoice');
+  expect(screen.getByText('2 of 3 documents')).toBeTruthy();
+  expect(nameLink('report-a.pdf')).not.toBeNull();
+  expect(nameLink('invoice-c.pdf')).not.toBeNull();
+  expect(nameLink('report-b.pdf')).toBeNull();
+});
+
+test('resetting to All tags shows every document again', () => {
+  state.documents = TAGGED_DOCS;
+  render(<DocumentLibrary />);
+  selectTag('tax');
+  expect(screen.getByText('1 of 3 documents')).toBeTruthy();
+  selectTag('');
+  expect(screen.getByText('3 documents')).toBeTruthy();
+  expect(nameLink('report-b.pdf')).not.toBeNull();
+});
+
+test('removing a tag chip calls the api', async () => {
+  state.documents = TAGGED_DOCS;
+  vi.mocked(removeDocumentTag).mockResolvedValue();
+  render(<DocumentLibrary />);
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: 'Remove tag tax from report-b.pdf',
+    })
+  );
+  await vi.waitFor(() =>
+    expect(removeDocumentTag).toHaveBeenCalledWith('b', 'tax')
+  );
+});
+
+test('adding a tag from the action menu posts the name', async () => {
+  state.documents = [makeDoc('a', 'report-a.pdf', 'completed')];
+  vi.mocked(addDocumentTag).mockResolvedValue(
+    makeDoc('a', 'report-a.pdf', 'completed', [{ id: 'new', name: 'draft' }])
+  );
+  render(<DocumentLibrary />);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'More actions for report-a.pdf' })
+  );
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Add tag' }));
+  fireEvent.change(screen.getByLabelText('Tag name'), {
+    target: { value: 'draft' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Add tag' }));
+  await vi.waitFor(() =>
+    expect(addDocumentTag).toHaveBeenCalledWith('a', 'draft')
+  );
 });

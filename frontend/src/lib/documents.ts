@@ -29,6 +29,11 @@ export type ReprocessInfo = {
   page_numbers: number[];
 };
 
+export type DocumentTag = {
+  id: string;
+  name: string;
+};
+
 export type DocumentSummary = {
   id: string;
   filename: string;
@@ -39,6 +44,7 @@ export type DocumentSummary = {
   error_message: string | null;
   created_at: string | null;
   reprocess?: ReprocessInfo | null;
+  tags?: DocumentTag[];
 };
 
 export function isInterrupted(doc: DocumentSummary): boolean {
@@ -65,8 +71,12 @@ export async function reprocessDocument(id: string): Promise<DocumentSummary> {
   return res.data;
 }
 
-export async function listDocuments(): Promise<DocumentSummary[]> {
-  const res = await api.get<DocumentSummary[]>('/api/v1/documents/');
+export async function listDocuments(
+  tagId?: string
+): Promise<DocumentSummary[]> {
+  const res = await api.get<DocumentSummary[]>('/api/v1/documents/', {
+    params: tagId ? { tag_id: tagId } : undefined,
+  });
   return res.data;
 }
 

@@ -53,6 +53,7 @@ from .sharing import (
     ShareDocumentRequest,
     UpdateShareRequest,
 )
+from .tag import TagCreate, TagListItem, TagOut
 from .table import (
     MergeCandidate,
     MergeCandidatesOut,
@@ -97,6 +98,9 @@ __all__ = [
     "StrictModel",
     "SyncResponse",
     "SyncStatusOut",
+    "TagCreate",
+    "TagListItem",
+    "TagOut",
     "TableCellNode",
     "TableMutationResult",
     "TableNode",
