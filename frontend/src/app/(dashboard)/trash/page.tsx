@@ -32,17 +32,21 @@ export default function TrashPage() {
   const [confirmEmpty, setConfirmEmpty] = useState(false);
   const [emptyError, setEmptyError] = useState<string | null>(null);
 
-  async function load() {
-    try {
-      setDocuments(await listTrash());
-      setError(null);
-    } catch (err) {
-      setError(toApiError(err).message);
-    }
-  }
-
   useEffect(() => {
-    load();
+    let current = true;
+    listTrash()
+      .then((docs) => {
+        if (!current) return;
+        setDocuments(docs);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!current) return;
+        setError(toApiError(err).message);
+      });
+    return () => {
+      current = false;
+    };
   }, []);
 
   function drop(id: string) {
