@@ -4,7 +4,15 @@ import json
 import uuid
 
 import pytest
-from yarrow_db.models import Document, Page, Region, RegionText
+from yarrow_db.models import (
+    Document,
+    Page,
+    Region,
+    RegionTable,
+    RegionText,
+    Table,
+    TableCell,
+)
 
 from tests.conftest import FIXTURES_DIR
 
@@ -66,6 +74,60 @@ async def _complete(db_session, document_id: uuid.UUID) -> None:
             RegionText(region_id=body.id, text_content="Second page body."),
         ]
     )
+    await db_session.flush()
+
+
+async def _add_table(
+    db_session,
+    document_id,
+    rows: list[list[str]],
+    *,
+    title: str | None = None,
+    page_number: int = 1,
+    reading_order: int = 0,
+) -> None:
+    """Attach one logical table so csv export has real cells to write."""
+    page = Page(id=uuid.uuid4(), document_id=document_id, page_number=page_number)
+    region = Region(
+        id=uuid.uuid4(),
+        page_id=page.id,
+        page_number=page_number,
+        reading_order=reading_order,
+        region_type="table",
+    )
+    table = Table(
+        id=uuid.uuid4(),
+        document_id=document_id,
+        row_count=len(rows),
+        col_count=max((len(row) for row in rows), default=0),
+        title=title,
+    )
+    region_table = RegionTable(
+        id=uuid.uuid4(),
+        region_id=region.id,
+        table_id=table.id,
+        reading_order=reading_order,
+        row_start=0,
+        row_end=max(len(rows) - 1, 0),
+        col_start=0,
+        col_end=max(len(rows[0]) - 1, 0) if rows else 0,
+    )
+    cells = [
+        TableCell(
+            region_table_id=region_table.id,
+            row_idx=row_index,
+            col_idx=col_index,
+            text_content=value,
+            is_header=row_index == 0,
+            x0=0,
+            y0=0,
+            x1=1,
+            y1=1,
+        )
+        for row_index, row in enumerate(rows)
+        for col_index, value in enumerate(row)
+    ]
+    db_session.add_all([page, region, table, region_table, *cells])
     await db_session.flush()
 
 
@@ -161,7 +223,79 @@ class TestExport:
         assert response.status_code == 409
         assert response.json()["detail"]["code"] == "DOCUMENT_NOT_PROCESSED"
 
-    @pytest.mark.parametrize("params", [{}, {"format": "csv"}])
+    async def test_csv_download(self, client, auth_headers, db_session):
+        document_id = await _upload(client, auth_headers)
+        await _complete(db_session, document_id)
+        await _add_table(
+            db_session,
+            document_id,
+            [["Name", "Amount"], ["Rent", "1200"]],
+            title="Costs",
+            page_number=3,
+        )
+
+        response = await client.get(
+            f"{DOCUMENTS}{document_id}/export",
+            headers=auth_headers,
+            params={"format": "csv"},
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == "text/csv; charset=utf-8"
+        body = response.text
+        assert "Costs" in body
+        assert "Name,Amount" in body
+        assert "Rent,1200" in body
+        assert 'filename="sample.csv"' in response.headers["content-disposition"]
+
+    async def test_csv_includes_every_table(self, client, auth_headers, db_session):
+        document_id = await _upload(client, auth_headers)
+        await _complete(db_session, document_id)
+        await _add_table(
+            db_session,
+            document_id,
+            [["A", "B"], ["1", "2"]],
+            title="First",
+            page_number=3,
+            reading_order=0,
+        )
+        await _add_table(
+            db_session,
+            document_id,
+            [["C", "D"], ["3", "4"]],
+            title="Second",
+            page_number=4,
+            reading_order=0,
+        )
+
+        response = await client.get(
+            f"{DOCUMENTS}{document_id}/export",
+            headers=auth_headers,
+            params={"format": "csv"},
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.text
+        assert "First" in body
+        assert "A,B" in body
+        assert "Second" in body
+        assert "C,D" in body
+
+    async def test_csv_is_blocked_while_processing(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+
+        response = await client.get(
+            f"{DOCUMENTS}{document_id}/export",
+            headers=auth_headers,
+            params={"format": "csv"},
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "DOCUMENT_NOT_PROCESSED"
+
+    @pytest.mark.parametrize("params", [{}, {"format": "xlsx"}])
     async def test_missing_or_unknown_format_is_rejected(
         self, client, auth_headers, db_session, params
     ):

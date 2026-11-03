@@ -11,13 +11,19 @@ from app.deps import DocumentAccess, require_completed, require_read_access
 from app.schemas.parsed import DocumentTree
 from app.services.document_tree import load_document_tree
 from app.services.export import content_disposition, display_stem, safe_stem
-from app.services.markdown import RenderOptions, render_markdown, render_plain_text
+from app.services.markdown import (
+    RenderOptions,
+    render_csv,
+    render_markdown,
+    render_plain_text,
+)
 
 
 class ExportFormat(str, Enum):
     JSON = "json"
     MARKDOWN = "markdown"
     TEXT = "text"
+    CSV = "csv"
 
 
 router = APIRouter()
@@ -93,7 +99,7 @@ async def export_document(
     access: DocumentAccess = Depends(require_read_access),
     db: AsyncSession = Depends(get_db),
 ):
-    """Download the extracted content as JSON, Markdown or plain text"""
+    """Download the extracted content as JSON, Markdown, plain text, or CSV"""
     require_completed(access)
 
     tree = await load_document_tree(db, access, page=page, include_warnings=export_format is ExportFormat.JSON)
@@ -126,4 +132,6 @@ def _serialize(tree: DocumentTree, export_format: ExportFormat, include_artifact
         )
     if export_format is ExportFormat.MARKDOWN:
         return "md", "text/markdown; charset=utf-8", render_markdown(tree, options)
+    if export_format is ExportFormat.CSV:
+        return "csv", "text/csv; charset=utf-8", render_csv(tree)
     return "txt", "text/plain; charset=utf-8", render_plain_text(tree, options)

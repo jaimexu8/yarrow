@@ -94,6 +94,19 @@ test('falls back to the document name when no header is sent', async () => {
   expect(name()).toBe('report.txt');
 });
 
+test('csv export uses the csv extension', async () => {
+  const name = captureClickedName();
+  vi.mocked(api.get).mockResolvedValueOnce(jsonResponse('a,b\n', null));
+
+  await exportDocument('doc-1', 'csv', 'report.pdf');
+
+  expect(api.get).toHaveBeenCalledWith('/api/v1/documents/doc-1/export', {
+    params: { format: 'csv' },
+    responseType: 'blob',
+  });
+  expect(name()).toBe('report.csv');
+});
+
 test('parses a JSON error body so the message reaches the UI', async () => {
   const error = Object.assign(new Error('Request failed with status 409'), {
     isAxiosError: true,

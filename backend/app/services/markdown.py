@@ -1,5 +1,7 @@
-"""Render a DocumentTree as Markdown or plain text"""
+"""Render a DocumentTree as Markdown, plain text, or CSV"""
 
+import csv
+import io
 import re
 from dataclasses import dataclass
 
@@ -32,6 +34,30 @@ def render_markdown(tree: DocumentTree, options: RenderOptions | None = None) ->
 
 def render_plain_text(tree: DocumentTree, options: RenderOptions | None = None) -> str:
     return _Renderer(tree, options or RenderOptions()).plain_text()
+
+
+def render_csv(tree: DocumentTree) -> str:
+    """One csv file with every logical table, in document order.
+
+    Tables are separated by a blank row. A title, when present, is written as
+    the first row of that table. Excel on windows reads utf-8 more reliably
+    when the file starts with a bom, so one is prepended.
+    """
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    wrote_any = False
+    for table in tree.tables:
+        grid = _build_grid(table.cells)
+        if not table.title and not grid:
+            continue
+        if wrote_any:
+            writer.writerow([])
+        wrote_any = True
+        if table.title:
+            writer.writerow([table.title])
+        for row in grid:
+            writer.writerow(row)
+    return "\ufeff" + buffer.getvalue()
 
 
 class _Renderer:

@@ -1,12 +1,13 @@
 import { isAxiosError } from 'axios';
 import api from './api';
 
-export type ExportFormat = 'markdown' | 'text' | 'json';
+export type ExportFormat = 'markdown' | 'text' | 'json' | 'csv';
 
 const EXTENSION: Record<ExportFormat, string> = {
   markdown: 'md',
   text: 'txt',
   json: 'json',
+  csv: 'csv',
 };
 
 /**
@@ -71,7 +72,7 @@ async function surfaceJsonError(error: unknown): Promise<void> {
 }
 
 /**
- * Download the document's extracted content as Markdown or plain text.
+ * Download the document's extracted content as markdown, text, json, or csv.
  * Fetched through the API client rather than pointed at by an <a>, because the
  * endpoint needs the bearer token, which only the client sends.
  */
