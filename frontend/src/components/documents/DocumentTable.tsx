@@ -13,6 +13,10 @@ import {
   ArrowUp,
   Check,
   FileText,
+  Folder,
+  FolderInput,
+  FolderOpen,
+  FolderPlus,
   Pencil,
   RotateCw,
   Search,
@@ -26,6 +30,7 @@ import { Alert } from '@/components/ui/Alert';
 import { ActionMenu, type ActionMenuItem } from '@/components/ui/ActionMenu';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
@@ -34,11 +39,19 @@ import {
   bulkReprocess,
   canCancel,
   isInterrupted,
+  moveDocumentToFolder,
   parseApiDate,
   STATUS_LABELS,
   type DocumentStatus,
   type DocumentSummary,
 } from '@/lib/documents';
+import {
+  createFolder,
+  deleteFolder,
+  listFolders,
+  renameFolder,
+  type Folder as LibraryFolder,
+} from '@/lib/folders';
 import { cn } from '@/lib/cn';
 import { formatBytes } from '@/lib/uploads';
 import { toApiError } from '@/lib/errors';
@@ -83,6 +96,16 @@ const HEAD = 'px-3 pb-1 text-left sm:px-4 text-xs font-medium text-slate-500';
 
 type SortColumn = 'name' | 'date' | 'status' | 'pages';
 type SortDirection = 'asc' | 'desc';
+type FolderSelection = 'all' | 'unfiled' | string;
+
+function inSelectedFolder(
+  doc: DocumentSummary,
+  selected: FolderSelection
+): boolean {
+  if (selected === 'all') return true;
+  if (selected === 'unfiled') return doc.folder_id == null;
+  return doc.folder_id === selected;
+}
 
 /**
  * A table of the signed-in user's documents with upload time, page count
@@ -100,6 +123,33 @@ export function DocumentLibrary() {
   const filterId = useId();
   const filterInput = useRef<HTMLInputElement>(null);
   const [deletions, setDeletions] = useState(0);
+  const [folders, setFolders] = useState<LibraryFolder[]>([]);
+  const [foldersError, setFoldersError] = useState<string | null>(null);
+  const [currentFolder, setCurrentFolder] = useState<FolderSelection>('all');
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState<LibraryFolder | null>(
+    null
+  );
+  const [deletingFolder, setDeletingFolder] = useState<LibraryFolder | null>(
+    null
+  );
+
+  useEffect(() => {
+    let current = true;
+    listFolders()
+      .then((items) => {
+        if (current) {
+          setFolders(items);
+          setFoldersError(null);
+        }
+      })
+      .catch((err) => {
+        if (current) setFoldersError(toApiError(err).message);
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
 
   // Row selection for bulk actions. A plain Set, plus the last row that was
   // toggled so Shift+click can range-select from it.
@@ -234,22 +284,91 @@ export function DocumentLibrary() {
       Couldn&apos;t refresh your documents ({error}) Trying again…
     </Alert>
   );
+  const folderWarning = foldersError && (
+    <Alert tone="error">{foldersError}</Alert>
+  );
+
+  function handleFolderCreated(folder: LibraryFolder) {
+    setFolders((current) =>
+      [...current, folder].sort((a, b) => a.name.localeCompare(b.name))
+    );
+    setCurrentFolder(folder.id);
+    setCreatingFolder(false);
+    setAnnouncement(`Created folder ${folder.name}.`);
+  }
+
+  function handleFolderRenamed(folder: LibraryFolder) {
+    setFolders((current) =>
+      current
+        .map((item) => (item.id === folder.id ? folder : item))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    );
+    setRenamingFolder(null);
+    setAnnouncement(`Renamed folder to ${folder.name}.`);
+  }
+
+  function handleFolderDeleted(folder: LibraryFolder) {
+    setFolders((current) => current.filter((item) => item.id !== folder.id));
+    if (currentFolder === folder.id) setCurrentFolder('unfiled');
+    setDeletingFolder(null);
+    setAnnouncement(`Deleted folder ${folder.name}. Documents are unfiled.`);
+    reload();
+  }
+
+  const folderChrome = (
+    <>
+      {creatingFolder && (
+        <FolderNameDialog
+          title="New folder"
+          confirmLabel="Create"
+          onSave={createFolder}
+          onSaved={handleFolderCreated}
+          onClose={() => setCreatingFolder(false)}
+        />
+      )}
+      {renamingFolder && (
+        <FolderNameDialog
+          title="Rename folder"
+          confirmLabel="Save"
+          initialName={renamingFolder.name}
+          onSave={(name) => renameFolder(renamingFolder.id, name)}
+          onSaved={handleFolderRenamed}
+          onClose={() => setRenamingFolder(null)}
+        />
+      )}
+      {deletingFolder && (
+        <DeleteFolderDialog
+          folder={deletingFolder}
+          onDeleted={handleFolderDeleted}
+          onClose={() => setDeletingFolder(null)}
+        />
+      )}
+    </>
+  );
+
+  const folderSidebar = (
+    <FolderSidebar
+      folders={folders}
+      currentFolder={currentFolder}
+      onSelect={(next) => {
+        setCurrentFolder(next);
+        clearSelection();
+      }}
+      onCreate={() => setCreatingFolder(true)}
+      onRename={setRenamingFolder}
+      onDelete={setDeletingFolder}
+    />
+  );
 
   if (documents === null) {
     return warning || <LoadingRows />;
   }
-  if (documents.length === 0) {
-    return (
-      <div className="space-y-3">
-        {status}
-        {warning}
-        <EmptyLibrary />
-      </div>
-    );
-  }
 
+  const inFolder = documents.filter((doc) =>
+    inSelectedFolder(doc, currentFolder)
+  );
   const needle = query.trim().toLocaleLowerCase();
-  const visible = documents.filter(
+  const visible = inFolder.filter(
     (doc) =>
       (statusFilter === '' || doc.status === statusFilter) &&
       (!needle || doc.filename.toLocaleLowerCase().includes(needle))
@@ -276,183 +395,195 @@ export function DocumentLibrary() {
   });
 
   return (
-    <div className="space-y-4">
-      {status}
-      {warning}
-      {bulk && (
-        <BulkConfirmDialog
-          action={bulk.action}
-          count={bulk.ids.length}
-          busy={bulkBusy}
-          error={bulkError}
-          onConfirm={runBulk}
-          onClose={() => setBulk(null)}
-        />
-      )}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-0 flex-1">
-          <label htmlFor={filterId} className="sr-only">
-            Search documents by name
-          </label>
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      {folderSidebar}
+      <div className="min-w-0 flex-1 space-y-4">
+        {status}
+        {warning}
+        {folderWarning}
+        {folderChrome}
+        {bulk && (
+          <BulkConfirmDialog
+            action={bulk.action}
+            count={bulk.ids.length}
+            busy={bulkBusy}
+            error={bulkError}
+            onConfirm={runBulk}
+            onClose={() => setBulk(null)}
           />
-          <input
-            ref={filterInput}
-            id={filterId}
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search documents…"
-            className="w-full rounded-lg border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:ring-slate-900"
-          />
-        </div>
-        <div className="w-44 shrink-0">
-          <Select
-            id="status-filter"
-            label="Status"
-            hideLabel
-            value={statusFilter}
-            onChange={(event) =>
-              setStatusFilter(event.target.value as DocumentStatus | '')
-            }
-          >
-            <option value="">Any status</option>
-            {STATUS_OPTIONS.map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABELS[status]}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <p aria-live="polite" className="text-sm text-slate-500">
-          {needle || statusFilter !== ''
-            ? `${visible.length} of ${documents.length} documents`
-            : `${documents.length} ${documents.length === 1 ? 'document' : 'documents'}`}
-        </p>
-      </div>
-
-      {visible.length === 0 ? (
-        <NoMatches
-          query={query.trim()}
-          statusLabel={statusFilter ? STATUS_LABELS[statusFilter] : null}
-          onClear={() => {
-            setQuery('');
-            setStatusFilter('');
-          }}
-        />
-      ) : (
-        <>
-          {selected.size > 0 && (
-            <BulkActionBar
-              count={selected.size}
-              onClear={clearSelection}
-              onDelete={() => requestBulk('delete')}
-              onReprocess={() => requestBulk('reprocess')}
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-0 flex-1">
+            <label htmlFor={filterId} className="sr-only">
+              Search documents by name
+            </label>
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
             />
-          )}
-          <table className="w-full border-separate border-spacing-y-2">
-            <caption className="sr-only">Your documents, newest first</caption>
-            <thead>
-              <tr>
-                <th scope="col" className={cn(HEAD, 'w-8')}>
-                  <SelectAllButton
-                    indeterminate={
-                      selected.size > 0 && selected.size < visible.length
-                    }
-                    checked={
-                      visible.length > 0 && selected.size === visible.length
-                    }
-                    onToggle={() => {
-                      if (
-                        visible.length > 0 &&
-                        selected.size === visible.length
-                      ) {
-                        clearSelection();
-                      } else {
-                        setSelected(() => new Set(sorted.map((d) => d.id)));
-                      }
-                    }}
-                  />
-                </th>
-                <th scope="col" className={HEAD}>
-                  <button
-                    className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
-                    onClick={() => toggleSort('name')}
-                  >
-                    Document
-                    {sortCol === 'name' &&
-                      (sortDir === 'asc' ? (
-                        <ArrowUp className="size-4" />
-                      ) : (
-                        <ArrowDown className="size-4" />
-                      ))}
-                  </button>
-                </th>
-                <th scope="col" className={cn(HEAD, 'hidden md:table-cell')}>
-                  <button
-                    className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
-                    onClick={() => toggleSort('date')}
-                  >
-                    Uploaded
-                    {sortCol === 'date' &&
-                      (sortDir === 'asc' ? (
-                        <ArrowUp className="size-4" />
-                      ) : (
-                        <ArrowDown className="size-4" />
-                      ))}
-                  </button>
-                </th>
-                <th scope="col" className={cn(HEAD, 'hidden sm:table-cell')}>
-                  <button
-                    className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
-                    onClick={() => toggleSort('pages')}
-                  >
-                    Pages
-                    {sortCol === 'pages' &&
-                      (sortDir === 'asc' ? (
-                        <ArrowUp className="size-4" />
-                      ) : (
-                        <ArrowDown className="size-4" />
-                      ))}
-                  </button>
-                </th>
-                <th scope="col" className={HEAD}>
-                  <button
-                    className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
-                    onClick={() => toggleSort('status')}
-                  >
-                    Status
-                    {sortCol === 'status' &&
-                      (sortDir === 'asc' ? (
-                        <ArrowUp className="size-4" />
-                      ) : (
-                        <ArrowDown className="size-4" />
-                      ))}
-                  </button>
-                </th>
-                <th scope="col" className={cn(HEAD, 'text-right')}>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((doc) => (
-                <DocumentTableRow
-                  key={doc.id}
-                  doc={doc}
-                  selected={selected.has(doc.id)}
-                  onToggle={(event) => toggleRow(doc.id, event)}
-                  onChanged={replace}
-                  onStale={reload}
-                  onDeleted={handleDeleted}
-                />
+            <input
+              ref={filterInput}
+              id={filterId}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search documents…"
+              className="w-full rounded-lg border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:ring-slate-900"
+            />
+          </div>
+          <div className="w-44 shrink-0">
+            <Select
+              id="status-filter"
+              label="Status"
+              hideLabel
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as DocumentStatus | '')
+              }
+            >
+              <option value="">Any status</option>
+              {STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {STATUS_LABELS[status]}
+                </option>
               ))}
-            </tbody>
-          </table>
-        </>
-      )}
+            </Select>
+          </div>
+          <p aria-live="polite" className="text-sm text-slate-500">
+            {needle || statusFilter !== ''
+              ? `${visible.length} of ${inFolder.length} documents`
+              : `${inFolder.length} ${inFolder.length === 1 ? 'document' : 'documents'}`}
+          </p>
+        </div>
+
+        {documents.length === 0 ? (
+          <EmptyLibrary />
+        ) : inFolder.length === 0 ? (
+          <EmptyFolder selection={currentFolder} folders={folders} />
+        ) : visible.length === 0 ? (
+          <NoMatches
+            query={query.trim()}
+            statusLabel={statusFilter ? STATUS_LABELS[statusFilter] : null}
+            onClear={() => {
+              setQuery('');
+              setStatusFilter('');
+            }}
+          />
+        ) : (
+          <>
+            {selected.size > 0 && (
+              <BulkActionBar
+                count={selected.size}
+                onClear={clearSelection}
+                onDelete={() => requestBulk('delete')}
+                onReprocess={() => requestBulk('reprocess')}
+              />
+            )}
+            <table className="w-full border-separate border-spacing-y-2">
+              <caption className="sr-only">
+                Your documents, newest first
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col" className={cn(HEAD, 'w-8')}>
+                    <SelectAllButton
+                      indeterminate={
+                        selected.size > 0 && selected.size < visible.length
+                      }
+                      checked={
+                        visible.length > 0 && selected.size === visible.length
+                      }
+                      onToggle={() => {
+                        if (
+                          visible.length > 0 &&
+                          selected.size === visible.length
+                        ) {
+                          clearSelection();
+                        } else {
+                          setSelected(() => new Set(sorted.map((d) => d.id)));
+                        }
+                      }}
+                    />
+                  </th>
+                  <th scope="col" className={HEAD}>
+                    <button
+                      className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                      onClick={() => toggleSort('name')}
+                    >
+                      Document
+                      {sortCol === 'name' &&
+                        (sortDir === 'asc' ? (
+                          <ArrowUp className="size-4" />
+                        ) : (
+                          <ArrowDown className="size-4" />
+                        ))}
+                    </button>
+                  </th>
+                  <th scope="col" className={cn(HEAD, 'hidden md:table-cell')}>
+                    <button
+                      className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                      onClick={() => toggleSort('date')}
+                    >
+                      Uploaded
+                      {sortCol === 'date' &&
+                        (sortDir === 'asc' ? (
+                          <ArrowUp className="size-4" />
+                        ) : (
+                          <ArrowDown className="size-4" />
+                        ))}
+                    </button>
+                  </th>
+                  <th scope="col" className={cn(HEAD, 'hidden sm:table-cell')}>
+                    <button
+                      className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                      onClick={() => toggleSort('pages')}
+                    >
+                      Pages
+                      {sortCol === 'pages' &&
+                        (sortDir === 'asc' ? (
+                          <ArrowUp className="size-4" />
+                        ) : (
+                          <ArrowDown className="size-4" />
+                        ))}
+                    </button>
+                  </th>
+                  <th scope="col" className={HEAD}>
+                    <button
+                      className="group inline-flex items-center gap-x-1 font-medium hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded"
+                      onClick={() => toggleSort('status')}
+                    >
+                      Status
+                      {sortCol === 'status' &&
+                        (sortDir === 'asc' ? (
+                          <ArrowUp className="size-4" />
+                        ) : (
+                          <ArrowDown className="size-4" />
+                        ))}
+                    </button>
+                  </th>
+                  <th scope="col" className={cn(HEAD, 'text-right')}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((doc) => (
+                  <DocumentTableRow
+                    key={doc.id}
+                    doc={doc}
+                    selected={selected.has(doc.id)}
+                    folders={folders}
+                    onToggle={(event) => toggleRow(doc.id, event)}
+                    onChanged={replace}
+                    onStale={reload}
+                    onDeleted={handleDeleted}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -475,6 +606,7 @@ function UploadedAt({ value }: { value: string | null }) {
 function DocumentTableRow({
   doc,
   selected,
+  folders,
   onToggle,
   onChanged,
   onStale,
@@ -482,6 +614,7 @@ function DocumentTableRow({
 }: {
   doc: DocumentSummary;
   selected: boolean;
+  folders: LibraryFolder[];
   onToggle: (event: ReactMouseEvent) => void;
   onChanged: (doc: DocumentSummary) => void;
 
@@ -491,6 +624,7 @@ function DocumentTableRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [moving, setMoving] = useState(false);
   const nameLink = useRef<HTMLAnchorElement>(null);
   const { cancel, canceling, cancelError } = useCancelProcessing(
     doc,
@@ -518,6 +652,12 @@ function DocumentTableRow({
       icon: Pencil,
       keepFocus: true,
       onSelect: () => setEditing(true),
+    },
+    {
+      label: 'Move to folder',
+      icon: FolderInput,
+      keepFocus: true,
+      onSelect: () => setMoving(true),
     },
     // Resumes unfinished work, or processes a finished document again
     ...(reprocess.available && !reprocess.reprocessing
@@ -670,6 +810,17 @@ function DocumentTableRow({
             onDeleted(deleted);
           }}
         />
+        {moving && (
+          <MoveToFolderDialog
+            doc={doc}
+            folders={folders}
+            onMoved={(moved) => {
+              setMoving(false);
+              onChanged(moved);
+            }}
+            onClose={() => setMoving(false)}
+          />
+        )}
       </td>
     </tr>
   );
@@ -898,5 +1049,380 @@ function NoMatches({
         Clear filters
       </Button>
     </div>
+  );
+}
+
+function folderNavClass(active: boolean): string {
+  return cn(
+    'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium',
+    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900',
+    active
+      ? 'bg-slate-900 text-white'
+      : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+  );
+}
+
+function FolderSidebar({
+  folders,
+  currentFolder,
+  onSelect,
+  onCreate,
+  onRename,
+  onDelete,
+}: {
+  folders: LibraryFolder[];
+  currentFolder: FolderSelection;
+  onSelect: (next: FolderSelection) => void;
+  onCreate: () => void;
+  onRename: (folder: LibraryFolder) => void;
+  onDelete: (folder: LibraryFolder) => void;
+}) {
+  return (
+    <nav
+      aria-label="Folders"
+      className="w-full shrink-0 rounded-xl border border-slate-200 bg-white p-2 lg:w-56"
+    >
+      <p className="px-2.5 pb-1 pt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+        Folders
+      </p>
+      <ul className="space-y-0.5">
+        <li>
+          <button
+            type="button"
+            aria-current={currentFolder === 'all' ? 'page' : undefined}
+            className={folderNavClass(currentFolder === 'all')}
+            onClick={() => onSelect('all')}
+          >
+            <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
+            All documents
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            aria-current={currentFolder === 'unfiled' ? 'page' : undefined}
+            className={folderNavClass(currentFolder === 'unfiled')}
+            onClick={() => onSelect('unfiled')}
+          >
+            <FileText aria-hidden="true" className="size-4 shrink-0" />
+            Unfiled
+          </button>
+        </li>
+        {folders.map((folder) => {
+          const active = currentFolder === folder.id;
+          return (
+            <li key={folder.id} className="flex items-center gap-0.5">
+              <button
+                type="button"
+                aria-current={active ? 'page' : undefined}
+                className={cn(folderNavClass(active), 'min-w-0 flex-1')}
+                onClick={() => onSelect(folder.id)}
+              >
+                <Folder aria-hidden="true" className="size-4 shrink-0" />
+                <span className="truncate">{folder.name}</span>
+              </button>
+              <ActionMenu
+                label={`Folder actions for ${folder.name}`}
+                items={[
+                  {
+                    label: 'Rename',
+                    icon: Pencil,
+                    keepFocus: true,
+                    onSelect: () => onRename(folder),
+                  },
+                  {
+                    label: 'Delete',
+                    icon: Trash,
+                    destructive: true,
+                    keepFocus: true,
+                    onSelect: () => onDelete(folder),
+                  },
+                ]}
+              />
+            </li>
+          );
+        })}
+      </ul>
+      <button
+        type="button"
+        onClick={onCreate}
+        className="mt-2 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+      >
+        <FolderPlus aria-hidden="true" className="size-4 shrink-0" />
+        New folder
+      </button>
+    </nav>
+  );
+}
+
+function EmptyFolder({
+  selection,
+  folders,
+}: {
+  selection: FolderSelection;
+  folders: LibraryFolder[];
+}) {
+  const name =
+    selection === 'unfiled'
+      ? 'Unfiled'
+      : (folders.find((folder) => folder.id === selection)?.name ??
+        'this folder');
+  return (
+    <div className="flex flex-col items-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+      <span className="flex size-11 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+        <Folder aria-hidden="true" className="size-5" />
+      </span>
+      <h2 className="mt-4 text-base font-semibold text-slate-900">
+        {selection === 'unfiled' ? 'No unfiled documents' : `${name} is empty`}
+      </h2>
+      <p className="mt-1 max-w-sm text-sm text-slate-600">
+        {selection === 'unfiled'
+          ? 'Documents you have not moved into a folder will show up here.'
+          : 'Move a document into this folder from its action menu.'}
+      </p>
+    </div>
+  );
+}
+
+function FolderNameDialog({
+  title,
+  confirmLabel,
+  initialName = '',
+  onSave,
+  onSaved,
+  onClose,
+}: {
+  title: string;
+  confirmLabel: string;
+  initialName?: string;
+  onSave: (name: string) => Promise<LibraryFolder>;
+  onSaved: (folder: LibraryFolder) => void;
+  onClose: () => void;
+}) {
+  const inputId = useId();
+  const [name, setName] = useState(initialName);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError('Name cannot be empty.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(await onSave(trimmed));
+    } catch (err) {
+      const apiError = toApiError(err);
+      setError(apiError.fields.name ?? apiError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!busy}
+      title={title}
+      footer={
+        <>
+          <Button
+            variant="secondary"
+            className="sm:w-auto"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+          <Button className="sm:w-auto" onClick={submit} loading={busy}>
+            {confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <Input
+        id={inputId}
+        label="Folder name"
+        value={name}
+        maxLength={255}
+        autoFocus
+        data-autofocus
+        disabled={busy}
+        error={error ?? undefined}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            submit();
+          }
+        }}
+      />
+    </Modal>
+  );
+}
+
+function DeleteFolderDialog({
+  folder,
+  onDeleted,
+  onClose,
+}: {
+  folder: LibraryFolder;
+  onDeleted: (folder: LibraryFolder) => void;
+  onClose: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteFolder(folder.id);
+      onDeleted(folder);
+    } catch (err) {
+      setError(toApiError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!busy}
+      title={`Delete ${folder.name}?`}
+      footer={
+        <>
+          <Button
+            variant="secondary"
+            className="sm:w-auto"
+            onClick={onClose}
+            disabled={busy}
+            data-autofocus
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            className="sm:w-auto"
+            onClick={confirm}
+            loading={busy}
+          >
+            {error ? 'Try again' : 'Delete'}
+          </Button>
+        </>
+      }
+    >
+      <p>
+        Documents in this folder will become unfiled. They will not be deleted.
+      </p>
+      {error && (
+        <Alert className="mt-4" tone="error">
+          {error}
+        </Alert>
+      )}
+    </Modal>
+  );
+}
+
+function MoveToFolderDialog({
+  doc,
+  folders,
+  onMoved,
+  onClose,
+}: {
+  doc: DocumentSummary;
+  folders: LibraryFolder[];
+  onMoved: (doc: DocumentSummary) => void;
+  onClose: () => void;
+}) {
+  const [target, setTarget] = useState<string>(doc.folder_id ?? 'unfiled');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    const folderId = target === 'unfiled' ? null : target;
+    if (folderId === (doc.folder_id ?? null)) {
+      onClose();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      onMoved(await moveDocumentToFolder(doc.id, folderId));
+    } catch (err) {
+      setError(toApiError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!busy}
+      title={`Move ${doc.filename}`}
+      footer={
+        <>
+          <Button
+            variant="secondary"
+            className="sm:w-auto"
+            onClick={onClose}
+            disabled={busy}
+            data-autofocus
+          >
+            Cancel
+          </Button>
+          <Button className="sm:w-auto" onClick={confirm} loading={busy}>
+            {error ? 'Try again' : 'Move'}
+          </Button>
+        </>
+      }
+    >
+      <fieldset className="space-y-1.5" disabled={busy}>
+        <legend className="sr-only">Choose a folder</legend>
+        <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-800 hover:bg-slate-50">
+          <input
+            type="radio"
+            name="move-folder"
+            checked={target === 'unfiled'}
+            onChange={() => setTarget('unfiled')}
+            className="border-slate-300 text-slate-900 focus:ring-slate-900"
+          />
+          Unfiled
+        </label>
+        {folders.map((folder) => (
+          <label
+            key={folder.id}
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-800 hover:bg-slate-50"
+          >
+            <input
+              type="radio"
+              name="move-folder"
+              checked={target === folder.id}
+              onChange={() => setTarget(folder.id)}
+              className="border-slate-300 text-slate-900 focus:ring-slate-900"
+            />
+            {folder.name}
+          </label>
+        ))}
+        {folders.length === 0 && (
+          <p className="px-2 text-sm text-slate-500">
+            Create a folder first to file this document.
+          </p>
+        )}
+      </fieldset>
+      {error && (
+        <Alert className="mt-4" tone="error">
+          {error}
+        </Alert>
+      )}
+    </Modal>
   );
 }
