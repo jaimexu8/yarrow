@@ -143,6 +143,8 @@ test('confirming a bulk delete calls the api and drops the rows', async () => {
   fireEvent.click(screen.getByRole('button', { name: /Delete/ }));
 
   const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText(/moved to Trash/)).toBeTruthy();
+  expect(within(dialog).getByText(/restore them for 7 days/)).toBeTruthy();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
   await vi.waitFor(() => expect(bulkDelete).toHaveBeenCalledWith(['a', 'b']));

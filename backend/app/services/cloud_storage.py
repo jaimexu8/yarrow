@@ -354,6 +354,7 @@ async def sync_credential_documents(
             select(Document.id).where(
                 Document.owner_id == user.id,
                 Document.client_upload_id == client_upload_id,
+                Document.deleted_at.is_(None),
             )
         )
         if existing is not None:

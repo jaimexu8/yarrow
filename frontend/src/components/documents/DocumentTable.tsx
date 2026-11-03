@@ -782,7 +782,7 @@ function BulkConfirmDialog({
   const body = isDelete
     ? `These ${count} ${
         count === 1 ? 'document' : 'documents'
-      } and everything extracted from them will be permanently deleted. This can't be undone.`
+      } will be moved to Trash. You can restore them for 7 days.`
     : `Each selected document will be processed again. Documents that are already being processed are skipped and stay selected.`;
   return (
     <Modal

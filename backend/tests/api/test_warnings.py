@@ -136,3 +136,16 @@ class TestWarnings:
 
         theirs_response = await client.get(WARNINGS_PATH, headers=other_headers)
         assert [entry["filename"] for entry in theirs_response.json()] == ["theirs.pdf"]
+
+    async def test_trashed_document_warnings_are_hidden(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        document_id = await upload_document(client, auth_headers, "scan.pdf")
+        await add_warning(db_session, document_id, 1, "Image is blurry")
+        document = await db_session.get(Document, document_id)
+        document.deleted_at = datetime.now(UTC).replace(tzinfo=None)
+        await db_session.flush()
+
+        response = await client.get(WARNINGS_PATH, headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json() == []

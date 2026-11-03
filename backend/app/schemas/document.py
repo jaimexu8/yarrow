@@ -75,6 +75,8 @@ class DocumentOut(BaseModel):
     status: str | None = None
     error_message: str | None = None
     created_at: datetime | None = None
+    # Set while the document is in trash; null in the normal library.
+    deleted_at: datetime | None = None
     # Filled in by the endpoint (see app.services.reprocess); not a column.
     reprocess: ReprocessInfo | None = None
 
