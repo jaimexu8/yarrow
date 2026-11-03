@@ -28,6 +28,9 @@ class Settings(DatabaseSettings):
     # Just over the worker's Celery task_time_limit (3600s)
     JOB_INTERRUPTED_AFTER_SECONDS: int = 65 * 60
     MAX_UPLOAD_BYTES: int = 256 * 1024 * 1024  # 256 MiB per file
+    # Resumable uploads (US-80): how long an unfinished upload can be resumed
+    # after its last chunk. After that its chunks are swept and it starts over.
+    UPLOAD_SESSION_TTL_HOURS: int = 24
 
     SECRET_KEY: str = "supersecretkey_please_change_in_production"
     JWT_ALGORITHM: str = "HS256"

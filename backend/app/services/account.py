@@ -24,6 +24,8 @@ from yarrow_db.models import (
     Table,
     TableCell,
     Tag,
+    UploadChunk,
+    UploadSession,
     User,
     Warning,
 )
@@ -146,6 +148,17 @@ async def _delete_rows(db: AsyncSession, user_id: UUID) -> tuple[int, list[str]]
     if document_ids:
         await db.execute(delete(Document).where(Document.id.in_(document_ids)))
     await db.execute(delete(Folder).where(Folder.owner_id == user_id))
+    # Resumable upload sessions (US-80): their temporary chunk objects go
+    # with the account. (The FK would cascade the rows, but not the objects.)
+    session_ids = select(UploadSession.id).where(UploadSession.owner_id == user_id)
+    keys.extend(
+        await db.scalars(
+            select(UploadChunk.storage_key).where(
+                UploadChunk.session_id.in_(session_ids)
+            )
+        )
+    )
+    await db.execute(delete(UploadSession).where(UploadSession.owner_id == user_id))
     # Upload batches reference the user (US-31); documents reference them.
     await db.execute(delete(Batch).where(Batch.owner_id == user_id))
     await db.execute(delete(User).where(User.id == user_id))

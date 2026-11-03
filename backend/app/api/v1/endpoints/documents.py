@@ -87,6 +87,7 @@ from app.services.reprocess import (
     documents_out,
     reprocess_document,
 )
+from app.services.upload_sessions import purge_expired_upload_sessions
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -549,6 +550,8 @@ async def list_documents(
     current_user: User = Depends(get_current_user),
 ):
     await _cleanup_expired_trash(db)
+    # Abandoned resumable uploads (US-80) are swept on the same occasion.
+    await purge_expired_upload_sessions(db, get_storage)
     if tag_id is not None:
         query = (
             select(Document)

@@ -286,11 +286,12 @@ class FakeStorage:
 
 @pytest.fixture
 def fake_storage(monkeypatch: pytest.MonkeyPatch) -> FakeStorage:
-    from app.api.v1.endpoints import documents
+    from app.api.v1.endpoints import documents, uploads
     from app.services import cloud_storage
 
     storage = FakeStorage()
     monkeypatch.setattr(documents, "get_storage", lambda: storage)
+    monkeypatch.setattr(uploads, "get_storage", lambda: storage)
     monkeypatch.setattr(cloud_storage, "get_storage", lambda: storage)
     return storage
 
@@ -309,7 +310,7 @@ class EnqueuedJobs(list):
 @pytest.fixture
 def fake_queue(monkeypatch: pytest.MonkeyPatch) -> EnqueuedJobs:
     """Records enqueued job ids instead of talking to Celery."""
-    from app.api.v1.endpoints import documents
+    from app.api.v1.endpoints import documents, uploads
     from app.services import cloud_storage
 
     enqueued = EnqueuedJobs()
@@ -321,5 +322,6 @@ def fake_queue(monkeypatch: pytest.MonkeyPatch) -> EnqueuedJobs:
         return f"task-{len(enqueued)}"
 
     monkeypatch.setattr(documents, "enqueue_document_processing", _enqueue)
+    monkeypatch.setattr(uploads, "enqueue_document_processing", _enqueue)
     monkeypatch.setattr(cloud_storage, "enqueue_document_processing", _enqueue)
     return enqueued

@@ -1,6 +1,8 @@
 /**
  * US-31: how the Upload page ties each file to its run (batch).
  * US-79: the duplicate warning, Skip and Upload anyway.
+ * US-80: large files go through the resumable upload, with Pause, Resume and
+ * Retry.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -12,6 +14,11 @@ import {
   waitFor,
 } from '@testing-library/react';
 import type { UploadOutcome } from '@/lib/documents';
+import {
+  RESUMABLE_THRESHOLD_BYTES,
+  SESSIONS_STORAGE_KEY,
+  type ResumableOutcome,
+} from '@/lib/resumableUpload';
 import { storeBatchId } from '@/lib/useBatchProgress';
 import UploadPage from './page';
 
@@ -39,6 +46,42 @@ vi.mock('@/lib/documents', async (importOriginal) => ({
       ...(allowDuplicate ? { allowDuplicate: true as const } : {}),
     });
     return new Promise<UploadOutcome>((resolve) => api.pending.push(resolve));
+  },
+}));
+
+const chunked = vi.hoisted(() => ({
+  calls: [] as { name: string; batchId?: string; allowDuplicate?: true }[],
+  pending: [] as ((outcome: ResumableOutcome) => void)[],
+  discarded: [] as string[],
+}));
+
+vi.mock('@/lib/resumableUpload', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/resumableUpload')>()),
+  uploadResumable: (
+    file: File,
+    options: {
+      batchId?: string;
+      signal?: AbortSignal;
+      allowDuplicate?: boolean;
+    }
+  ) => {
+    chunked.calls.push({
+      name: file.name,
+      batchId: options.batchId,
+      // Only recorded when set, like the single-request mock above.
+      ...(options.allowDuplicate ? { allowDuplicate: true as const } : {}),
+    });
+    return new Promise<ResumableOutcome>((resolve) => {
+      chunked.pending.push(resolve);
+      // What the real upload does when Pause aborts it.
+      options.signal?.addEventListener('abort', () => {
+        chunked.pending = chunked.pending.filter((other) => other !== resolve);
+        resolve({ kind: 'paused' });
+      });
+    });
+  },
+  discardResumable: async (file: File) => {
+    chunked.discarded.push(file.name);
   },
 }));
 
@@ -72,6 +115,15 @@ function pdf(name: string) {
   return new File(['%PDF-1.4'], name, { type: 'application/pdf' });
 }
 
+/** Big enough for the resumable path; the bytes themselves don't matter. */
+function largePdf(name: string) {
+  const file = pdf(name);
+  Object.defineProperty(file, 'size', {
+    value: RESUMABLE_THRESHOLD_BYTES + 1,
+  });
+  return file;
+}
+
 function choose(...files: File[]) {
   const input = document.querySelector('input[type=file]') as HTMLInputElement;
   fireEvent.change(input, { target: { files } });
@@ -86,6 +138,10 @@ beforeEach(() => {
   api.batchIds = ['batch-1', 'batch-2'];
   api.calls = [];
   api.pending = [];
+  chunked.calls = [];
+  chunked.pending = [];
+  chunked.discarded = [];
+  localStorage.clear();
 });
 
 afterEach(() => {
@@ -267,5 +323,139 @@ describe('Upload page duplicates (US-79)', () => {
     ]);
     expect(screen.getByRole('button', { name: 'Skip a.pdf' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Skip b.pdf' })).toBeNull();
+  });
+});
+
+describe('Upload page resumable uploads', () => {
+  async function settleChunked(outcome: ResumableOutcome) {
+    await waitFor(() => expect(chunked.pending.length).toBeGreaterThan(0));
+    await act(async () => chunked.pending.shift()!(outcome));
+  }
+
+  it('sends a large file in chunks and a small one in one request', async () => {
+    render(<UploadPage />);
+    choose(largePdf('big.pdf'), pdf('small.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 2 files' }));
+
+    await settleChunked(accepted);
+    await settleNext(accepted);
+
+    expect(chunked.calls).toEqual([{ name: 'big.pdf', batchId: 'batch-1' }]);
+    expect(api.calls).toEqual([{ name: 'small.pdf', batchId: 'batch-1' }]);
+    await waitFor(() =>
+      expect(screen.getByTestId('panel').textContent).toBe(
+        'batch-1 uploading=false'
+      )
+    );
+  });
+
+  it('pauses a large file and resumes it into the same run', async () => {
+    render(<UploadPage />);
+    choose(largePdf('big.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 1 file' }));
+    await waitFor(() => expect(chunked.calls.length).toBe(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause big.pdf' }));
+    const resume = await screen.findByRole('button', {
+      name: 'Resume big.pdf',
+    });
+    expect(screen.getByText(/Paused/)).toBeTruthy();
+    // The partly sent file keeps its progress bar while paused.
+    expect(
+      screen.getByRole('progressbar', { name: 'Uploading big.pdf' })
+    ).toBeTruthy();
+
+    fireEvent.click(resume);
+    await waitFor(() => expect(chunked.calls.length).toBe(2));
+    expect(chunked.calls[1]).toEqual({ name: 'big.pdf', batchId: 'batch-1' });
+    await settleChunked(accepted);
+    await screen.findByText(/Uploaded, queued for processing/);
+    expect(screen.queryByRole('button', { name: 'Resume big.pdf' })).toBeNull();
+  });
+
+  it('offers Retry when a large file fails, and Retry resumes it', async () => {
+    render(<UploadPage />);
+    choose(largePdf('big.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 1 file' }));
+    await settleChunked({ kind: 'failed', message: 'Network error' });
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Retry big.pdf' })
+    );
+    await settleChunked(accepted);
+
+    expect(chunked.calls).toEqual([
+      { name: 'big.pdf', batchId: 'batch-1' },
+      { name: 'big.pdf', batchId: 'batch-1' },
+    ]);
+    await screen.findByText(/Uploaded, queued for processing/);
+  });
+
+  it('removing a paused file discards what the server holds of it', async () => {
+    render(<UploadPage />);
+    choose(largePdf('big.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 1 file' }));
+    await waitFor(() => expect(chunked.calls.length).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Pause big.pdf' }));
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Remove big.pdf' })
+    );
+    expect(chunked.discarded).toEqual(['big.pdf']);
+  });
+
+  it('points out an unfinished upload left from an earlier visit', async () => {
+    localStorage.setItem(
+      SESSIONS_STORAGE_KEY,
+      JSON.stringify({
+        'big.pdf:9000000:1': {
+          sessionId: 'session-1',
+          filename: 'big.pdf',
+          size: 9000000,
+        },
+      })
+    );
+    render(<UploadPage />);
+    expect(
+      await screen.findByText(/An upload did not finish: big\.pdf/)
+    ).toBeTruthy();
+  });
+
+  it('warns about a large duplicate; Skip discards its chunks (US-79)', async () => {
+    render(<UploadPage />);
+    choose(largePdf('big.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 1 file' }));
+    await settleChunked(duplicate);
+
+    expect(await screen.findByText(/Already in your library/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Lease.pdf' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Skip big.pdf' }));
+
+    expect(await screen.findByText(/Skipped/)).toBeTruthy();
+    // The session the server kept for Upload anyway is thrown away.
+    expect(chunked.discarded).toEqual(['big.pdf']);
+    expect(chunked.calls).toHaveLength(1);
+    expect(api.calls).toEqual([]);
+  });
+
+  it('Upload anyway finishes a large duplicate on the resumable path', async () => {
+    render(<UploadPage />);
+    choose(largePdf('big.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 1 file' }));
+    await settleChunked(duplicate);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Upload big.pdf anyway' })
+    );
+    await settleChunked(accepted);
+
+    expect(chunked.calls).toEqual([
+      { name: 'big.pdf', batchId: 'batch-1' },
+      { name: 'big.pdf', batchId: 'batch-1', allowDuplicate: true },
+    ]);
+    // Never sent as a single request, and its session was kept.
+    expect(api.calls).toEqual([]);
+    expect(chunked.discarded).toEqual([]);
+    await screen.findByText(/Uploaded, queued for processing/);
   });
 });
