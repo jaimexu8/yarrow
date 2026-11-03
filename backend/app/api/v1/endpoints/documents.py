@@ -52,7 +52,16 @@ from app.schemas import (
     UploadRejected,
     UploadResponse,
 )
-from app.services.document_deletion import delete_document, delete_stored_objects
+from app.services.document_deletion import (
+    DocumentDeletionError,
+    DocumentRestoreError,
+    delete_stored_objects,
+    empty_user_trash,
+    permanently_delete_trashed,
+    purge_expired_documents,
+    restore_document,
+    soft_delete_document,
+)
 from app.services.export import content_disposition, display_stem, safe_stem
 from app.services.failure_messages import (
     DOCUMENT_FAILED_MESSAGE,
@@ -101,7 +110,9 @@ async def _find_earlier_upload(
     """The result of this user's earlier upload with the same client id."""
     result = await db.execute(
         select(Document).where(
-            Document.owner_id == owner_id, Document.client_upload_id == upload_id
+            Document.owner_id == owner_id,
+            Document.client_upload_id == upload_id,
+            Document.deleted_at.is_(None),
         )
     )
     document = result.scalars().first()
@@ -129,6 +140,33 @@ async def _find_earlier_upload(
             document.error_message, document.status, DOCUMENT_FAILED_MESSAGE
         ),
     )
+
+
+async def _revoke_tasks(task_ids: list[str]) -> None:
+    for task_id in task_ids:
+        try:
+            await run_in_threadpool(revoke_document_processing, task_id)
+        except Exception:
+            logger.exception(f"Revoking task {task_id} failed")
+
+
+async def _delete_storage(keys: list[str], context: str) -> None:
+    if not keys:
+        return
+    orphaned = await run_in_threadpool(
+        delete_stored_objects, get_storage(), keys
+    )
+    if orphaned:
+        logger.error(
+            f"{context} left {len(orphaned)} stored object(s) behind: {orphaned}"
+        )
+
+
+async def _cleanup_expired_trash(db: AsyncSession) -> None:
+    """Wipe trash older than 7 days, then drop stored files and queued tasks."""
+    outcome = await purge_expired_documents(db)
+    await _revoke_tasks(outcome.task_ids)
+    await _delete_storage(outcome.storage_keys, "Purging expired trash")
 
 
 def _megabytes(size: int) -> str:
@@ -377,6 +415,7 @@ async def list_documents(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await _cleanup_expired_trash(db)
     if folder_id is None or folder_id == "":
         shared_subquery = select(DocumentShare.document_id).where(
             DocumentShare.shared_with_user_id == current_user.id
@@ -384,10 +423,11 @@ async def list_documents(
         result = await db.execute(
             select(Document)
             .where(
+                Document.deleted_at.is_(None),
                 or_(
                     Document.owner_id == current_user.id,
                     Document.id.in_(shared_subquery),
-                )
+                ),
             )
             .order_by(Document.created_at.desc())
         )
@@ -395,7 +435,10 @@ async def list_documents(
 
     # folder filters are for the owner's docs only; shares stay in the
     # unfiltered list.
-    query = select(Document).where(Document.owner_id == current_user.id)
+    query = select(Document).where(
+        Document.owner_id == current_user.id,
+        Document.deleted_at.is_(None),
+    )
     if folder_id.lower() == "null":
         query = query.where(Document.folder_id.is_(None))
     else:
@@ -416,6 +459,36 @@ async def list_documents(
 
     result = await db.execute(query.order_by(Document.created_at.desc()))
     return await documents_out(db, list(result.scalars().all()))
+
+
+@router.get("/trash", response_model=list[DocumentOut])
+async def list_trashed_documents(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The current user's trash: deleted_at set and not yet past 7 days."""
+    await _cleanup_expired_trash(db)
+    result = await db.execute(
+        select(Document)
+        .where(
+            Document.owner_id == current_user.id,
+            Document.deleted_at.is_not(None),
+        )
+        .order_by(Document.deleted_at.desc())
+    )
+    return await documents_out(db, list(result.scalars().all()))
+
+
+@router.delete("/trash", status_code=status.HTTP_204_NO_CONTENT)
+async def empty_trash_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Permanently delete every document in this user's trash."""
+    outcome = await empty_user_trash(db, current_user.id)
+    await _revoke_tasks(outcome.task_ids)
+    await _delete_storage(outcome.storage_keys, "Emptying trash")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)
@@ -601,38 +674,90 @@ async def delete_document_endpoint(
     access: DocumentAccess = Depends(require_owner_access),
     db: AsyncSession = Depends(get_db),
 ):
-    """Permanently delete a document, its extracted data and its jobs.
+    """Move a document to trash for 7 days.
 
-    Allowed in any processing state. A worker that runs it anyway finds its
-    job gone. If processing is saving results for this document at that moment,
-    the request answers 409 after a short wait instead of hanging, and can
-    simply be retried.
+    Extracted data and files stay so it can be restored. Unfinished jobs are
+    canceled and their tasks revoked. If processing is saving results for this
+    document at that moment, the request answers 409 after a short wait.
     """
 
     document_id = access.document.id
-    outcome = await delete_document(db, document_id)
+    outcome = await soft_delete_document(db, document_id)
     if not outcome.ok:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"detail": outcome.detail, "code": outcome.error.value},
         )
 
-    for task_id in outcome.task_ids:
-        try:
-            await run_in_threadpool(revoke_document_processing, task_id)
-        except Exception:
-            logger.exception(f"Revoking task {task_id} failed")
+    await _revoke_tasks(outcome.task_ids)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    if outcome.storage_keys:
-        orphaned = await run_in_threadpool(
-            delete_stored_objects, get_storage(), outcome.storage_keys
+
+@router.post("/{document_id}/restore", response_model=DocumentOut)
+async def restore_document_endpoint(
+    document_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Restore a trashed document if it is still within 7 days.
+
+    Older than that is permanently deleted (410). Missing or not owned is 404.
+    """
+    outcome = await restore_document(db, document_id, current_user.id)
+    if outcome.error is DocumentRestoreError.NOT_FOUND:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
-        if orphaned:
-            logger.error(
-                f"Deleted document {document_id} left "
-                f"{len(orphaned)} stored object(s) behind: {orphaned}"
-            )
+    if outcome.error is DocumentRestoreError.NOT_TRASHED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+    if outcome.error is DocumentRestoreError.EXPIRED:
+        await _revoke_tasks(outcome.task_ids)
+        await _delete_storage(
+            outcome.storage_keys, f"Purging expired document {document_id}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+    if outcome.error is DocumentRestoreError.BUSY:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+    document = outcome.document
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+    await _cleanup_expired_trash(db)
+    return (await documents_out(db, [document]))[0]
 
+
+@router.delete("/{document_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+async def permanently_delete_document_endpoint(
+    document_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Permanently wipe a trashed document now, without waiting 7 days."""
+    outcome = await permanently_delete_trashed(db, document_id, current_user.id)
+    if outcome.error is DocumentDeletionError.NOT_FOUND:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+    if not outcome.ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+
+    await _revoke_tasks(outcome.task_ids)
+    await _delete_storage(
+        outcome.storage_keys, f"Deleted document {document_id}"
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -690,19 +815,18 @@ async def bulk_delete_documents(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Permanently delete several documents at once, reporting each on its own.
+    """Move several documents to trash at once, reporting each on its own.
 
-    Each id goes through the same single-document deletion: the row, its
-    extracted data and jobs are removed and the owner's storage quota is
-    refunded. A document that a worker is saving results for at that moment is
-    reported with ``ok: false`` (code ``DOCUMENT_BUSY``) so it can be retried
-    without blocking the rest of the batch.
+    Each id goes through the same single-document soft delete. A document that
+    a worker is saving results for at that moment is reported with ``ok:
+    false`` (code ``DOCUMENT_BUSY``) so it can be retried without blocking the
+    rest of the batch.
     """
     user_id = current_user.id
     results: list[BulkItemResult] = []
     for document_id in body.document_ids:
-        # Re-read the user each pass: delete_document commits per document,
-        # which expires the object loaded by get_current_user.
+        # Re-read the user each pass: soft_delete_document commits per
+        # document, which expires the object loaded by get_current_user.
         user = await db.get(User, user_id)
         try:
             access = await get_document_access(document_id, db=db, current_user=user)
@@ -729,7 +853,7 @@ async def bulk_delete_documents(
             )
             continue
 
-        outcome = await delete_document(db, document_id)
+        outcome = await soft_delete_document(db, document_id)
         if not outcome.ok:
             results.append(
                 BulkItemResult(
@@ -738,22 +862,7 @@ async def bulk_delete_documents(
             )
             continue
 
-        for task_id in outcome.task_ids:
-            try:
-                await run_in_threadpool(revoke_document_processing, task_id)
-            except Exception:
-                logger.exception(f"Revoking task {task_id} failed")
-
-        if outcome.storage_keys:
-            orphaned = await run_in_threadpool(
-                delete_stored_objects, get_storage(), outcome.storage_keys
-            )
-            if orphaned:
-                logger.error(
-                    f"Deleted document {document_id} left "
-                    f"{len(orphaned)} stored object(s) behind: {orphaned}"
-                )
-
+        await _revoke_tasks(outcome.task_ids)
         results.append(BulkItemResult(document_id=document_id, ok=True))
     return results
 

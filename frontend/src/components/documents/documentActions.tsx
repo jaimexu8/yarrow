@@ -366,9 +366,9 @@ export function ReprocessLink({
 }
 
 /**
- * Confirm dialog before permanently deleting a document. While the
- * request is in flight the dialog cannot be dismissed, and a failure is shown
- * inside it so the user can retry or back out.
+ * Confirm dialog before moving a document to trash. While the request is
+ * in flight the dialog cannot be dismissed, and a failure is shown inside
+ * it so the user can retry or back out.
  */
 export function DeleteDocumentDialog({
   doc,
@@ -439,10 +439,9 @@ export function DeleteDocumentDialog({
       }
     >
       <p className="break-words">
-        <span className="font-medium text-slate-900">{doc.filename}</span> and
-        everything extracted from it will be permanently deleted.
-        {inProgress && ' Its processing will be stopped.'} This can&apos;t be
-        undone.
+        <span className="font-medium text-slate-900">{doc.filename}</span> will
+        be moved to Trash. You can restore it for 7 days.
+        {inProgress && ' Its processing will be stopped.'}
       </p>
       {error && (
         <Alert className="mt-4" tone="error">

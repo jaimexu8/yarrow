@@ -36,6 +36,9 @@ class Document(Base):
     )
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # When set, the document is in trash. Cleared on restore. Rows and
+    # files stay until permanent purge after 7 days.
+    deleted_at = Column(DateTime)
 
     owner = relationship("User")
     folder = relationship("Folder", back_populates="documents")
