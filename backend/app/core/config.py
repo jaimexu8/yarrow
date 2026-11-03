@@ -32,6 +32,14 @@ class Settings(DatabaseSettings):
     # after its last chunk. After that its chunks are swept and it starts over.
     UPLOAD_SESSION_TTL_HOURS: int = 24
 
+    # US-60 batch completion notifications. A batch the browser never sealed
+    # (its tab closed mid-upload) counts as sealed once no file has joined it
+    # for this long.
+    BATCH_SEAL_TIMEOUT_SECONDS: int = 10 * 60
+    # A claimed notification not acknowledged within this long (the reply was
+    # lost, the tab closed) can be claimed again.
+    BATCH_NOTIFICATION_LEASE_SECONDS: int = 60
+
     SECRET_KEY: str = "supersecretkey_please_change_in_production"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440

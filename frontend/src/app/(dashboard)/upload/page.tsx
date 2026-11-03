@@ -12,6 +12,7 @@ import { BatchProgressPanel } from '@/components/documents/BatchProgressPanel';
 import { DocumentList } from '@/components/documents/DocumentList';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
+import { announceBatchActivity, sealBatch } from '@/lib/batchNotifications';
 import { cn } from '@/lib/cn';
 import {
   newBatchId,
@@ -192,59 +193,80 @@ export default function UploadPage() {
           : item
       )
     );
+    // Runs that received a file. When the loop ends they are sealed, which
+    // tells the server no more files are coming, so it may announce them
+    // when they finish (US-60).
+    const joined = new Set<string>();
     // One at a time: each file gets its own progress and result, and the
     // server's per-user storage check sees each upload in turn.
-    for (const key of keys) {
-      const item = items.find((candidate) => candidate.key === key);
-      if (!item) continue;
-      const runId = newRun ? freshRun : (item.batchId ?? batchId ?? freshRun);
-      const askForCopy = allowDuplicate || item.allowDuplicate === true;
-      update(key, { status: 'uploading', progress: 0, batchId: runId });
-      const onProgress = (progress: number) => update(key, { progress });
-      let outcome;
-      if (isResumable(item.file)) {
-        const controller = new AbortController();
-        controllers.current.set(key, controller);
-        outcome = await uploadResumable(item.file, {
-          batchId: runId,
-          onProgress,
-          signal: controller.signal,
-          allowDuplicate: askForCopy,
-        });
-        controllers.current.delete(key);
-      } else {
-        outcome = await uploadDocument(
-          item.file,
-          item.uploadId,
-          onProgress,
-          runId,
-          askForCopy
-        );
-      }
-      if (outcome.kind === 'paused') {
-        update(key, { status: 'paused' });
-      } else if (outcome.kind === 'accepted') {
-        update(key, {
-          status: outcome.processingStarted ? 'accepted' : 'stored',
-          progress: 100,
-          documentId: outcome.documentId,
-          message: outcome.processingStarted ? undefined : outcome.message,
-        });
-        // A new run takes over the panel. A retry into an earlier run that is
-        // no longer on screen leaves the panel showing the current run.
-        if (!shown && (newRun || !batchId)) {
-          storeBatchId(runId);
-          shown = true;
+    // A paused large file has not joined its run: its document only exists
+    // once it is finalized. The run is sealed anyway, so the files that did
+    // arrive are announced when they finish; resuming the file later joins
+    // it to the run, which unseals the batch until that loop seals it again.
+    try {
+      for (const key of keys) {
+        const item = items.find((candidate) => candidate.key === key);
+        if (!item) continue;
+        const runId = newRun ? freshRun : (item.batchId ?? batchId ?? freshRun);
+        const askForCopy = allowDuplicate || item.allowDuplicate === true;
+        update(key, { status: 'uploading', progress: 0, batchId: runId });
+        const onProgress = (progress: number) => update(key, { progress });
+        let outcome;
+        if (isResumable(item.file)) {
+          const controller = new AbortController();
+          controllers.current.set(key, controller);
+          outcome = await uploadResumable(item.file, {
+            batchId: runId,
+            onProgress,
+            signal: controller.signal,
+            allowDuplicate: askForCopy,
+          });
+          controllers.current.delete(key);
+        } else {
+          outcome = await uploadDocument(
+            item.file,
+            item.uploadId,
+            onProgress,
+            runId,
+            askForCopy
+          );
         }
-        // The run has one more file; show it in the progress panel now.
-        setRefreshKey((n) => n + 1);
-      } else if (outcome.kind === 'rejected') {
-        update(key, { status: 'rejected', message: outcome.reason });
-      } else if (outcome.kind === 'duplicate') {
-        update(key, { status: 'duplicate', duplicateOf: outcome.duplicateOf });
-      } else {
-        update(key, { status: 'failed', message: outcome.message });
+        if (outcome.kind === 'paused') {
+          update(key, { status: 'paused' });
+        } else if (outcome.kind === 'accepted') {
+          joined.add(runId);
+          update(key, {
+            status: outcome.processingStarted ? 'accepted' : 'stored',
+            progress: 100,
+            documentId: outcome.documentId,
+            message: outcome.processingStarted ? undefined : outcome.message,
+          });
+          // A new run takes over the panel. A retry into an earlier run that is
+          // no longer on screen leaves the panel showing the current run.
+          if (!shown && (newRun || !batchId)) {
+            storeBatchId(runId);
+            shown = true;
+          }
+          // The run has one more file; show it in the progress panel now.
+          setRefreshKey((n) => n + 1);
+        } else if (outcome.kind === 'rejected') {
+          update(key, { status: 'rejected', message: outcome.reason });
+        } else if (outcome.kind === 'duplicate') {
+          update(key, {
+            status: 'duplicate',
+            duplicateOf: outcome.duplicateOf,
+          });
+        } else {
+          update(key, { status: 'failed', message: outcome.message });
+        }
       }
+    } finally {
+      // A failed seal is not fatal: the server treats a batch as sealed by
+      // itself once no file has joined it for a while.
+      await Promise.all(
+        Array.from(joined, (runId) => sealBatch(runId).catch(() => {}))
+      );
+      if (joined.size) announceBatchActivity();
     }
     setUploading(false);
     setRefreshKey((n) => n + 1);

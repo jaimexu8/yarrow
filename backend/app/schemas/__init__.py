@@ -21,7 +21,12 @@ from .auth import (
 )
 from .common import BBox, StrictModel
 from .document import (
+    BatchAcknowledge,
+    BatchAcknowledged,
+    BatchNotification,
+    BatchNotifications,
     BatchProgress,
+    BatchSealed,
     BulkDocumentRequest,
     BulkItemResult,
     DocumentDetail,
@@ -77,7 +82,12 @@ from .upload import (
 __all__ = [
     "SCHEMA_VERSION",
     "BBox",
+    "BatchAcknowledge",
+    "BatchAcknowledged",
+    "BatchNotification",
+    "BatchNotifications",
     "BatchProgress",
+    "BatchSealed",
     "BulkDocumentRequest",
     "BulkItemResult",
     "ChunkReceipt",
