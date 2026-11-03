@@ -12,12 +12,13 @@ const OPTIONS: { format: ExportFormat; label: string }[] = [
   { format: 'markdown', label: 'Markdown (.md)' },
   { format: 'text', label: 'Plain text (.txt)' },
   { format: 'json', label: 'Structured JSON (.json)' },
+  { format: 'csv', label: 'Tables (.csv)' },
 ];
 
 /**
- * The Export button in the viewer header. Offers the extracted content as
- * Markdown or plain text. Disabled until the document has finished
- * processing, which is also what the export endpoint requires.
+ * The Export button in the viewer header. Offers markdown, text, json, and
+ * csv. Disabled until the document has finished processing, which is also
+ * what the export endpoint requires.
  */
 export function ExportMenu() {
   const { document } = useViewer();
