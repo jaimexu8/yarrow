@@ -43,3 +43,7 @@ export async function getAdminStats(): Promise<AdminStats> {
   const res = await api.get<AdminStats>('/api/v1/admin/stats');
   return res.data;
 }
+
+export async function deleteAdminAccount(accountId: string): Promise<void> {
+  await api.delete(`/api/v1/admin/accounts/${accountId}`);
+}
