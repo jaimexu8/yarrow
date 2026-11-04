@@ -310,7 +310,7 @@ class EnqueuedJobs(list):
 @pytest.fixture
 def fake_queue(monkeypatch: pytest.MonkeyPatch) -> EnqueuedJobs:
     """Records enqueued job ids instead of talking to Celery."""
-    from app.api.v1.endpoints import documents, uploads
+    from app.api.v1.endpoints import admin, documents, uploads
     from app.services import cloud_storage
 
     enqueued = EnqueuedJobs()
@@ -322,6 +322,7 @@ def fake_queue(monkeypatch: pytest.MonkeyPatch) -> EnqueuedJobs:
         return f"task-{len(enqueued)}"
 
     monkeypatch.setattr(documents, "enqueue_document_processing", _enqueue)
+    monkeypatch.setattr(admin, "enqueue_document_processing", _enqueue)
     monkeypatch.setattr(uploads, "enqueue_document_processing", _enqueue)
     monkeypatch.setattr(cloud_storage, "enqueue_document_processing", _enqueue)
     return enqueued

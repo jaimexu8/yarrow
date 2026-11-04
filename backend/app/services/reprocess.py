@@ -163,6 +163,7 @@ class ReprocessOutcome:
     scope: Literal["incomplete", "all"] | None = None
     # The 1-based pages queued, or None for the whole document.
     pages: list[int] | None = None
+    job_id: UUID | None = None
 
     @property
     def ok(self) -> bool:
@@ -173,6 +174,9 @@ async def reprocess_document(
     db: AsyncSession,
     document_id: UUID,
     enqueue: Callable[..., str],
+    *,
+    requested_by_id: UUID | None = None,
+    retry_of_job_id: UUID | None = None,
 ) -> ReprocessOutcome:
     """Queue a job that reprocesses the document; see the module docstring
     for which pages it covers
@@ -222,6 +226,8 @@ async def reprocess_document(
         current_stage="queued",
         pages_processed=0,
         total_pages=len(pages) if pages is not None else (document.page_count or 0),
+        requested_by_id=requested_by_id,
+        retry_of_job_id=retry_of_job_id,
     )
     
     db.add(new_job)
@@ -253,4 +259,4 @@ async def reprocess_document(
 
     new_job.celery_task_id = task_id
     await db.commit()
-    return ReprocessOutcome(scope=scope, pages=pages)
+    return ReprocessOutcome(scope=scope, pages=pages, job_id=new_job.id)

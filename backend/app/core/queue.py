@@ -73,11 +73,19 @@ def enqueue_document_processing(
     return result.id
 
 
-def revoke_document_processing(task_id: str) -> None:
+def revoke_document_processing(task_id: str, terminate: bool = False) -> None:
     """Ask workers to drop a queued task (US-42).
 
     Best effort: Celery keeps revocations in worker memory only, so a worker
     that restarts forgets them. The job row marked "canceled" is what really
     stops processing; the worker checks it before starting.
+
+    terminate also stops a task that is already running, by sending SIGTERM to
+    the worker process executing it, which frees its pool slot. Admin
+    force-cancel uses it (US-75); a user cancel lets the run reach its next
+    check instead.
     """
+    if terminate:
+        get_celery().control.revoke(task_id, terminate=True, signal="SIGTERM")
+        return
     get_celery().control.revoke(task_id)

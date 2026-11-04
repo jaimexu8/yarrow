@@ -1,24 +1,39 @@
-from datetime import datetime
+import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import and_, func, select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
+from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
 from yarrow_db.models import Document, Job, User
 
 from app.core.database import get_db
+from app.core.queue import enqueue_document_processing, revoke_document_processing
 from app.core.security import get_current_active_admin
 from app.schemas.admin import (
     AdminAccount,
     AdminAccountStatus,
     AdminAccountStatusUpdate,
     AdminJob,
+    AdminJobActionResult,
+    AdminJobCancelRequest,
     AdminStats,
     JobStatusCounts,
 )
 from app.services.account import delete_account
+from app.services.job_progress import cancel_open_job_pages
+from app.services.reprocess import (
+    ACTIVE_JOB_STATES,
+    ReprocessError,
+    is_interrupted,
+    reprocess_document,
+)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 JOB_STATUSES = ("queued", "processing", "completed", "failed", "canceled")
 
@@ -130,8 +145,16 @@ async def list_jobs(
         reverse=True,
     )
 
+    latest: dict[UUID, Job] = {}
+    for job, _, _ in rows:
+        current = latest.get(job.document_id)
+        if current is None or _job_time(job.created_at) > _job_time(current.created_at):
+            latest[job.document_id] = job
+    now = datetime.now(UTC).replace(tzinfo=None)
+
     out: list[AdminJob] = []
     for job, document, user in processing + queued + rest:
+        is_latest = latest[job.document_id].id == job.id
         out.append(
             AdminJob(
                 id=job.id,
@@ -147,6 +170,14 @@ async def list_jobs(
                 total_pages=job.total_pages,
                 error_message=job.error_message,
                 created_at=job.created_at,
+                is_stuck=is_interrupted(
+                    {"status": job.status, "updated_at": job.updated_at}, now
+                ),
+                can_cancel=is_latest and job.status in ACTIVE_JOB_STATES,
+                can_retry=is_latest and job.status == "failed",
+                canceled_by_id=job.canceled_by_id,
+                cancel_reason=job.cancel_reason,
+                retry_of_job_id=job.retry_of_job_id,
             )
         )
     return out
@@ -232,3 +263,149 @@ async def delete_user_account(
             status_code=status.HTTP_409_CONFLICT,
             detail={"detail": outcome.detail, "code": outcome.error.value},
         )
+
+
+DEADLOCK_DETECTED = "40P01"
+
+
+def _job_error(status_code: int, detail: str, code: str) -> HTTPException:
+    return HTTPException(
+        status_code=status_code, detail={"detail": detail, "code": code}
+    )
+
+
+def _is_busy(exc: DBAPIError) -> bool:
+    deadlock = DEADLOCK_DETECTED in (
+        getattr(exc.orig, "sqlstate", None),
+        getattr(exc.orig, "pgcode", None),
+    )
+    return is_lock_timeout(exc) or deadlock
+
+
+async def _lock_job_for_action(
+    db: AsyncSession, job_id: UUID
+) -> tuple[Document, Job, Job | None]:
+    target = await db.get(Job, job_id)
+    if target is None:
+        raise _job_error(status.HTTP_404_NOT_FOUND, "Job not found", "JOB_NOT_FOUND")
+    document_id = target.document_id
+    try:
+        await db.execute(lock_timeout_statement())
+        document = (
+            await db.execute(
+                select(Document)
+                .where(Document.id == document_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        latest = (
+            await db.execute(
+                select(Job)
+                .where(Job.document_id == document_id)
+                .order_by(Job.created_at.desc())
+                .limit(1)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+    except DBAPIError as exc:
+        await db.rollback()
+        if _is_busy(exc):
+            raise _job_error(
+                status.HTTP_409_CONFLICT,
+                "This document is being updated right now; try again.",
+                "DOCUMENT_BUSY",
+            ) from None
+        raise
+    if document is None or document.deleted_at is not None:
+        raise _job_error(status.HTTP_404_NOT_FOUND, "Job not found", "JOB_NOT_FOUND")
+    await db.refresh(target)
+    return document, target, latest
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=AdminJobActionResult)
+async def force_cancel_job(
+    job_id: UUID,
+    body: AdminJobCancelRequest | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_active_admin),
+):
+    admin_id = admin.id
+    document, job, latest = await _lock_job_for_action(db, job_id)
+    if latest is None or latest.id != job.id or job.status not in ACTIVE_JOB_STATES:
+        raise _job_error(
+            status.HTTP_409_CONFLICT,
+            "Only the latest queued or processing job of a document can be canceled.",
+            "JOB_NOT_CANCELABLE",
+        )
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    job.status = "canceled"
+    job.current_stage = "canceled"
+    job.canceled_by_id = admin_id
+    job.cancel_reason = body.reason if body is not None else None
+    job.updated_at = now
+    await db.execute(cancel_open_job_pages([job.id], now))
+    document.status = "canceled"
+    document.error_message = None
+    document_id = document.id
+    task_id = job.celery_task_id
+    await db.commit()
+
+    if task_id:
+        try:
+            await run_in_threadpool(revoke_document_processing, task_id, terminate=True)
+        except Exception:
+            logger.exception(f"Force-revoking task {task_id} failed")
+
+    return AdminJobActionResult(job_id=job_id, document_id=document_id, status="canceled")
+
+
+@router.post(
+    "/jobs/{job_id}/retry",
+    response_model=AdminJobActionResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def retry_job(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_active_admin),
+):
+    admin_id = admin.id
+    document, job, latest = await _lock_job_for_action(db, job_id)
+    if latest is None or latest.id != job.id or job.status != "failed":
+        raise _job_error(
+            status.HTTP_409_CONFLICT,
+            "Only the latest failed job of a document can be retried.",
+            "JOB_NOT_RETRYABLE",
+        )
+
+    document_id = document.id
+    outcome = await reprocess_document(
+        db,
+        document_id,
+        enqueue_document_processing,
+        requested_by_id=admin_id,
+        retry_of_job_id=job_id,
+    )
+    if outcome.error is ReprocessError.QUEUE_UNAVAILABLE:
+        raise _job_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE, outcome.detail, "QUEUE_UNAVAILABLE"
+        )
+    if not outcome.ok:
+        raise _job_error(
+            status.HTTP_409_CONFLICT,
+            "Only the latest failed job of a document can be retried.",
+            "JOB_NOT_RETRYABLE",
+        )
+
+    return AdminJobActionResult(
+        job_id=job_id,
+        document_id=document_id,
+        status="failed",
+        new_job_id=outcome.job_id,
+        new_job_status="queued",
+        scope=outcome.scope,
+        pages=outcome.pages,
+    )
