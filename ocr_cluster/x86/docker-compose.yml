@@ -119,6 +119,8 @@ services:
     environment:
       STRUCTURE_GATEWAY_URL: http://paddlex-pipeline:8080/layout-parsing
       VL_GATEWAY_URL: http://paddleocr-vl-api:8080/layout-parsing
+      MODEL_NAME: "${MODEL_NAME:?set MODEL_NAME in .env}"
+      MODEL_VERSION: "${MODEL_VERSION:?set MODEL_VERSION in .env}"
     depends_on:
       paddlex-pipeline:
         condition: service_healthy

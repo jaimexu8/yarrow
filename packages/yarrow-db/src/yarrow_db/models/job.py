@@ -38,6 +38,9 @@ class Job(Base):
     cancel_reason = Column(String(500))
     retry_of_job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL"))
     requested_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    model_name = Column(String(128))
+    model_version = Column(String(64))
+    pipeline_version = Column(String(64))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

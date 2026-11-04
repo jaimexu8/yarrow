@@ -58,6 +58,8 @@ export type PageNode = {
   // corrected upright image for those pages; null for everything else.
   image_key: string | null;
   has_thumbnail: boolean;
+  model_name?: string | null;
+  model_version?: string | null;
   regions: RegionNode[];
   warnings: WarningNode[];
 };

@@ -66,6 +66,12 @@ Box = tuple[float, float, float, float]
 BlockWithTable = tuple[JsonDict, JsonDict | None]
 CellBBoxPair = tuple[JsonDict, Box | None]
 
+
+class ModelInfo(NamedTuple):
+    name: str
+    version: str
+
+
 LAYOUT_SCORE_IOU_THRESHOLD = 0.5
 
 TABLE_LABELS = {"table"}
@@ -224,6 +230,7 @@ class DocumentParser:
 
         self.quality_checker = QualityChecker()
         self.orientation_corrector = OrientationCorrector()
+        self.page_models: dict[int, ModelInfo] = {}
 
     @property
     def failed_page_numbers(self) -> list[int]:
@@ -260,7 +267,7 @@ class DocumentParser:
                 self.page_orientations[index] = angle
                 logger.info(f"Page {index + 1} auto-rotated by {angle:.1f}° (confidence {confidence:.2f})")
 
-    def process_page(self, page_data: str) -> JsonDict:
+    def process_page(self, page_data: str, page_index: int) -> JsonDict:
         headers = {"Content-Type": "application/json"}
         if settings.INFERENCE_API_KEY:
             headers["Authorization"] = f"Bearer {settings.INFERENCE_API_KEY}"
@@ -273,7 +280,12 @@ class DocumentParser:
         )
 
         response.raise_for_status()
-        return response.json()
+        body = response.json()
+        self.page_models[page_index] = ModelInfo(
+            response.headers.get("X-Yarrow-Model-Name") or settings.INFERENCE_MODEL_NAME,
+            response.headers.get("X-Yarrow-Model-Version") or settings.INFERENCE_MODEL_VERSION,
+        )
+        return body
 
     def _emit_page_event(self, page_number: int, event: PageEvent) -> None:
         if self.on_page_event is None:
@@ -288,7 +300,7 @@ class DocumentParser:
         self._emit_page_event(page_number, "started")
 
         try:
-            result = self.process_page(page_data)
+            result = self.process_page(page_data, page_index)
         except Exception as error:
             error_message = f"{type(error).__name__}: {error}"
             logger.error(f"Page {page_number} processing failed: ({error_message})")
@@ -301,6 +313,7 @@ class DocumentParser:
 
     async def process_async(self, page_to_process: tuple | None = None) -> None:
         self.page_errors = {}
+        self.page_models = {}
         
         # Creates processing tasks for each page that needs to be processed
         tasks = [asyncio.to_thread(self._process_page_isolated, index, page) for index, page in enumerate(self.pages) if page_to_process is None or index + 1 in page_to_process]
@@ -732,6 +745,7 @@ class DocumentParser:
             page_id = uuid.uuid4()
             page_error = self.page_errors.get(page_index)
             page_number = page_index + 1
+            model = None if page_error else self.page_models.get(page_index)
             page = Page(
                 id=page_id,
                 document_id=document.id,
@@ -741,6 +755,8 @@ class DocumentParser:
                 status="failed" if page_error else "completed",
                 error_code=page_error.code if page_error else None,
                 error_message=page_error.message if page_error else None,
+                model_name=model.name if model else None,
+                model_version=model.version if model else None,
             )
 
             # A page that was rotated is stored with its corrected image so the

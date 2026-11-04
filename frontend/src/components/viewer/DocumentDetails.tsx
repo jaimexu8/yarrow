@@ -3,16 +3,21 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, Gauge } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { parseApiDate } from '@/lib/documents';
+import { getDocument, parseApiDate, type ModelUsage } from '@/lib/documents';
 import { formatBytes } from '@/lib/storage';
 import { isLowConfidence } from '@/lib/viewer';
 import { useViewer } from './ViewerContext';
+
+function modelLabel(name?: string | null, version?: string | null): string {
+  return [name, version].filter(Boolean).join(' ') || 'Not recorded';
+}
 
 // The header chip summarizing how many pages were read with high confidence
 export function DocumentDetails() {
   const { document, tree, showLowConfidence, setShowLowConfidence } =
     useViewer();
   const [open, setOpen] = useState(false);
+  const [models, setModels] = useState<ModelUsage[]>([]);
   const panelId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -38,6 +43,23 @@ export function DocumentDetails() {
       window.document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let current = true;
+
+    getDocument(document.id)
+      .then((detail) => {
+        if (current) setModels(detail.models);
+      })
+      .catch(() => {
+        if (current) setModels([]);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [open, document.id, document.processed_at]);
 
   if (!tree || tree.stats.page_count === 0) return null;
 
@@ -106,7 +128,44 @@ export function DocumentDetails() {
             <dd className="text-right tabular-nums text-slate-900">
               {formatBytes(document.file_size_bytes)}
             </dd>
+            <dt>Model</dt>
+            <dd className="text-right text-slate-900 [overflow-wrap:anywhere]">
+              {modelLabel(document.model_name, document.model_version)}
+            </dd>
+            <dt>Processed</dt>
+            <dd className="text-right text-slate-900">
+              {document.processed_at
+                ? parseApiDate(document.processed_at).toLocaleString(
+                    undefined,
+                    { dateStyle: 'medium', timeStyle: 'short' }
+                  )
+                : 'Not recorded'}
+            </dd>
           </dl>
+
+          {models.length > 1 && (
+            <div className="mt-3 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600">
+              <p className="font-medium text-slate-900">
+                Pages were processed by {models.length} model versions
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {models.map((model) => (
+                  <li
+                    key={`${model.model_name}\u0000${model.model_version}`}
+                    className="flex justify-between gap-3"
+                  >
+                    <span className="[overflow-wrap:anywhere]">
+                      {modelLabel(model.model_name, model.model_version)}
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {model.page_count}{' '}
+                      {model.page_count === 1 ? 'page' : 'pages'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="mt-4 border-t border-slate-100 pt-4">
             <h3 className="font-medium text-slate-900">Confidence</h3>

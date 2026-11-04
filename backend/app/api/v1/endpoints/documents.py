@@ -1,5 +1,6 @@
 import hashlib
 import logging
+from collections import Counter
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -67,6 +68,7 @@ from app.schemas import (
     DocumentRename,
     DuplicateOf,
     JobOut,
+    ModelUsage,
     PageOut,
     UploadAccepted,
     UploadRejected,
@@ -807,12 +809,22 @@ async def get_document(
     pages = await db.execute(
         select(Page).where(Page.document_id == document_id).order_by(Page.page_number)
     )
+    page_rows = list(pages.scalars())
+    usage = Counter(
+        (page.model_name, page.model_version)
+        for page in page_rows
+        if page.status == "completed"
+    )
     base = (await documents_out(db, [document]))[0]
     # Validated one by one so each gets the user-facing error filter (US-11).
     return DocumentDetail(
         **base.model_dump(),
         jobs=[JobOut.model_validate(job) for job in jobs.scalars()],
-        pages=[PageOut.model_validate(page) for page in pages.scalars()],
+        pages=[PageOut.model_validate(page) for page in page_rows],
+        models=[
+            ModelUsage(model_name=name, model_version=version, page_count=count)
+            for (name, version), count in usage.most_common()
+        ],
     )
 
 

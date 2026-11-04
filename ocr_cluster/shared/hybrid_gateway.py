@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 
 import requests
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from PIL import Image, ImageStat
 from pydantic import BaseModel, ConfigDict
 
@@ -23,6 +23,11 @@ VL_GATEWAY_URL = os.environ.get(
 )
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "300"))
 VLM_MAX_WORKERS = int(os.environ.get("VLM_MAX_WORKERS", "16"))
+
+MODEL_NAME = os.environ.get("MODEL_NAME", "").strip()
+MODEL_VERSION = os.environ.get("MODEL_VERSION", "").strip()
+if not MODEL_NAME or not MODEL_VERSION:
+    raise RuntimeError("MODEL_NAME and MODEL_VERSION must be set")
 
 # Layout labels worth re-recognizing with the VLM.
 RECOGNIZABLE_LABELS = {
@@ -205,6 +210,15 @@ def _recognize_with_vlm(
             "VLM recognition failed for a crop; keeping PP-StructureV3 text"
         )
         return None
+
+
+@app.middleware("http")
+async def model_identity_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/layout-parsing":
+        response.headers["X-Yarrow-Model-Name"] = MODEL_NAME
+        response.headers["X-Yarrow-Model-Version"] = MODEL_VERSION
+    return response
 
 
 @app.get("/health")

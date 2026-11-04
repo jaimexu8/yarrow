@@ -42,6 +42,10 @@ class Document(Base):
     # documents uploaded before the column existed. Indexed with owner_id in
     # migration 0017; not unique, because "Upload anyway" keeps a second copy.
     content_sha256 = Column(String(64))
+    model_name = Column(String(128))
+    model_version = Column(String(64))
+    pipeline_version = Column(String(64))
+    processed_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     # When set, the document is in trash. Cleared on restore. Rows and

@@ -6,6 +6,7 @@ import pytest
 from yarrow_db.models import Document, Job, JobPage, Page
 from yarrow_db.models.region import RegionImage
 
+from app.pipeline.document_parser import ModelInfo
 from app.tasks import ingestion
 
 
@@ -130,6 +131,7 @@ class FakeDocumentParser:
     figures: ClassVar[dict[str, bytes]] = {}
     # 1-based page number -> content rotation, for pages the fake corrects
     corrected_pages: ClassVar[dict[int, float]] = {}
+    models: ClassVar[dict[int, ModelInfo]] = {}
     
     def __init__(self, on_page_event=None) -> None:
         self.on_page_event = on_page_event
@@ -141,9 +143,10 @@ class FakeDocumentParser:
         self.figure_images: dict[str, bytes] = {}
         self.page_images: dict[str, bytes] = {}
         self.page_orientations: dict[int, float] = {}
+        self.page_models: dict[int, ModelInfo] = {}
             
     @classmethod
-    def configure(cls, page_count=1, failed=(), load_error=None, inference_error=None, figures=None, corrected_pages=None):
+    def configure(cls, page_count=1, failed=(), load_error=None, inference_error=None, figures=None, corrected_pages=None, models=None):
         cls.page_count = page_count
         cls.failed = failed
         cls.load_error = load_error
@@ -151,6 +154,7 @@ class FakeDocumentParser:
         # Figure crops by storage key, each given a RegionImage row
         cls.figures = dict(figures or {})
         cls.corrected_pages = dict(corrected_pages or {})
+        cls.models = dict(models or {})
     
     @property
     def failed_page_numbers(self) -> list[int]:
@@ -171,12 +175,18 @@ class FakeDocumentParser:
     def process_sync(self, page_to_process = None):
         if FakeDocumentParser.inference_error is not None:
             raise FakeDocumentParser.inference_error
+        self.page_models = {
+            index: model
+            for index, model in FakeDocumentParser.models.items()
+            if index + 1 not in FakeDocumentParser.failed
+        }
     
     def to_model_objects(self, document, target_pages = None, merge_consecutive_tables=False):
         output = []
         self.page_images = {}
         for number in range(1, len(self.pages) + 1):
             failed = number in FakeDocumentParser.failed
+            model = self.page_models.get(number - 1)
             page = Page(
                 id=uuid4(),
                 document_id=document.id,
@@ -184,6 +194,8 @@ class FakeDocumentParser:
                 status="failed" if failed else "completed",
                 error_code="inference_error" if failed else None,
                 error_message="inference failed" if failed else None,
+                model_name=model.name if model else None,
+                model_version=model.version if model else None,
             )
             if number in FakeDocumentParser.corrected_pages:
                 key = f"documents/{document.id}/pages/{number}.png"
