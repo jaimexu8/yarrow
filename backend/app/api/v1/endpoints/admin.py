@@ -8,7 +8,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
-from yarrow_db.models import Document, Job, User
+from yarrow_db.models import Document, Job, ServiceNode, User
 
 from app.core.database import get_db
 from app.core.queue import enqueue_document_processing, revoke_document_processing
@@ -22,9 +22,11 @@ from app.schemas.admin import (
     AdminJobCancelRequest,
     AdminStats,
     JobStatusCounts,
+    NodeStatusReport,
 )
 from app.services.account import delete_account
 from app.services.job_progress import cancel_open_job_pages
+from app.services.node_health import check_nodes
 from app.services.reprocess import (
     ACTIVE_JOB_STATES,
     LATEST_JOB_FIRST,
@@ -438,3 +440,45 @@ async def retry_job(
         scope=outcome.scope,
         pages=outcome.pages,
     )
+
+
+@router.get("/nodes", response_model=NodeStatusReport)
+async def get_node_status(
+    refresh: bool = False,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_active_admin),
+):
+    return await check_nodes(db, refresh=refresh)
+
+
+@router.delete("/nodes/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def forget_node(
+    node_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_active_admin),
+):
+    node = await db.get(ServiceNode, node_id)
+    if node is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"detail": "Node not found", "code": "NODE_NOT_FOUND"},
+        )
+    if node.kind == "inference":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "detail": "Inference servers come from configuration and "
+                "cannot be removed here",
+                "code": "NODE_CONFIGURED",
+            },
+        )
+    if node.status != "down":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "detail": "Only a node that is down can be removed",
+                "code": "NODE_NOT_DOWN",
+            },
+        )
+    await db.delete(node)
+    await db.commit()

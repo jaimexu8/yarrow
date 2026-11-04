@@ -93,3 +93,37 @@ class AdminJobActionResult(BaseModel):
     new_job_status: str | None = None
     scope: Literal["incomplete", "all"] | None = None
     pages: list[int] | None = None
+
+
+NodeKind = Literal["worker", "inference"]
+NodeHealth = Literal["healthy", "degraded", "down", "unknown"]
+
+
+class AdminNodeStatus(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    kind: NodeKind
+    name: str
+    hostname: str
+    url: str | None = None
+    status: NodeHealth
+    latency_ms: int | None = None
+    last_checked_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    last_error: str | None = None
+    details: dict[str, int | str | None] = Field(default_factory=dict)
+
+
+class NodeStatusSummary(BaseModel):
+    healthy: int
+    degraded: int
+    down: int
+    unknown: int
+
+
+class NodeStatusReport(BaseModel):
+    checked_at: datetime
+    overall_status: Literal["healthy", "degraded", "down"]
+    summary: NodeStatusSummary
+    nodes: list[AdminNodeStatus]

@@ -2335,6 +2335,20 @@ otel = ["opentelemetry-api (>=1.39.1)", "opentelemetry-exporter-otlp-proto-http 
 xxhash = ["xxhash (>=3.6.0,<3.7.0)"]
 
 [[package]]
+name = "respx"
+version = "0.23.1"
+description = "A utility for mocking out the Python HTTPX and HTTP Core libraries."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "respx-0.23.1-py2.py3-none-any.whl", hash = "sha256:b18004b029935384bccfa6d7d9d74b4ec9af73a081cc28600fffc0447f4b8c1a"},
+    {file = "respx-0.23.1.tar.gz", hash = "sha256:242dcc6ce6b5b9bf621f5870c82a63997e8e82bc7c947f9ffe272b8f3dd5a780"},
+]
+
+[package.dependencies]
+httpx = ">=0.25.0"
+
+[[package]]
 name = "rsa"
 version = "4.9.1"
 description = "Pure-Python RSA implementation"
@@ -3009,8 +3023,7 @@ pydantic-settings = "*"
 type = "directory"
 url = "../packages/yarrow-storage"
 
-
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "604417e994accee597bf493ef0b5f6f793745253bd52b66f0c85be5eb964c936"
+content-hash = "dbc6f66d1309d19e1ce30f42864e9c5a2171d0f740ac56df92bc8e80d39246b4"

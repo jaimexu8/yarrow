@@ -7,6 +7,7 @@ from .job import JOB_STAGES, Job, JobStage
 from .job_page import OPEN_PAGE_STATUSES, PAGE_STATUSES, JobPage, PageStatus
 from .page import Page
 from .region import Region, RegionImage, RegionText
+from .service_node import ServiceNode
 from .share import DocumentShare
 from .table import RegionTable, Table, TableCell
 from .tag import DocumentTag, Tag
@@ -34,6 +35,7 @@ __all__ = [
     "RegionImage",
     "RegionTable",
     "RegionText",
+    "ServiceNode",
     "Table",
     "TableCell",
     "Tag",

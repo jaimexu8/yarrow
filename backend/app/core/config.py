@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 from yarrow_db.config import DatabaseSettings
 
@@ -53,6 +54,13 @@ class Settings(DatabaseSettings):
     # Which endpoint the *worker* uses is set in its own Settings.
     INFERENCE_SERVICE_URL: str = "http://gateway:8080/layout-parsing"
     INFERENCE_API_KEY: str = ""
+
+    INFERENCE_HEALTH_TARGETS: list[dict[str, str]] = Field(default_factory=list)
+    INFERENCE_HEALTH_TIMEOUT_SECONDS: float = 3.0
+    INFERENCE_DEGRADED_LATENCY_MS: int = 1500
+    WORKER_PING_TIMEOUT_SECONDS: float = 2.0
+    WORKER_DEGRADED_LATENCY_MS: int = 1000
+    NODE_STATUS_CACHE_SECONDS: int = 5
 
     # Outbound email (US-1 verification, US-67 reset). SMTP_HOST unset means
     # "no mail server": nothing is sent, which is what a developer running the
