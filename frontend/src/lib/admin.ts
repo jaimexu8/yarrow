@@ -63,6 +63,12 @@ export type AdminJob = {
   total_pages: number | null;
   error_message: string | null;
   created_at: string | null;
+  is_stuck: boolean;
+  can_cancel: boolean;
+  can_retry: boolean;
+  canceled_by_id: string | null;
+  cancel_reason: string | null;
+  retry_of_job_id: string | null;
 };
 
 export async function listAdminJobs(): Promise<AdminJob[]> {
@@ -79,4 +85,33 @@ export function jobQueuePlace(job: AdminJob): string {
 export function jobStage(job: AdminJob): string {
   if (!job.current_stage) return '—';
   return job.current_stage.charAt(0).toUpperCase() + job.current_stage.slice(1);
+}
+
+export type AdminJobActionResult = {
+  job_id: string;
+  document_id: string;
+  status: string;
+  new_job_id: string | null;
+  new_job_status: string | null;
+  scope: 'incomplete' | 'all' | null;
+  pages: number[] | null;
+};
+
+export async function forceCancelJob(
+  jobId: string,
+  reason?: string
+): Promise<AdminJobActionResult> {
+  const trimmed = reason?.trim();
+  const res = await api.post<AdminJobActionResult>(
+    `/api/v1/admin/jobs/${jobId}/cancel`,
+    trimmed ? { reason: trimmed } : {}
+  );
+  return res.data;
+}
+
+export async function retryJob(jobId: string): Promise<AdminJobActionResult> {
+  const res = await api.post<AdminJobActionResult>(
+    `/api/v1/admin/jobs/${jobId}/retry`
+  );
+  return res.data;
 }
