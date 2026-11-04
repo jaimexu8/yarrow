@@ -1,5 +1,7 @@
 """Unit tests for process_document_task"""
 
+import uuid
+
 import pytest
 from yarrow_db.models import JobPage
 from yarrow_db.models.region import RegionImage
@@ -140,6 +142,29 @@ class TestCanceled:
         process_document_task(str(job.id))
 
         assert job.status == "canceled"
+        assert job.document.status == "canceled"
+        assert _results(session) == []
+
+    def test_force_canceled_by_admin_saves_nothing(
+        self, job, session, storage, parser, monkeypatch
+    ):
+        parser.configure(page_count=2)
+        admin_id = uuid.uuid4()
+
+        def force_cancel_during_inference(self, page_to_process=None):
+            job.status = "canceled"
+            job.current_stage = "canceled"
+            job.canceled_by_id = admin_id
+            job.cancel_reason = "Stuck in parsing for 2 hours"
+            job.document.status = "canceled"
+
+        monkeypatch.setattr(type(parser), "process_sync", force_cancel_during_inference)
+
+        process_document_task(str(job.id))
+
+        assert job.status == "canceled"
+        assert job.current_stage == "canceled"
+        assert job.canceled_by_id == admin_id
         assert job.document.status == "canceled"
         assert _results(session) == []
 
