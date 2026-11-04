@@ -17,6 +17,7 @@ class Page(Base):
     height = Column(Float)
     status = Column(String)
     error_message = Column(String)
+    error_code = Column(String(32))
     page_image_key = Column(String) # Storage key of the upright page image
 
     document = relationship("Document")

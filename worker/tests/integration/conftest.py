@@ -25,7 +25,7 @@ from yarrow_db.models import (
 from yarrow_db.session import session_scope
 from yarrow_storage import get_storage
 
-from app.pipeline.document_parser import DocumentParser
+from app.pipeline.document_parser import DocumentParser, PageError
 from app.tasks import ingestion
 
 logger = logging.getLogger(__name__)
@@ -195,8 +195,8 @@ class TestInitializer:
 class FakeDocumentParser(DocumentParser):
     failed: ClassVar[set[int]] = set()
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, on_page_event=None) -> None:
+        super().__init__(on_page_event)
         self.failed = set(FakeDocumentParser.failed)
 
     @classmethod
@@ -205,7 +205,9 @@ class FakeDocumentParser(DocumentParser):
 
     def _process_page_isolated(self, page_index: int, page_data: str):
         if page_index in self.failed:
-            self.page_errors[page_index] = "Exception: Simulated failure"
+            self._emit_page_event(page_index + 1, "started")
+            self.page_errors[page_index] = PageError("unknown", "Exception: Simulated failure")
+            self._emit_page_event(page_index + 1, "failed")
             return {}
 
         return super()._process_page_isolated(page_index, page_data)

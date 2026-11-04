@@ -1,11 +1,24 @@
 import uuid
 from datetime import datetime
+from typing import Literal, get_args
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from .base import Base
+
+JobStage = Literal[
+    "queued",
+    "downloading",
+    "preparing",
+    "parsing",
+    "saving",
+    "finished",
+    "failed",
+    "canceled",
+]
+JOB_STAGES: tuple[JobStage, ...] = get_args(JobStage)
 
 
 class Job(Base):
@@ -24,3 +37,10 @@ class Job(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     document = relationship("Document")
+    pages = relationship(
+        "JobPage",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="JobPage.page_number",
+    )

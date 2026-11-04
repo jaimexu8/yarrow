@@ -1,5 +1,6 @@
 import hashlib
 import logging
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import filetype
@@ -62,6 +63,7 @@ from app.schemas import (
     DocumentDetail,
     DocumentFolderUpdate,
     DocumentOut,
+    DocumentProgress,
     DocumentRename,
     DuplicateOf,
     JobOut,
@@ -94,6 +96,7 @@ from app.services.failure_messages import (
     QUEUE_FAILED_MESSAGE,
     public_error_message,
 )
+from app.services.job_progress import cancel_open_job_pages, document_progress
 from app.services.reprocess import (
     ReprocessError,
     documents_out,
@@ -811,6 +814,14 @@ async def get_document(
     )
 
 
+@router.get("/{document_id}/progress", response_model=DocumentProgress)
+async def get_document_progress(
+    access: DocumentAccess = Depends(require_read_access),
+    db: AsyncSession = Depends(get_db),
+):
+    return await document_progress(db, access.document)
+
+
 @router.patch("/{document_id}", response_model=DocumentOut)
 async def rename_document(
     body: DocumentRename,
@@ -943,7 +954,11 @@ async def cancel_document_processing(
             detail="Only documents that haven't finished processing can be canceled.",
         )
 
+    now = datetime.now(UTC).replace(tzinfo=None)
     job.status = "canceled"
+    job.current_stage = "canceled"
+    job.updated_at = now
+    await db.execute(cancel_open_job_pages([job.id], now))
     document.status = "canceled"
     document.error_message = None
     task_id = job.celery_task_id

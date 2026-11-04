@@ -1,15 +1,16 @@
 import asyncio
 import base64
+import binascii
 import io
 import logging
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from html.parser import HTMLParser
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal, NamedTuple
 
 import filetype
 import requests
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from yarrow_db.models import (
     Base,
     Document,
@@ -37,6 +38,30 @@ from app.pipeline.reading_order import order_blocks
 logger = logging.getLogger(__name__)
 
 JsonDict = dict[str, Any]
+PageEvent = Literal["started", "completed", "failed"]
+PageEventCallback = Callable[[int, PageEvent], None]
+
+
+class PageError(NamedTuple):
+    code: str
+    message: str
+
+
+UNAVAILABLE_HTTP_STATUSES = {502, 503, 504}
+
+
+def page_error_code(error: BaseException) -> str:
+    if isinstance(error, requests.Timeout):
+        return "inference_timeout"
+    if isinstance(error, requests.ConnectionError):
+        return "inference_unavailable"
+    if isinstance(error, requests.HTTPError):
+        status = getattr(error.response, "status_code", None)
+        return "inference_unavailable" if status in UNAVAILABLE_HTTP_STATUSES else "inference_error"
+    if isinstance(error, (UnidentifiedImageError, binascii.Error)):
+        return "invalid_page_image"
+    return "unknown"
+
 Box = tuple[float, float, float, float]
 BlockWithTable = tuple[JsonDict, JsonDict | None]
 CellBBoxPair = tuple[JsonDict, Box | None]
@@ -179,10 +204,11 @@ class DocumentParser:
         "pdf": PDFLoader(),
     }
 
-    def __init__(self) -> None:
+    def __init__(self, on_page_event: PageEventCallback | None = None) -> None:
+        self.on_page_event = on_page_event
         self.pages: list[str] = []
         self.parsed_result: list[JsonDict] = []
-        self.page_errors: dict[int, str] = {}
+        self.page_errors: dict[int, PageError] = {}
 
         # PNG crops of the figure regions built by to_model_objects, by the
         # storage key their RegionImage points at. The caller uploads them.
@@ -249,17 +275,29 @@ class DocumentParser:
         response.raise_for_status()
         return response.json()
 
+    def _emit_page_event(self, page_number: int, event: PageEvent) -> None:
+        if self.on_page_event is None:
+            return
+        try:
+            self.on_page_event(page_number, event)
+        except Exception:
+            logger.exception(f"Could not record page {page_number} as {event}")
+
     def _process_page_isolated(self, page_index: int, page_data: str) -> JsonDict:
-        error_message = ""
+        page_number = page_index + 1
+        self._emit_page_event(page_number, "started")
 
         try:
-            return self.process_page(page_data)
+            result = self.process_page(page_data)
         except Exception as error:
             error_message = f"{type(error).__name__}: {error}"
-            logger.error(f"Page {page_index + 1} processing failed: " f"({error_message})")
+            logger.error(f"Page {page_number} processing failed: ({error_message})")
+            self.page_errors[page_index] = PageError(page_error_code(error), error_message)
+            self._emit_page_event(page_number, "failed")
+            return {}
 
-        self.page_errors[page_index] = error_message
-        return {}
+        self._emit_page_event(page_number, "completed")
+        return result
 
     async def process_async(self, page_to_process: tuple | None = None) -> None:
         self.page_errors = {}
@@ -692,7 +730,7 @@ class DocumentParser:
 
             # Construct page object
             page_id = uuid.uuid4()
-            error_message = self.page_errors.get(page_index)
+            page_error = self.page_errors.get(page_index)
             page_number = page_index + 1
             page = Page(
                 id=page_id,
@@ -700,8 +738,9 @@ class DocumentParser:
                 page_number=page_number,
                 width=page_data.get("width"),
                 height=page_data.get("height"),
-                status="failed" if error_message else "completed",
-                error_message=error_message,
+                status="failed" if page_error else "completed",
+                error_code=page_error.code if page_error else None,
+                error_message=page_error.message if page_error else None,
             )
 
             # A page that was rotated is stored with its corrected image so the

@@ -3,7 +3,8 @@ from .batch import Batch
 from .cloud_credential import CloudCredential
 from .document import Document
 from .folder import Folder
-from .job import Job
+from .job import JOB_STAGES, Job, JobStage
+from .job_page import OPEN_PAGE_STATUSES, PAGE_STATUSES, JobPage, PageStatus
 from .page import Page
 from .region import Region, RegionImage, RegionText
 from .share import DocumentShare
@@ -14,6 +15,9 @@ from .user import User
 from .warning import Warning
 
 __all__ = [
+    "JOB_STAGES",
+    "OPEN_PAGE_STATUSES",
+    "PAGE_STATUSES",
     "Base",
     "Batch",
     "CloudCredential",
@@ -22,7 +26,10 @@ __all__ = [
     "DocumentTag",
     "Folder",
     "Job",
+    "JobPage",
+    "JobStage",
     "Page",
+    "PageStatus",
     "Region",
     "RegionImage",
     "RegionTable",

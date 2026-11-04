@@ -3,7 +3,7 @@ from typing import ClassVar
 from uuid import uuid4
 
 import pytest
-from yarrow_db.models import Document, Job, Page
+from yarrow_db.models import Document, Job, JobPage, Page
 from yarrow_db.models.region import RegionImage
 
 from app.tasks import ingestion
@@ -97,6 +97,8 @@ class FakeSession:
             )
         if RegionImage in entities:
             return FakeResult(self.existing_image_keys)
+        if JobPage in entities:
+            return FakeResult([job_page for job_page in self.added if isinstance(job_page, JobPage)])
         return FakeResult()
 
     def scalar(self, statement):
@@ -129,7 +131,8 @@ class FakeDocumentParser:
     # 1-based page number -> content rotation, for pages the fake corrects
     corrected_pages: ClassVar[dict[int, float]] = {}
     
-    def __init__(self) -> None:
+    def __init__(self, on_page_event=None) -> None:
+        self.on_page_event = on_page_event
         self.pages: list[str] = []
         self.page_count = 0
         self.failed = ()
@@ -179,6 +182,7 @@ class FakeDocumentParser:
                 document_id=document.id,
                 page_number=number,
                 status="failed" if failed else "completed",
+                error_code="inference_error" if failed else None,
                 error_message="inference failed" if failed else None,
             )
             if number in FakeDocumentParser.corrected_pages:

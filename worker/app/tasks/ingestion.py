@@ -1,10 +1,23 @@
 import io
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError
-from yarrow_db.models import Document, Job, Page, Region, RegionTable, Table, Warning
+from yarrow_db.models import (
+    OPEN_PAGE_STATUSES,
+    Document,
+    Job,
+    JobPage,
+    JobStage,
+    Page,
+    Region,
+    RegionTable,
+    Table,
+    Warning,
+)
 from yarrow_db.models.region import RegionImage, RegionText
 from yarrow_db.models.table import TableCell
 from yarrow_db.session import session_scope
@@ -16,11 +29,7 @@ from yarrow_db.utils.table_utils import (
 from yarrow_storage import ObjectNotFoundError, get_storage
 
 from app.celery_app import celery_app
-
-# from app.pipeline.document_parser import DocumentParser
-from app.pipeline.document_parser import DocumentParser
-
-# from app.pipeline.document_parser import DocumentParser
+from app.pipeline.document_parser import DocumentParser, PageEvent
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +111,70 @@ def _job_deleted(job_id: str) -> bool:
         return False
 
 
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _run_page_numbers(page_count: int, page_to_process: tuple | None) -> list[int]:
+    return [number for number in range(1, page_count + 1) if page_to_process is None or number in page_to_process]
+
+
+def _lock_running_job(session: Session, job_id: str) -> Job:
+    job = session.get(Job, UUID(job_id), with_for_update=True)
+    if job is None:
+        raise JobDeletedError(job_id)
+    if job.status == "canceled":
+        raise JobCanceledError(job_id)
+    return job
+
+
+def _set_stage(job_id: str, stage: JobStage) -> None:
+    with session_scope() as session:
+        _lock_running_job(session, job_id).current_stage = stage
+
+
+def _record_page_event(job_id: UUID, parser: DocumentParser, page_number: int, event: PageEvent) -> None:
+    now = _utcnow()
+    this_page = (JobPage.job_id == job_id, JobPage.page_number == page_number)
+    with session_scope() as session:
+        if event == "started":
+            session.execute(
+                update(JobPage)
+                .where(*this_page, JobPage.status == "queued")
+                .values(status="processing", started_at=now)
+                .execution_options(synchronize_session=False)
+            )
+            return
+
+        running = session.execute(
+            update(Job)
+            .where(Job.id == job_id, Job.status == "processing")
+            .values(updated_at=now)
+            .execution_options(synchronize_session=False)
+        )
+        if not running.rowcount:
+            return
+
+        outcome = {"status": event, "finished_at": now}
+        if event == "failed":
+            error = parser.page_errors.get(page_number - 1)
+            outcome["error_code"] = error.code if error else "unknown"
+            outcome["error_message"] = error.message if error else None
+        finished = session.execute(
+            update(JobPage)
+            .where(*this_page, JobPage.status.in_(OPEN_PAGE_STATUSES))
+            .values(**outcome)
+            .execution_options(synchronize_session=False)
+        )
+        if finished.rowcount:
+            session.execute(
+                update(Job)
+                .where(Job.id == job_id, Job.status == "processing")
+                .values(pages_processed=Job.pages_processed + 1, updated_at=now)
+                .execution_options(synchronize_session=False)
+            )
+
+
 def _mark_failed(job_id: str, message: str) -> None:
     with session_scope() as session:
         job = session.get(Job, UUID(job_id))
@@ -120,6 +193,7 @@ def _mark_failed(job_id: str, message: str) -> None:
             # The user canceled it (US-42); that is the state they should see.
             return
         job.status = "failed"
+        job.current_stage = "failed"
         job.error_message = message
         job.document.status = "failed"
         job.document.error_message = message
@@ -173,8 +247,13 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
         file_data = get_storage().download_bytes(storage_key)
         logger.info(f"Downloaded {len(file_data)} bytes from {storage_key}")
 
-        parser = DocumentParser()
+        job_uuid = UUID(job_id)
+        parser = DocumentParser(
+            on_page_event=lambda page_number, event: _record_page_event(job_uuid, parser, page_number, event)
+        )
         parser.load_file(file_data)
+
+        _set_stage(job_id, "preparing")
 
         # Rotate any rotated pages upright before OCR, so the text is readable
         # and every downstream consumer (OCR, quality check, figure crops,
@@ -182,16 +261,17 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
         parser.correct_orientations()
 
         with session_scope() as session:
-            job = session.get(Job, UUID(job_id))
-            if job is None:
-                raise JobDeletedError(job_id)
-            if job.status == "canceled":
-                # Canceled while downloading: skip the slow OCR step.
-                raise JobCanceledError(job_id)
+            job = _lock_running_job(session, job_id)
+            run_page_numbers = _run_page_numbers(len(parser.pages), page_to_process)
+            session.execute(delete(JobPage).where(JobPage.job_id == job.id))
+            session.add_all([JobPage(job_id=job.id, page_number=number, status="queued") for number in run_page_numbers])
+            job.total_pages = len(run_page_numbers)
+            job.pages_processed = 0
             job.current_stage = "parsing"
-            job.total_pages = len(parser.pages)
 
         parser.process_sync(page_to_process)
+
+        _set_stage(job_id, "saving")
 
         failed_pages = parser.failed_page_numbers
         total_pages = len(parser.pages)
@@ -386,10 +466,22 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
             job = session.get(Job, UUID(job_id))
             if job is None:
                 raise JobDeletedError(job_id)
-            
-            job.pages_processed = sum(status == "completed" for _, status in page_states)
+
+            run_pages = {obj.page_number: obj for obj in all_objects if isinstance(obj, Page)}
+            job_pages = session.execute(select(JobPage).where(JobPage.job_id == job.id)).scalars().all()
+            finished_at = _utcnow()
+            for job_page in job_pages:
+                page = run_pages.get(job_page.page_number)
+                if page is None:
+                    continue
+                job_page.status = page.status
+                job_page.error_code = page.error_code
+                job_page.error_message = page.error_message
+                job_page.finished_at = job_page.finished_at or finished_at
+
+            job.pages_processed = sum(job_page.status in ("completed", "failed") for job_page in job_pages)
             job.error_message = summary
-            job.current_stage = "parsing" if run_failed else "finished"
+            job.current_stage = "failed" if run_failed else "finished"
             job.status = "failed" if run_failed else "completed"
 
             document.status, document.error_message = _document_state(page_states, document.page_count or total_pages)

@@ -9,7 +9,9 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, model_validator
+
+from app.services.failure_messages import page_error_message
 
 from .common import BBox, StrictModel
 from .document import DocumentOut
@@ -48,11 +50,17 @@ class PageNode(StrictModel):
     width: float | None = None
     height: float | None = None
     status: str | None = None
+    error_code: str | None = None
     error_message: str | None = None
     # Storage key of the upright page image
     image_key: str | None = None
     regions: list[RegionNode] = Field(default_factory=list)
     warnings: list[WarningNode] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _only_user_facing_errors(self):
+        self.error_message = page_error_message(self.error_code, self.status)
+        return self
 
 
 class DocumentStats(StrictModel):

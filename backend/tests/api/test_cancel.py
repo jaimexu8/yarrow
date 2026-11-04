@@ -3,7 +3,8 @@
 import uuid
 
 import pytest
-from yarrow_db.models import Document, Job
+from sqlalchemy import select
+from yarrow_db.models import Document, Job, JobPage
 
 from tests.conftest import FIXTURES_DIR
 
@@ -112,6 +113,57 @@ class TestCancelWhileProcessing:
         await db_session.refresh(job)
         assert job.status == "canceled"
         assert revoked == ["task-1"]
+
+    async def test_open_job_pages_are_canceled(
+        self, client, auth_headers, fake_storage, fake_queue, revoked, db_session
+    ):
+        document_id, job_id = await _upload(client, auth_headers)
+        await _set_status(db_session, job_id, "processing")
+        db_session.add_all(
+            [
+                JobPage(job_id=job_id, page_number=1, status="completed"),
+                JobPage(
+                    job_id=job_id,
+                    page_number=2,
+                    status="failed",
+                    error_code="inference_timeout",
+                ),
+                JobPage(job_id=job_id, page_number=3, status="processing"),
+                JobPage(job_id=job_id, page_number=4, status="queued"),
+            ]
+        )
+        await db_session.flush()
+
+        response = await client.post(_cancel_url(document_id), headers=auth_headers)
+
+        assert response.status_code == 200, response.text
+        job = await db_session.get(Job, job_id)
+        await db_session.refresh(job)
+        assert job.current_stage == "canceled"
+        pages = (
+            await db_session.execute(
+                select(JobPage)
+                .where(JobPage.job_id == job_id)
+                .order_by(JobPage.page_number)
+                .execution_options(populate_existing=True)
+            )
+        ).scalars().all()
+        assert [page.status for page in pages] == [
+            "completed",
+            "failed",
+            "canceled",
+            "canceled",
+        ]
+        assert pages[1].error_code == "inference_timeout"
+        assert pages[0].finished_at is None
+        assert all(page.finished_at is not None for page in pages[2:])
+
+        progress = (
+            await client.get(f"{DOCUMENTS}{document_id}/progress", headers=auth_headers)
+        ).json()
+        assert progress["job_status"] == "canceled"
+        assert progress["current_stage"] == "canceled"
+        assert progress["progress_percent"] == 100
 
 
 class TestFinishedCannotBeCanceled:
