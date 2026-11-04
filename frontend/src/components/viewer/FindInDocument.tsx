@@ -38,11 +38,12 @@ export function FindInDocument() {
   const [hits, setHits] = useState<DocumentHit[]>([]);
   const [active, setActive] = useState(0);
 
-  // eslint-disable-next-line react-hooks/refs -- Latest-value ref tracking the highlight for the search effect; never read during render.
-  highlightRef.current = {
-    regionId: highlightRegionId,
-    cellId: highlightCellId,
-  };
+  useEffect(() => {
+    highlightRef.current = {
+      regionId: highlightRegionId,
+      cellId: highlightCellId,
+    };
+  }, [highlightRegionId, highlightCellId]);
 
   useEffect(() => {
     if (!tree) return;

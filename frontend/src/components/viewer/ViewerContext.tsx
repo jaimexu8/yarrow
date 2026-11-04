@@ -69,7 +69,6 @@ type ViewerState = {
   // Returns true only when the page differs from the one already current.
   reportVisiblePage: (page: number) => boolean;
 
-  // current find hit; starts from a /search link's ?region=&q=&cell=
   highlightRegionId: string | null;
   highlightQuery: string;
   highlightCellId: string | null;
