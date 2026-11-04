@@ -179,6 +179,8 @@ export type BatchProgress = {
   failed: number;
   canceled: number;
   created_at: string | null;
+  /** When every file reached a final state (US-60); null while any is left. */
+  completed_at?: string | null;
 };
 
 /** Whether any file in the batch is still queued or being processed. */

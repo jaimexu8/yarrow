@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.common import StrictModel
 from app.schemas.tag import TagOut
 from app.services.failure_messages import (
     DOCUMENT_FAILED_MESSAGE,
@@ -201,3 +202,50 @@ class BatchProgress(BaseModel):
     failed: int
     canceled: int
     created_at: datetime | None = None
+    # When every file was last seen in a final state (US-60); None while any
+    # file is still queued or processing.
+    completed_at: datetime | None = None
+
+
+class BatchSealed(BaseModel):
+    """The run has finished sending its files (US-60)."""
+
+    batch_id: UUID
+    sealed_at: datetime
+
+
+class BatchAcknowledge(StrictModel):
+    """Notifications the browser has shown, so they are never offered again."""
+
+    batch_ids: list[UUID] = Field(min_length=1, max_length=50)
+
+
+class BatchAcknowledged(BaseModel):
+    """The batches this request marked as announced."""
+
+    acknowledged: list[UUID]
+
+
+class BatchNotification(BaseModel):
+    """One finished batch, announced once (US-60): how its files ended up."""
+
+    batch_id: UUID
+    total: int
+    completed: int
+    failed: int
+    canceled: int
+    created_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class BatchNotifications(BaseModel):
+    """Newly finished batches, plus how many unannounced ones are left.
+
+    Every batch in ``notifications`` is leased to this request: other tabs
+    are not offered it unless the lease expires without an acknowledgement.
+    ``pending`` (unannounced batches still running, unsealed, or leased but
+    unacknowledged) lets the browser stop checking once it reaches 0.
+    """
+
+    notifications: list[BatchNotification]
+    pending: int

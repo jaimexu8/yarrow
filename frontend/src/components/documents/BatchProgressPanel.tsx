@@ -1,5 +1,6 @@
 'use client';
 
+import { BrowserNotificationsOffer } from '@/components/notifications/BrowserNotificationsOffer';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
 import {
@@ -127,6 +128,9 @@ export function BatchProgressPanel({
               </div>
             ))}
           </dl>
+          {/* While it runs, offer a system notification for when it ends,
+              so the user can leave this page (US-60). Hidden once answered. */}
+          {isBatchWorking(progress) && <BrowserNotificationsOffer />}
         </>
       ) : (
         <p className="text-sm text-slate-500">

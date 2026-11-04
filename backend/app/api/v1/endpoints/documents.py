@@ -52,7 +52,11 @@ from app.deps import (
     require_read_access,
 )
 from app.schemas import (
+    BatchAcknowledge,
+    BatchAcknowledged,
+    BatchNotifications,
     BatchProgress,
+    BatchSealed,
     BulkDocumentRequest,
     BulkItemResult,
     DocumentDetail,
@@ -65,6 +69,14 @@ from app.schemas import (
     UploadAccepted,
     UploadRejected,
     UploadResponse,
+)
+from app.services.batch_notifications import (
+    acknowledge_batch_notifications,
+    claim_batch_notifications,
+    is_finished,
+    is_sealed,
+    seal_batch,
+    sync_completed_at,
 )
 from app.services.document_deletion import (
     DocumentDeletionError,
@@ -281,6 +293,13 @@ async def _get_or_create_batch(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Batch not found"
         )
+    # Every caller is about to add a document to the batch (US-60): it is
+    # not finished, the run is sending again until the browser re-seals it,
+    # and a claimed but unacknowledged notification had stale counts.
+    # notified_at is left alone: an announced batch is not announced again.
+    batch.completed_at = None
+    batch.sealed_at = None
+    batch.claimed_at = None
     return batch
 
 
@@ -659,6 +678,16 @@ async def empty_trash_endpoint(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+async def _owned_batch(db: AsyncSession, batch_id: UUID, owner_id: UUID) -> Batch:
+    """The caller's batch; anyone else's, or an unknown id, is a 404."""
+    batch = await db.get(Batch, batch_id)
+    if batch is None or batch.owner_id != owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Batch not found"
+        )
+    return batch
+
+
 @router.get("/batches/{batch_id}", response_model=BatchProgress)
 async def get_batch_progress(
     batch_id: UUID,
@@ -668,24 +697,23 @@ async def get_batch_progress(
     """Per-status counts for the files uploaded together in one run (US-31).
 
     Counted from the documents each time it is asked, so leaving and coming
-    back to the Upload page shows where things really are. Another user's
-    batch is a 404, like another user's document.
+    back to the Upload page shows where things really are. Trashed documents
+    are left out. Another user's batch is a 404, like another user's document.
     """
-    batch = await db.get(Batch, batch_id)
-    if batch is None or batch.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Batch not found"
-        )
+    batch = await _owned_batch(db, batch_id, current_user.id)
 
-    rows = await db.execute(
-        select(Document.status, func.count())
-        # A file moved to the trash has left the run as far as the user can
-        # see, so it no longer counts toward the batch.
-        .where(Document.batch_id == batch_id, Document.deleted_at.is_(None))
-        .group_by(Document.status)
-    )
+    rows = (
+        await db.execute(
+            select(Document.status, func.count(), func.max(Document.created_at))
+            # A file moved to the trash has left the run as far as the user
+            # can see, so it no longer counts toward the batch.
+            .where(Document.batch_id == batch_id, Document.deleted_at.is_(None))
+            .group_by(Document.status)
+        )
+    ).all()
     counts = {state: 0 for state in STATUS_VALUES}
-    for state, count in rows:
+    newest = max((row[2] for row in rows if row[2] is not None), default=None)
+    for state, count, _newest in rows:
         if state not in counts:
             # Still in the batch, so still in the total. Reported as queued
             # for the user, and logged so a bad or new status value is seen.
@@ -694,12 +722,68 @@ async def get_batch_progress(
             )
             state = "queued"
         counts[state] += count
+    # Detected on read too (US-60), so completed_at is right whoever asks.
+    finished = is_finished(counts) and is_sealed(batch, newest)
+    await sync_completed_at(db, batch, finished)
     return BatchProgress(
         batch_id=batch.id,
         total=sum(counts.values()),
         created_at=batch.created_at,
+        completed_at=batch.completed_at,
         **counts,
     )
+
+
+@router.post("/batches/{batch_id}/seal", response_model=BatchSealed)
+async def seal_upload_batch(
+    batch_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The browser has sent every file of this run (US-60).
+
+    Only a sealed batch can be announced as finished, so a run whose first
+    files finished before the last was sent is not reported early. Sealing
+    again is harmless. A file that joins later (a Retry) unseals the batch
+    until the browser seals it again.
+    """
+    batch = await _owned_batch(db, batch_id, current_user.id)
+    await seal_batch(db, batch)
+    return BatchSealed(batch_id=batch.id, sealed_at=batch.sealed_at)
+
+
+@router.post("/batches/notifications/claim", response_model=BatchNotifications)
+async def claim_batch_completion_notifications(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The caller's upload batches that finished and were not announced (US-60).
+
+    Each returned batch is leased to this request for
+    ``BATCH_NOTIFICATION_LEASE_SECONDS``, atomically, so another tab checking
+    at the same time is not offered it. Acknowledge it after showing it; if
+    that never happens, it is offered again when the lease runs out. Only
+    the caller's own batches are considered.
+    """
+    return await claim_batch_notifications(db, current_user.id)
+
+
+@router.post("/batches/notifications/ack", response_model=BatchAcknowledged)
+async def acknowledge_batch_completion_notifications(
+    body: BatchAcknowledge,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The browser has shown these notifications: never offer them again (US-60).
+
+    Ids that are not the caller's, unknown, or not currently claimed are
+    ignored rather than reported, so the answer reveals nothing about other
+    users' batches.
+    """
+    acknowledged = await acknowledge_batch_notifications(
+        db, current_user.id, body.batch_ids
+    )
+    return BatchAcknowledged(acknowledged=acknowledged)
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)

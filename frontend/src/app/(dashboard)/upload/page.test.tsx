@@ -95,6 +95,17 @@ vi.mock('@/components/documents/BatchProgressPanel', () => ({
   ),
 }));
 
+const notifier = vi.hoisted(() => ({
+  log: [] as string[],
+}));
+
+vi.mock('@/lib/batchNotifications', () => ({
+  sealBatch: vi.fn(async (batchId: string) => {
+    notifier.log.push(`seal ${batchId}`);
+  }),
+  announceBatchActivity: vi.fn(() => notifier.log.push('nudge')),
+}));
+
 vi.mock('@/components/documents/DocumentList', () => ({
   DocumentList: () => null,
 }));
@@ -200,6 +211,35 @@ describe('Upload page batches', () => {
     ]);
     // The panel keeps showing the run on screen.
     expect(screen.getByTestId('panel').textContent).toContain('batch-2');
+  });
+
+  it('seals the run only after every file has been sent (US-60)', async () => {
+    notifier.log = [];
+    render(<UploadPage />);
+    choose(pdf('a.pdf'), pdf('b.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 2 files' }));
+
+    await settleNext(accepted);
+    // a.pdf may already be processed, but b.pdf has not been sent yet.
+    expect(notifier.log).toEqual([]);
+
+    await settleNext(failed);
+    await waitFor(() =>
+      expect(notifier.log).toEqual(['seal batch-1', 'nudge'])
+    );
+  });
+
+  it('does not seal a run that no file joined (US-60)', async () => {
+    notifier.log = [];
+    render(<UploadPage />);
+    choose(pdf('a.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 1 file' }));
+    await settleNext(failed);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Retry a.pdf' })).toBeTruthy()
+    );
+    expect(notifier.log).toEqual([]);
   });
 });
 
@@ -457,5 +497,59 @@ describe('Upload page resumable uploads', () => {
     expect(api.calls).toEqual([]);
     expect(chunked.discarded).toEqual([]);
     await screen.findByText(/Uploaded, queued for processing/);
+  });
+
+  it('seals a run of large, paused and duplicate files once the loop ends (US-60)', async () => {
+    notifier.log = [];
+    render(<UploadPage />);
+    choose(largePdf('big.pdf'), largePdf('later.pdf'), pdf('copy.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 3 files' }));
+
+    await settleChunked(accepted); // big.pdf, through the resumable path
+    await waitFor(() => expect(chunked.calls.length).toBe(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Pause later.pdf' }));
+    await settleNext(duplicate); // copy.pdf
+    // Sealed once, after the last file, even though one is paused and one
+    // was a duplicate: only big.pdf joined the run.
+    await waitFor(() =>
+      expect(notifier.log).toEqual(['seal batch-1', 'nudge'])
+    );
+
+    // Resuming the paused file joins it to the run, which is sealed again.
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Resume later.pdf' })
+    );
+    await settleChunked(accepted);
+    await waitFor(() =>
+      expect(notifier.log).toEqual([
+        'seal batch-1',
+        'nudge',
+        'seal batch-1',
+        'nudge',
+      ])
+    );
+    expect(chunked.calls.at(-1)).toEqual({
+      name: 'later.pdf',
+      batchId: 'batch-1',
+    });
+  });
+
+  it('seals the run when Upload anyway joins a large duplicate to it (US-60)', async () => {
+    notifier.log = [];
+    render(<UploadPage />);
+    choose(largePdf('big.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 1 file' }));
+    await settleChunked(duplicate);
+    await screen.findByRole('button', { name: 'Upload big.pdf anyway' });
+    // Nothing joined the run, so there is nothing to seal yet.
+    expect(notifier.log).toEqual([]);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Upload big.pdf anyway' })
+    );
+    await settleChunked(accepted);
+    await waitFor(() =>
+      expect(notifier.log).toEqual(['seal batch-1', 'nudge'])
+    );
   });
 });
