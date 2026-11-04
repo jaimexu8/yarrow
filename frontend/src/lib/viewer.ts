@@ -57,6 +57,7 @@ export type PageNode = {
   // Set only when the page was rotated before OCR. The viewer shows the
   // corrected upright image for those pages; null for everything else.
   image_key: string | null;
+  has_thumbnail: boolean;
   regions: RegionNode[];
   warnings: WarningNode[];
 };

@@ -61,6 +61,7 @@ function tree(region: RegionNode = REGION): DocumentTree {
         status: 'completed',
         error_message: null,
         image_key: null,
+        has_thumbnail: false,
         regions: [region],
         warnings: [],
       },
