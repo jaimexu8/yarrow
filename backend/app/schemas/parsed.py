@@ -54,6 +54,7 @@ class PageNode(StrictModel):
     error_message: str | None = None
     # Storage key of the upright page image
     image_key: str | None = None
+    has_thumbnail: bool = False
     regions: list[RegionNode] = Field(default_factory=list)
     warnings: list[WarningNode] = Field(default_factory=list)
 

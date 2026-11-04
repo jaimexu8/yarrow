@@ -43,6 +43,7 @@ class PageOut(BaseModel):
     height: float | None = None
     error_code: str | None = None
     error_message: str | None = None
+    has_thumbnail: bool = False
 
     @model_validator(mode="after")
     def _only_user_facing_errors(self):

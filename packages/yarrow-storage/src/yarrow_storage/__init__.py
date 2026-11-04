@@ -1,4 +1,5 @@
 from .config import StorageSettings, storage_settings
+from .keys import thumbnail_key
 from .provider import (
     LocalStorageProvider,
     ObjectNotFoundError,
@@ -15,4 +16,5 @@ __all__ = [
     "StorageSettings",
     "get_storage",
     "storage_settings",
+    "thumbnail_key",
 ]
