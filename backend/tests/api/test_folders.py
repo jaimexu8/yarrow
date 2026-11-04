@@ -14,6 +14,8 @@ async def _upload(client, headers, name: str = "sample.pdf") -> str:
     response = await client.post(
         UPLOAD,
         headers=headers,
+        # The same fixture bytes are uploaded many times; not a duplicate test.
+        data={"allow_duplicate": "true"},
         files=[("files", (name, pdf, "application/pdf"))],
     )
     assert response.status_code == 200, response.text

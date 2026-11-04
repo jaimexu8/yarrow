@@ -1,3 +1,4 @@
+import hashlib
 import io
 import logging
 from datetime import UTC, datetime
@@ -200,7 +201,9 @@ async def save_or_update_credential(
 SAMPLE_PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000010 00000 n \n0000000060 00000 n \n0000000117 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n190\n%%EOF"
 
 
-async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, str, bytes]]:
+async def fetch_cloud_files(
+    credential: CloudCredential,
+) -> list[tuple[str, str, bytes]]:
     """Fetch documents from the connected cloud account.
 
     Returns a list of (remote_file_id, filename, content_bytes).
@@ -223,7 +226,9 @@ async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, str,
                     )
                     folder_ids: list[str] = []
                     if folder_resp.status_code == 200:
-                        folder_ids = [f["id"] for f in folder_resp.json().get("files", [])]
+                        folder_ids = [
+                            f["id"] for f in folder_resp.json().get("files", [])
+                        ]
 
                     # 2. Recursively gather all subfolder IDs under any "yarrow" folder
                     all_folder_ids = list(folder_ids)
@@ -237,7 +242,9 @@ async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, str,
                         sub_resp = await client.get(
                             "https://www.googleapis.com/drive/v3/files",
                             params={"q": sub_q, "fields": "files(id)"},
-                            headers={"Authorization": f"Bearer {credential.access_token}"},
+                            headers={
+                                "Authorization": f"Bearer {credential.access_token}"
+                            },
                         )
                         if sub_resp.status_code == 200:
                             for sub in sub_resp.json().get("files", []):
@@ -247,19 +254,27 @@ async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, str,
 
                     # 3. Query supported files only inside those folders
                     if all_folder_ids:
-                        parents_clause = " or ".join(f"'{fid}' in parents" for fid in all_folder_ids[:25])
+                        parents_clause = " or ".join(
+                            f"'{fid}' in parents" for fid in all_folder_ids[:25]
+                        )
                         file_q = f"({parents_clause}) and trashed = false"
                         resp = await client.get(
                             "https://www.googleapis.com/drive/v3/files",
                             params={"q": file_q, "fields": "files(id, name, mimeType)"},
-                            headers={"Authorization": f"Bearer {credential.access_token}"},
+                            headers={
+                                "Authorization": f"Bearer {credential.access_token}"
+                            },
                         )
                         if resp.status_code == 200:
                             items = resp.json().get("files", [])
                             for item in items[:25]:
                                 file_id = item["id"]
                                 name = item["name"]
-                                ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+                                ext = (
+                                    name.rsplit(".", 1)[-1].lower()
+                                    if "." in name
+                                    else ""
+                                )
                                 if ext not in ALLOWED_EXTENSIONS:
                                     continue
                                 down_resp = await client.get(
@@ -279,7 +294,9 @@ async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, str,
                         resp = await client.post(
                             "https://api.dropboxapi.com/2/files/list_folder",
                             json={"path": try_path, "recursive": True},
-                            headers={"Authorization": f"Bearer {credential.access_token}"},
+                            headers={
+                                "Authorization": f"Bearer {credential.access_token}"
+                            },
                         )
                         if resp.status_code == 200:
                             # If querying root, filter to entries that reside within a folder named "yarrow"
@@ -290,8 +307,10 @@ async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, str,
                             else:
                                 # When app folder is mounted at root, check if it's already the yarrow folder or has a /yarrow subfolder
                                 matched = [
-                                    e for e in raw_entries
-                                    if "/yarrow/" in e.get("path_lower", "") or e.get("path_lower", "").startswith("/yarrow/")
+                                    e
+                                    for e in raw_entries
+                                    if "/yarrow/" in e.get("path_lower", "")
+                                    or e.get("path_lower", "").startswith("/yarrow/")
                                 ]
                                 if matched:
                                     entries = matched
@@ -301,7 +320,9 @@ async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, str,
                                 break
 
                     for entry in entries[:25]:
-                        if entry.get(".tag") == "file" and entry.get("name", "").lower().endswith(
+                        if entry.get(".tag") == "file" and entry.get(
+                            "name", ""
+                        ).lower().endswith(
                             tuple(f".{ext}" for ext in ALLOWED_EXTENSIONS)
                         ):
                             file_id = entry.get("id") or entry["path_lower"]
@@ -313,7 +334,9 @@ async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, str,
                                 },
                             )
                             if down_resp.status_code == 200:
-                                files.append((file_id, entry["name"], down_resp.content))
+                                files.append(
+                                    (file_id, entry["name"], down_resp.content)
+                                )
         except Exception as exc:
             logger.info("External cloud fetch failed: %s", exc)
 
@@ -321,7 +344,9 @@ async def fetch_cloud_files(credential: CloudCredential) -> list[tuple[str, str,
         # Explicit mock token for integration tests or sandbox mode
         prefix = credential.provider
         ts = _utcnow().strftime("%Y%m%d_%H%M%S")
-        files.append((f"mock_id_{prefix}", f"{prefix}_import_{ts}.pdf", SAMPLE_PDF_BYTES))
+        files.append(
+            (f"mock_id_{prefix}", f"{prefix}_import_{ts}.pdf", SAMPLE_PDF_BYTES)
+        )
 
     return files
 
@@ -383,6 +408,10 @@ async def sync_credential_documents(
             storage_key=storage_key,
             status="queued",
             client_upload_id=client_upload_id,
+            # Fingerprint only (US-79): a later manual upload of the same file
+            # is warned about. Sync itself does not skip identical files; it
+            # has no one to ask, and dedupes by remote file id instead.
+            content_sha256=hashlib.sha256(content).hexdigest(),
         )
         job = Job(
             id=uuid4(),

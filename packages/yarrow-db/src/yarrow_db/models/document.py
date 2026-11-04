@@ -37,6 +37,11 @@ class Document(Base):
     # The upload run this file was part of (US-31); NULL for documents
     # uploaded before batches existed or sent without a batch id.
     batch_id = Column(UUID(as_uuid=True), ForeignKey("batches.id"), index=True)
+    # sha256 of the stored bytes, hex (US-79). Lets an upload be compared with
+    # the owner's existing documents to warn about an identical file. NULL for
+    # documents uploaded before the column existed. Indexed with owner_id in
+    # migration 0017; not unique, because "Upload anyway" keeps a second copy.
+    content_sha256 = Column(String(64))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     # When set, the document is in trash. Cleared on restore. Rows and

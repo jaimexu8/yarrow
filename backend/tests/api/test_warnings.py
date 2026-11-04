@@ -17,6 +17,8 @@ async def upload_document(client, headers, name="sample.pdf"):
     response = await client.post(
         UPLOAD_PATH,
         headers=headers,
+        # The same fixture bytes are uploaded many times; not a duplicate test.
+        data={"allow_duplicate": "true"},
         files=[("files", (name, pdf, "application/pdf"))],
     )
     return uuid.UUID(response.json()["accepted"][0]["document_id"])
@@ -28,9 +30,9 @@ async def add_warning(db_session, document_id, page_number, message):
             Page.document_id == document_id, Page.page_number == page_number
         )
     )
-    
+
     page = result.scalar_one_or_none()
-    
+
     if page is None:
         page = Page(id=uuid.uuid4(), document_id=document_id, page_number=page_number)
         db_session.add(page)
@@ -56,7 +58,7 @@ class TestWarnings:
         self, client, auth_headers, fake_storage, fake_queue
     ):
         """Test that the warnings endpoint returns an empty list when there are no warnings"""
-        
+
         await upload_document(client, auth_headers)
 
         response = await client.get(WARNINGS_PATH, headers=auth_headers)
@@ -67,7 +69,7 @@ class TestWarnings:
         self, client, auth_headers, fake_storage, fake_queue, db_session
     ):
         """Test that each warning generates one entry and is associated with its page"""
-        
+
         document_id = await upload_document(client, auth_headers, "scan.pdf")
         await add_warning(db_session, document_id, 3, "Image is truncated")
         await add_warning(db_session, document_id, 1, "Image is blurry")
@@ -91,7 +93,7 @@ class TestWarnings:
         self, client, auth_headers, fake_storage, fake_queue, db_session
     ):
         """Test that warnings are listed with the newest document first"""
-        
+
         older = await upload_document(client, auth_headers, "older.pdf")
         newer = await upload_document(client, auth_headers, "newer.pdf")
         now = datetime.now(UTC).replace(tzinfo=None)
@@ -118,7 +120,7 @@ class TestWarnings:
         login,
     ):
         """Test that only the user's own documents are listed in warnings"""
-        
+
         mine = await upload_document(client, auth_headers, "mine.pdf")
         await add_warning(db_session, mine, 1, "Image is blurry")
 

@@ -19,7 +19,9 @@ def _batch_url(batch_id) -> str:
 async def _upload(client, headers, batch_id=None, name="sample.pdf", upload_id=None):
     """One file per request, the way the Upload page sends them."""
     pdf = (FIXTURES_DIR / "sample.pdf").read_bytes()
-    data = {}
+    # Every file of a run is the same fixture; these tests are about batches,
+    # not duplicates (US-79 has its own batch tests in test_duplicates.py).
+    data = {"allow_duplicate": "true"}
     if batch_id is not None:
         data["batch_id"] = str(batch_id)
     if upload_id is not None:

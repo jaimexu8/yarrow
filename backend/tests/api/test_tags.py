@@ -17,6 +17,8 @@ async def _upload(client, headers, name: str = "sample.pdf") -> str:
     response = await client.post(
         UPLOAD,
         headers=headers,
+        # The same fixture bytes are uploaded many times; not a duplicate test.
+        data={"allow_duplicate": "true"},
         files=[("files", (name, pdf, "application/pdf"))],
     )
     assert response.status_code == 200, response.text
@@ -166,18 +168,14 @@ class TestFilterByTag:
         tag_id = added.json()["tags"][0]["id"]
         other = await _other_user_headers(register, verify, login)
 
-        filtered = await client.get(
-            DOCUMENTS, headers=other, params={"tag_id": tag_id}
-        )
+        filtered = await client.get(DOCUMENTS, headers=other, params={"tag_id": tag_id})
         assert filtered.json() == []
         assert (await client.get(TAGS, headers=other)).json() == []
 
 
 class TestRemoveTag:
     async def test_requires_auth(self, client):
-        response = await client.delete(
-            f"{DOCUMENTS}{uuid.uuid4()}/tags/{uuid.uuid4()}"
-        )
+        response = await client.delete(f"{DOCUMENTS}{uuid.uuid4()}/tags/{uuid.uuid4()}")
         assert response.status_code == 401
 
     async def test_tag_is_gone_after_remove(
@@ -222,13 +220,9 @@ class TestRemoveTag:
                 headers=auth_headers,
                 json={"name": "keep"},
             )
-        tag_id = (
-            await client.get(TAGS, headers=auth_headers)
-        ).json()[0]["id"]
+        tag_id = (await client.get(TAGS, headers=auth_headers)).json()[0]["id"]
 
-        await client.delete(
-            f"{DOCUMENTS}{first}/tags/{tag_id}", headers=auth_headers
-        )
+        await client.delete(f"{DOCUMENTS}{first}/tags/{tag_id}", headers=auth_headers)
 
         library = {
             doc["filename"]: [tag["name"] for tag in doc["tags"]]
@@ -237,9 +231,7 @@ class TestRemoveTag:
         assert library["a.pdf"] == []
         assert library["b.pdf"] == ["keep"]
         mine = (await client.get(TAGS, headers=auth_headers)).json()
-        assert [(tag["name"], tag["document_count"]) for tag in mine] == [
-            ("keep", 1)
-        ]
+        assert [(tag["name"], tag["document_count"]) for tag in mine] == [("keep", 1)]
 
     async def test_cannot_remove_from_someone_elses_document(
         self, client, auth_headers, register, verify, login, fake_storage, fake_queue

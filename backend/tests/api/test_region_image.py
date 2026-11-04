@@ -21,6 +21,8 @@ async def _upload(client, headers) -> uuid.UUID:
     response = await client.post(
         UPLOAD,
         headers=headers,
+        # The same fixture bytes are uploaded many times; not a duplicate test.
+        data={"allow_duplicate": "true"},
         files=[("files", ("sample.pdf", pdf, "application/pdf"))],
     )
     return uuid.UUID(response.json()["accepted"][0]["document_id"])

@@ -47,6 +47,8 @@ async def _upload(client, headers) -> tuple[uuid.UUID, uuid.UUID]:
     response = await client.post(
         UPLOAD,
         headers=headers,
+        # The same fixture bytes are uploaded many times; not a duplicate test.
+        data={"allow_duplicate": "true"},
         files=[("files", ("sample.pdf", pdf, "application/pdf"))],
     )
     accepted = response.json()["accepted"][0]
@@ -121,9 +123,7 @@ async def _count(db_session, model, *where) -> int:
 
 async def _expire_trash(db_session, document_id, days=TRASH_RETENTION_DAYS + 1):
     document = await db_session.get(Document, document_id)
-    document.deleted_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(
-        days=days
-    )
+    document.deleted_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
     await db_session.flush()
 
 
@@ -445,9 +445,7 @@ class TestRestore:
         await client.delete(f"{DOCUMENTS}{document_id}", headers=auth_headers)
         other = await _other_user_headers(register, verify, login)
 
-        response = await client.post(
-            f"{DOCUMENTS}{document_id}/restore", headers=other
-        )
+        response = await client.post(f"{DOCUMENTS}{document_id}/restore", headers=other)
         assert response.status_code == 404
 
     async def test_expired_restore_purges_and_is_gone(
@@ -595,9 +593,7 @@ class TestPermanentDeleteFromTrash:
         await db_session.flush()
 
         await client.delete(f"{DOCUMENTS}{document_id}", headers=auth_headers)
-        await client.delete(
-            f"{DOCUMENTS}{document_id}/permanent", headers=auth_headers
-        )
+        await client.delete(f"{DOCUMENTS}{document_id}/permanent", headers=auth_headers)
 
         await db_session.refresh(owner)
         assert owner.storage_used_bytes == 0

@@ -273,13 +273,17 @@ class TestRetrySafety:
     async def test_different_ids_are_separate_uploads(
         self, client, auth_headers, fake_storage, fake_queue
     ):
-        """Uploading the same file on purpose twice is allowed."""
+        """Uploading the same file on purpose twice is allowed.
+
+        "On purpose" means saying so with allow_duplicate (US-79); without it
+        the second copy is refused as a duplicate (see test_duplicates.py).
+        """
         for upload_id in ("one", "two"):
             await client.post(
                 UPLOAD,
                 headers=auth_headers,
                 files=[_pdf()],
-                data={"client_upload_ids": upload_id},
+                data={"client_upload_ids": upload_id, "allow_duplicate": "true"},
             )
 
         library = (await client.get(DOCUMENTS, headers=auth_headers)).json()
@@ -378,8 +382,10 @@ class TestQuota:
         self, client, auth_headers, fake_storage, fake_queue
     ):
         size = len((FIXTURES_DIR / "sample.pdf").read_bytes())
+        # Same bytes twice, so the second is an explicit extra copy (US-79).
+        copy = {"allow_duplicate": "true"}
         await client.post(UPLOAD, headers=auth_headers, files=[_pdf()])
-        await client.post(UPLOAD, headers=auth_headers, files=[_pdf()])
+        await client.post(UPLOAD, headers=auth_headers, files=[_pdf()], data=copy)
 
         me = (await client.get("/api/v1/auth/me", headers=auth_headers)).json()
 
@@ -393,7 +399,13 @@ class TestQuota:
         size = len((FIXTURES_DIR / "sample.pdf").read_bytes())
         monkeypatch.setattr(settings, "STORAGE_QUOTA_BYTES", size + 10)
         first = await client.post(UPLOAD, headers=auth_headers, files=[_pdf()])
-        second = await client.post(UPLOAD, headers=auth_headers, files=[_pdf()])
+        # allow_duplicate: an explicit extra copy still has to fit the quota.
+        second = await client.post(
+            UPLOAD,
+            headers=auth_headers,
+            files=[_pdf()],
+            data={"allow_duplicate": "true"},
+        )
 
         assert first.status_code == 200
         assert second.status_code == 400

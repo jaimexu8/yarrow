@@ -133,6 +133,19 @@ class UploadAccepted(BaseModel):
     message: str | None = None
 
 
+class DuplicateOf(BaseModel):
+    """The caller's own document that an upload was identical to (US-79).
+
+    Only ever describes a document the caller owns, so naming it discloses
+    nothing new. ``status`` lets the client suggest reprocessing a copy that
+    failed instead of storing the file again.
+    """
+
+    document_id: UUID
+    filename: str
+    status: str | None = None
+
+
 class UploadRejected(BaseModel):
     """One file that was not accepted, so a bulk upload can report per file."""
 
@@ -142,6 +155,10 @@ class UploadRejected(BaseModel):
     # briefly unavailable), so the client can offer "Retry". False for
     # problems with the file itself, which retrying cannot fix.
     retryable: bool = False
+    # Set when the file was refused only because the caller already has an
+    # identical one (US-79). Sending it again with ``allow_duplicate`` stores
+    # a second copy.
+    duplicate_of: DuplicateOf | None = None
 
 
 class UploadResponse(BaseModel):
