@@ -337,7 +337,7 @@ async def upload_documents(
     if client_upload_ids is not None:
         if len(client_upload_ids) != len(files):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Send exactly one client_upload_ids value per file.",
             )
         if len(set(client_upload_ids)) != len(client_upload_ids) or any(
@@ -345,7 +345,7 @@ async def upload_documents(
             for upload_id in client_upload_ids
         ):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="client_upload_ids must be unique, non-empty and short.",
             )
 
@@ -593,7 +593,7 @@ async def list_documents(
                 folder_uuid = UUID(folder_id)
             except ValueError:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="folder_id must be a UUID or the string 'null'",
                 ) from None
             folder = await db.get(Folder, folder_uuid)
@@ -636,7 +636,7 @@ async def list_documents(
             folder_uuid = UUID(folder_id)
         except ValueError:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="folder_id must be a UUID or the string 'null'",
             ) from None
         folder = await db.get(Folder, folder_uuid)

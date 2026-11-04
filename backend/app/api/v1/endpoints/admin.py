@@ -178,7 +178,7 @@ async def update_account_status(
     """
     if update.is_active is None and update.is_admin is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="At least one account status field must be provided.",
         )
 
