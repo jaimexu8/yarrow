@@ -9,6 +9,7 @@ from .region import Region, RegionImage, RegionText
 from .share import DocumentShare
 from .table import RegionTable, Table, TableCell
 from .tag import DocumentTag, Tag
+from .upload_session import UploadChunk, UploadSession
 from .user import User
 from .warning import Warning
 
@@ -29,6 +30,8 @@ __all__ = [
     "Table",
     "TableCell",
     "Tag",
+    "UploadChunk",
+    "UploadSession",
     "User",
     "Warning",
 ]

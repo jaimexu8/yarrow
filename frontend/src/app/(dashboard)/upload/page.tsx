@@ -1,7 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useId, useRef, useState, type DragEvent } from 'react';
+import {
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type DragEvent,
+} from 'react';
 import { BatchProgressPanel } from '@/components/documents/BatchProgressPanel';
 import { DocumentList } from '@/components/documents/DocumentList';
 import { Alert } from '@/components/ui/Alert';
@@ -13,6 +19,14 @@ import {
   uploadDocument,
   type DuplicateOf,
 } from '@/lib/documents';
+import {
+  discardResumable,
+  isResumable,
+  parseStoredSessions,
+  storedSessionsSnapshot,
+  subscribeStoredSessions,
+  uploadResumable,
+} from '@/lib/resumableUpload';
 import { storeBatchId, useStoredBatchId } from '@/lib/useBatchProgress';
 import {
   ACCEPT_ATTRIBUTE,
@@ -27,6 +41,7 @@ type ItemStatus =
   | 'invalid' // failed the checks before upload; will not be sent
   | 'waiting' // in this upload run, not started yet
   | 'uploading'
+  | 'paused' // a large file stopped by the user; Resume continues it (US-80)
   | 'accepted' // stored and queued for processing
   | 'stored' // stored, but processing could not be started
   | 'rejected' // the server refused it, with a reason
@@ -59,9 +74,15 @@ function keyFor(file: File) {
   return `${file.name}:${file.size}:${file.lastModified}`;
 }
 
+function noStoredSessions(): string | null {
+  // The server has no localStorage; the client re-reads after hydration.
+  return null;
+}
+
 /**
  * US-7 Upload PDF, US-8 Bulk upload, US-37 Reject unsupported types,
- * US-31 Batch upload progress, US-79 Detect duplicate uploads.
+ * US-31 Batch upload progress, US-79 Detect duplicate uploads,
+ * US-80 Resumable uploads.
  *
  * Files are uploaded one at a time, each with its own progress and result,
  * so one bad file never affects the others and a failed one can be retried
@@ -72,6 +93,13 @@ function keyFor(file: File) {
  * A file identical to one already in the library is not stored; its row
  * names the existing document and offers Skip (nothing is sent) or Upload
  * anyway (sent again, into the same run, as a deliberate extra copy).
+ *
+ * US-80: files over RESUMABLE_THRESHOLD_BYTES go up in chunks the server
+ * confirms one by one, so they can be paused, retried and resumed (even
+ * after a reload, by choosing the same file again) from the last confirmed
+ * chunk instead of starting over. A large duplicate is detected when its
+ * chunks are finalized: Skip then discards the server's chunks, and Upload
+ * anyway finalizes the same chunks again with the flag, without resending.
  */
 export default function UploadPage() {
   const inputId = useId();
@@ -83,6 +111,16 @@ export default function UploadPage() {
   // The run whose progress is shown, remembered for the tab so coming back
   // to this page picks it up again (US-31).
   const batchId = useStoredBatchId();
+  // Lets Pause stop the chunked upload in flight, per file.
+  const controllers = useRef(new Map<string, AbortController>());
+  // Unfinished large uploads remembered from an earlier visit (US-80).
+  const unfinished = parseStoredSessions(
+    useSyncExternalStore(
+      subscribeStoredSessions,
+      storedSessionsSnapshot,
+      noStoredSessions
+    )
+  );
 
   function addFiles(files: FileList | File[]) {
     // Copy the files out now. A FileList belongs to the input or drop event,
@@ -162,14 +200,30 @@ export default function UploadPage() {
       const runId = newRun ? freshRun : (item.batchId ?? batchId ?? freshRun);
       const askForCopy = allowDuplicate || item.allowDuplicate === true;
       update(key, { status: 'uploading', progress: 0, batchId: runId });
-      const outcome = await uploadDocument(
-        item.file,
-        item.uploadId,
-        (progress) => update(key, { progress }),
-        runId,
-        askForCopy
-      );
-      if (outcome.kind === 'accepted') {
+      const onProgress = (progress: number) => update(key, { progress });
+      let outcome;
+      if (isResumable(item.file)) {
+        const controller = new AbortController();
+        controllers.current.set(key, controller);
+        outcome = await uploadResumable(item.file, {
+          batchId: runId,
+          onProgress,
+          signal: controller.signal,
+          allowDuplicate: askForCopy,
+        });
+        controllers.current.delete(key);
+      } else {
+        outcome = await uploadDocument(
+          item.file,
+          item.uploadId,
+          onProgress,
+          runId,
+          askForCopy
+        );
+      }
+      if (outcome.kind === 'paused') {
+        update(key, { status: 'paused' });
+      } else if (outcome.kind === 'accepted') {
         update(key, {
           status: outcome.processingStarted ? 'accepted' : 'stored',
           progress: 100,
@@ -213,6 +267,7 @@ export default function UploadPage() {
       'duplicate',
       'skipped',
       'failed',
+      'paused',
     ].includes(item.status)
   );
   const counts = {
@@ -224,7 +279,16 @@ export default function UploadPage() {
     failed: items.filter((item) => item.status === 'failed').length,
     duplicate: items.filter((item) => item.status === 'duplicate').length,
     skipped: items.filter((item) => item.status === 'skipped').length,
+    paused: items.filter((item) => item.status === 'paused').length,
   };
+  // Remembered uploads whose file is not in the list yet.
+  const resumable = unfinished.filter(
+    (stored) =>
+      !items.some(
+        (item) =>
+          item.file.name === stored.filename && item.file.size === stored.size
+      )
+  );
   const runDone = !uploading && finished.length > 0 && ready.length === 0;
 
   return (
@@ -236,9 +300,21 @@ export default function UploadPage() {
         <p className="text-sm text-slate-600">
           Add one or more {ACCEPTED_TYPES_TEXT} files, up to{' '}
           {formatBytes(MAX_UPLOAD_BYTES)} each. Each file is queued for
-          processing as soon as it is uploaded.
+          processing as soon as it is uploaded. Large files can be paused and
+          resumed.
         </p>
       </div>
+
+      {resumable.length > 0 && (
+        <Alert tone="info">
+          {resumable.length === 1
+            ? 'An upload did not finish: '
+            : `${resumable.length} uploads did not finish: `}
+          {resumable.map((stored) => stored.filename).join(', ')}. Choose the
+          same {resumable.length === 1 ? 'file' : 'files'} again to continue
+          from where {resumable.length === 1 ? 'it' : 'they'} stopped.
+        </Alert>
+      )}
 
       <section aria-labelledby="choose-heading" className="space-y-4">
         <h2 id="choose-heading" className="sr-only">
@@ -294,16 +370,21 @@ export default function UploadPage() {
                 key={item.key}
                 item={item}
                 disabled={uploading}
-                onRemove={() =>
+                onRemove={() => {
+                  if (isResumable(item.file)) void discardResumable(item.file);
                   setItems((current) =>
                     current.filter((other) => other.key !== item.key)
-                  )
-                }
+                  );
+                }}
                 onRetry={() => uploadAll([item.key], false)}
-                onSkip={() =>
-                  update(item.key, { status: 'skipped', progress: 0 })
-                }
+                onSkip={() => {
+                  // A large duplicate's chunks are still on the server,
+                  // waiting for Upload anyway; Skip discards them (US-80).
+                  if (isResumable(item.file)) void discardResumable(item.file);
+                  update(item.key, { status: 'skipped', progress: 0 });
+                }}
                 onUploadAnyway={() => uploadAll([item.key], false, true)}
+                onPause={() => controllers.current.get(item.key)?.abort()}
               />
             ))}
           </ul>
@@ -397,6 +478,7 @@ function summaryText(counts: {
   failed: number;
   duplicate: number;
   skipped: number;
+  paused: number;
 }): string {
   const parts = [
     `${counts.accepted} ${counts.accepted === 1 ? 'file' : 'files'} uploaded and queued for processing`,
@@ -410,6 +492,7 @@ function summaryText(counts: {
   }
   if (counts.skipped) parts.push(`${counts.skipped} skipped`);
   if (counts.failed) parts.push(`${counts.failed} failed to upload`);
+  if (counts.paused) parts.push(`${counts.paused} paused`);
   return `${parts.join(', ')}.`;
 }
 
@@ -418,6 +501,7 @@ const STATUS_TEXT: Record<ItemStatus, string> = {
   invalid: 'Not accepted',
   waiting: 'Waiting',
   uploading: 'Uploading',
+  paused: 'Paused',
   accepted: 'Uploaded, queued for processing',
   stored: 'Uploaded, but processing could not start',
   rejected: 'Not accepted',
@@ -433,6 +517,7 @@ function FileRow({
   onRetry,
   onSkip,
   onUploadAnyway,
+  onPause,
 }: {
   item: Item;
   disabled: boolean;
@@ -440,7 +525,9 @@ function FileRow({
   onRetry: () => void;
   onSkip: () => void;
   onUploadAnyway: () => void;
+  onPause: () => void;
 }) {
+  const chunked = isResumable(item.file);
   const problem = ['invalid', 'stored', 'rejected', 'failed'].includes(
     item.status
   );
@@ -515,6 +602,26 @@ function FileRow({
               </Button>
             </>
           )}
+          {chunked && item.status === 'uploading' && (
+            // Not disabled while uploading: pausing is what it is for.
+            <Button
+              variant="link"
+              onClick={onPause}
+              aria-label={`Pause ${item.file.name}`}
+            >
+              Pause
+            </Button>
+          )}
+          {item.status === 'paused' && (
+            <Button
+              variant="link"
+              onClick={onRetry}
+              disabled={disabled}
+              aria-label={`Resume ${item.file.name}`}
+            >
+              Resume
+            </Button>
+          )}
           {item.status === 'failed' && (
             <Button
               variant="link"
@@ -525,9 +632,14 @@ function FileRow({
               Retry
             </Button>
           )}
-          {['ready', 'invalid', 'rejected', 'skipped', 'failed'].includes(
-            item.status
-          ) && (
+          {[
+            'ready',
+            'invalid',
+            'rejected',
+            'skipped',
+            'failed',
+            'paused',
+          ].includes(item.status) && (
             <Button
               variant="link"
               onClick={onRemove}
@@ -539,7 +651,7 @@ function FileRow({
           )}
         </div>
       </div>
-      {(item.status === 'uploading' || item.status === 'waiting') && (
+      {['uploading', 'waiting', 'paused'].includes(item.status) && (
         <div
           role="progressbar"
           aria-label={`Uploading ${item.file.name}`}

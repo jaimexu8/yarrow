@@ -67,6 +67,12 @@ from .table import (
     TablePart,
 )
 from .tag import TagCreate, TagListItem, TagOut
+from .upload import (
+    ChunkReceipt,
+    UploadFinalize,
+    UploadSessionCreate,
+    UploadSessionOut,
+)
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -74,6 +80,7 @@ __all__ = [
     "BatchProgress",
     "BulkDocumentRequest",
     "BulkItemResult",
+    "ChunkReceipt",
     "CloudConnectionOut",
     "DocumentDetail",
     "DocumentFolderUpdate",
@@ -117,8 +124,11 @@ __all__ = [
     "Token",
     "UpdateShareRequest",
     "UploadAccepted",
+    "UploadFinalize",
     "UploadRejected",
     "UploadResponse",
+    "UploadSessionCreate",
+    "UploadSessionOut",
     "UserCreate",
     "UserDelete",
     "UserOut",
