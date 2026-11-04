@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { canCancel, parseApiDate, type DocumentSummary } from '@/lib/documents';
-import { formatBytes } from '@/lib/uploads';
+import { formatBytes } from '@/lib/storage';
 import { useDocuments } from '@/lib/useDocuments';
 import {
   FailureNote,

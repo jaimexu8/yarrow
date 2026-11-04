@@ -38,6 +38,7 @@ from app.schemas import (
     PasswordResetConfirm,
     PasswordResetRequest,
     ResendVerificationRequest,
+    StorageUsage,
     Token,
     UserCreate,
     UserDelete,
@@ -47,6 +48,7 @@ from app.schemas import (
     normalize_email,
 )
 from app.services.account import delete_account, update_account
+from app.services.storage_usage import get_storage_usage
 
 INVALID_CODE = "Invalid or expired verification code"
 # Same reply whether or not the address is registered, so resend cannot be
@@ -252,6 +254,14 @@ async def login(
 @router.get("/me", response_model=UserOut)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/me/storage", response_model=StorageUsage)
+async def get_my_storage(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await get_storage_usage(db, current_user)
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

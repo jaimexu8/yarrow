@@ -55,7 +55,7 @@ import {
   type Folder as LibraryFolder,
 } from '@/lib/folders';
 import { cn } from '@/lib/cn';
-import { formatBytes } from '@/lib/uploads';
+import { formatBytes } from '@/lib/storage';
 import { toApiError } from '@/lib/errors';
 import { useDocuments } from '@/lib/useDocuments';
 import {

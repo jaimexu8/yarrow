@@ -9,6 +9,8 @@
  * MAX_UPLOAD_BYTES in backend/app/api/v1/endpoints/documents.py and config.py.
  */
 
+import { formatBytes } from './storage';
+
 export const ACCEPTED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'gif'];
 export const ACCEPTED_TYPES_TEXT = 'PDF, PNG, JPEG and GIF';
 /** For <input type="file" accept>: extensions plus MIME types. */
@@ -20,18 +22,6 @@ export const ACCEPT_ATTRIBUTE = [
   'image/gif',
 ].join(',');
 export const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
-
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB'];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
-}
 
 /** A reason the file can't be uploaded, or null if it looks fine. */
 export function checkFile(file: File): string | null {

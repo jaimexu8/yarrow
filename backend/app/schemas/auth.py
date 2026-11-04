@@ -1,6 +1,6 @@
 """User, token, email verification and password reset models."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field
@@ -91,3 +91,18 @@ class PasswordResetConfirm(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+StorageLevel = Literal["ok", "warning", "critical", "full"]
+
+
+class StorageUsage(BaseModel):
+    used_bytes: int
+    reserved_bytes: int
+    trash_bytes: int
+    quota_bytes: int
+    remaining_bytes: int
+    used_ratio: float
+    level: StorageLevel
+    warning_threshold: float
+    critical_threshold: float

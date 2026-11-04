@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { CloudStorageSection } from '@/components/settings/CloudStorageSection';
+import { StorageQuotaIndicator } from '@/components/storage/StorageQuotaIndicator';
 
 export default function SettingsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -222,6 +223,15 @@ export default function SettingsPage() {
 
       <SettingsCard id="cloud-storage" title="Cloud storage">
         <CloudStorageSection />
+      </SettingsCard>
+
+      <SettingsCard id="storage" title="Storage">
+        <SettingRow
+          title="Usage"
+          description="Documents in the trash count toward your quota until they are permanently deleted."
+        >
+          <StorageQuotaIndicator />
+        </SettingRow>
       </SettingsCard>
 
       <SettingsCard id="danger-zone" title="Danger zone" tone="danger">

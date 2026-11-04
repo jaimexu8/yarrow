@@ -18,7 +18,7 @@ import {
   type DocumentSummary,
 } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
-import { formatBytes } from '@/lib/uploads';
+import { formatBytes } from '@/lib/storage';
 
 const CELL =
   'border-y border-slate-200 bg-white px-3 py-3 sm:px-4 align-middle first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r';

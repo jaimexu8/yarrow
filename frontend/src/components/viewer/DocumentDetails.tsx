@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, Gauge } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { parseApiDate } from '@/lib/documents';
-import { formatBytes } from '@/lib/uploads';
+import { formatBytes } from '@/lib/storage';
 import { isLowConfidence } from '@/lib/viewer';
 import { useViewer } from './ViewerContext';
 
