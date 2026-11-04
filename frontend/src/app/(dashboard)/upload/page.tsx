@@ -21,6 +21,14 @@ import {
   type DuplicateOf,
 } from '@/lib/documents';
 import {
+  MAX_FOLDER_FILES,
+  scanDataTransfer,
+  scanFileList,
+  supportsFolderPicker,
+  type FolderScan,
+  type FoundFile,
+} from '@/lib/folderFiles';
+import {
   discardResumable,
   isResumable,
   parseStoredSessions,
@@ -53,6 +61,8 @@ type ItemStatus =
 type Item = {
   key: string;
   file: File;
+  /** The file's path inside a chosen folder, or just its name (US-81). */
+  path: string;
   /** Sent with every attempt for this file, so a retry can't duplicate it. */
   uploadId: string;
   /** The run this file was last sent in, so a Retry rejoins that run. */
@@ -71,8 +81,12 @@ type Item = {
   allowDuplicate?: boolean;
 };
 
-function keyFor(file: File) {
-  return `${file.name}:${file.size}:${file.lastModified}`;
+/**
+ * Same file chosen twice → same key. The path (not just the name) is used,
+ * so two "scan.pdf" files from different subfolders both stay in the list.
+ */
+function keyFor({ file, path }: FoundFile) {
+  return `${path}:${file.size}:${file.lastModified}`;
 }
 
 function noStoredSessions(): string | null {
@@ -80,10 +94,13 @@ function noStoredSessions(): string | null {
   return null;
 }
 
+// The browser can't gain or lose the folder picker while the page is open.
+const noSubscribe = () => () => {};
+
 /**
  * US-7 Upload PDF, US-8 Bulk upload, US-37 Reject unsupported types,
  * US-31 Batch upload progress, US-79 Detect duplicate uploads,
- * US-80 Resumable uploads.
+ * US-80 Resumable uploads, US-81 Folder upload.
  *
  * Files are uploaded one at a time, each with its own progress and result,
  * so one bad file never affects the others and a failed one can be retried
@@ -101,10 +118,31 @@ function noStoredSessions(): string | null {
  * chunk instead of starting over. A large duplicate is detected when its
  * chunks are finalized: Skip then discards the server's chunks, and Upload
  * anyway finalizes the same chunks again with the flag, without resending.
+ *
+ * A folder (picked, or dragged in) is opened up into its files, subfolders
+ * included, and they join the same list: each is checked on its own, shown
+ * with its path, and sent by the same Upload button (and the same uploadAll
+ * as every other file, so large, duplicate and paused folder files behave
+ * like any other) as one batch.
  */
 export default function UploadPage() {
   const inputId = useId();
+  const folderInputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Dropped folders still being read. Upload waits for them, so one click
+  // sends everything that was dropped as one batch.
+  const [scanning, setScanning] = useState(0);
+  // Bumped by "Clear list": a read that finishes after that is discarded
+  // instead of refilling the list the user just emptied.
+  const scanGeneration = useRef(0);
+  // Only offered where the browser has a folder picker; elsewhere the file
+  // picker and drop zone are the way in (US-81).
+  const folderPicker = useSyncExternalStore(
+    noSubscribe,
+    supportsFolderPicker,
+    () => false
+  );
   const [items, setItems] = useState<Item[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -123,27 +161,24 @@ export default function UploadPage() {
     )
   );
 
-  function addFiles(files: FileList | File[]) {
-    // Copy the files out now. A FileList belongs to the input or drop event,
-    // and it can be empty by the time React runs the updater below (the
-    // input is cleared right after this call, and a drop's list expires when
-    // the event ends).
+  function addFiles(found: FoundFile[]) {
     // Ids are made here, not in the updater, which React may run twice.
-    const chosen = Array.from(files, (file) => ({
-      file,
+    const chosen = found.map((entry) => ({
+      ...entry,
       uploadId: newUploadId(),
     }));
     setItems((current) => {
       const known = new Set(current.map((item) => item.key));
       const added: Item[] = [];
-      for (const { file, uploadId } of chosen) {
-        const key = keyFor(file);
+      for (const { file, path, uploadId } of chosen) {
+        const key = keyFor({ file, path });
         if (known.has(key)) continue;
         known.add(key);
         const problem = checkFile(file);
         added.push({
           key,
           file,
+          path,
           uploadId,
           status: problem ? 'invalid' : 'ready',
           progress: 0,
@@ -272,12 +307,46 @@ export default function UploadPage() {
     setRefreshKey((n) => n + 1);
   }
 
+  /** Adds what a selection or drop turned up, and says what was left out. */
+  function addScan(scan: FolderScan) {
+    addFiles(scan.files);
+    setNotice(scanNotice(scan));
+  }
+
   function onDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setDragging(false);
-    if (!uploading && event.dataTransfer.files.length) {
-      addFiles(event.dataTransfer.files);
-    }
+    if (uploading) return;
+    const generation = scanGeneration.current;
+    const current = () => generation === scanGeneration.current;
+    setScanning((n) => n + 1);
+    // Reads the drop's items now, while the event is live; dropped folders
+    // are then walked in the background.
+    scanDataTransfer(event.dataTransfer)
+      .then(
+        (scan) => {
+          if (current()) addScan(scan);
+        },
+        () => {
+          if (current()) {
+            setNotice(
+              'Those files could not be read. Try choosing them instead.'
+            );
+          }
+        }
+      )
+      .finally(() => {
+        // After a Clear the count was already reset.
+        if (current()) setScanning((n) => n - 1);
+      });
+  }
+
+  /** Empties the list and drops any folder still being read. */
+  function clearList() {
+    scanGeneration.current += 1;
+    setScanning(0);
+    setItems([]);
+    setNotice(null);
   }
 
   const ready = items.filter((item) => item.status === 'ready');
@@ -357,33 +426,85 @@ export default function UploadPage() {
           )}
         >
           <p className="text-sm text-slate-600">
-            Drag files here, or choose them from your computer.
+            {folderPicker
+              ? 'Drag files or folders here, or choose them from your computer.'
+              : 'Drag files here, or choose them from your computer.'}
           </p>
-          <input
-            ref={inputRef}
-            id={inputId}
-            type="file"
-            multiple
-            accept={ACCEPT_ATTRIBUTE}
-            disabled={uploading}
-            className="peer sr-only"
-            onChange={(event) => {
-              if (event.target.files) addFiles(event.target.files);
-              // Allow choosing the same file again after removing it.
-              event.target.value = '';
-            }}
-          />
-          <label
-            htmlFor={inputId}
-            className={cn(
-              'cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50',
-              'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-slate-900',
-              'peer-disabled:cursor-not-allowed peer-disabled:text-slate-400'
+          <div className="flex flex-wrap justify-center gap-3">
+            <input
+              ref={inputRef}
+              id={inputId}
+              type="file"
+              multiple
+              accept={ACCEPT_ATTRIBUTE}
+              disabled={uploading}
+              className="peer sr-only"
+              onChange={(event) => {
+                // Copy the files out now: the list belongs to the input, which
+                // is cleared on the next line.
+                if (event.target.files)
+                  addScan(scanFileList(event.target.files));
+                // Allow choosing the same file again after removing it.
+                event.target.value = '';
+              }}
+            />
+            <label
+              htmlFor={inputId}
+              className={cn(
+                'cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50',
+                'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-slate-900',
+                'peer-disabled:cursor-not-allowed peer-disabled:text-slate-400'
+              )}
+            >
+              Choose files
+            </label>
+            {folderPicker && (
+              <>
+                <input
+                  // React's typings don't know webkitdirectory, so it is set
+                  // as a plain attribute.
+                  ref={(node) => node?.setAttribute('webkitdirectory', '')}
+                  id={folderInputId}
+                  type="file"
+                  multiple
+                  disabled={uploading}
+                  data-testid="folder-input"
+                  className="peer/folder sr-only"
+                  onChange={(event) => {
+                    const files = event.target.files;
+                    if (files) {
+                      if (files.length === 0) {
+                        setNotice('That folder has no files to upload.');
+                      } else {
+                        addScan(scanFileList(files));
+                      }
+                    }
+                    event.target.value = '';
+                  }}
+                />
+                <label
+                  htmlFor={folderInputId}
+                  className={cn(
+                    'cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50',
+                    'peer-focus-visible/folder:outline peer-focus-visible/folder:outline-2 peer-focus-visible/folder:outline-offset-2 peer-focus-visible/folder:outline-slate-900',
+                    'peer-disabled/folder:cursor-not-allowed peer-disabled/folder:text-slate-400'
+                  )}
+                >
+                  Choose folder
+                </label>
+              </>
             )}
-          >
-            Choose files
-          </label>
+          </div>
         </div>
+
+        <div aria-live="polite">
+          {scanning > 0 && (
+            <p role="status" className="text-sm text-slate-600">
+              Reading folder…
+            </p>
+          )}
+        </div>
+        {notice && <Alert tone="info">{notice}</Alert>}
 
         {items.length > 0 && (
           <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
@@ -434,7 +555,7 @@ export default function UploadPage() {
         <div className="flex flex-wrap gap-3">
           <Button
             className="w-auto px-5"
-            disabled={ready.length === 0}
+            disabled={ready.length === 0 || scanning > 0}
             loading={uploading}
             onClick={() =>
               uploadAll(
@@ -445,11 +566,13 @@ export default function UploadPage() {
           >
             {uploadButtonLabel(uploading, ready.length)}
           </Button>
-          {items.length > 0 && !uploading && (
+          {(items.length > 0 || scanning > 0) && !uploading && (
+            // Stays usable while a folder is read, to stop a mistaken drop
+            // of a huge folder; the read's results are then thrown away.
             <Button
               variant="secondary"
               className="w-auto px-5"
-              onClick={() => setItems([])}
+              onClick={clearList}
             >
               Clear list
             </Button>
@@ -491,6 +614,46 @@ function uploadButtonLabel(uploading: boolean, readyCount: number): string {
   if (uploading) return 'Uploading…';
   if (readyCount === 0) return 'Upload files';
   return readyCount === 1 ? 'Upload 1 file' : `Upload ${readyCount} files`;
+}
+
+/**
+ * What to tell the user about a folder selection or drop, beyond the files
+ * that appear in the list: an empty folder, hidden files left out, the cap.
+ * Nothing for an ordinary pick of loose files.
+ */
+function scanNotice(scan: FolderScan): string | null {
+  const parts: string[] = [];
+  if (scan.files.length === 0) {
+    if (scan.folders > 0) {
+      parts.push(
+        scan.folders === 1
+          ? 'That folder has no files to upload.'
+          : 'Those folders have no files to upload.'
+      );
+    } else if (scan.skipped > 0 || scan.unreadable > 0) {
+      parts.push('No files to upload were found.');
+    }
+  } else if (scan.folders > 0) {
+    const n = scan.files.length;
+    const where = scan.folders === 1 ? 'the folder' : `${scan.folders} folders`;
+    parts.push(`Found ${n} ${n === 1 ? 'file' : 'files'} in ${where}.`);
+  }
+  if (scan.skipped > 0) {
+    parts.push(
+      `${scan.skipped} hidden or system ${scan.skipped === 1 ? 'item was' : 'items were'} skipped.`
+    );
+  }
+  if (scan.unreadable > 0) {
+    parts.push(
+      `${scan.unreadable} ${scan.unreadable === 1 ? 'item' : 'items'} could not be read.`
+    );
+  }
+  if (scan.truncated) {
+    parts.push(
+      `Only the first ${MAX_FOLDER_FILES} files were added; upload the rest separately.`
+    );
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
 }
 
 function summaryText(counts: {
@@ -563,10 +726,10 @@ function FileRow({
                 href={`/documents/${item.documentId}`}
                 className="underline-offset-4 hover:underline"
               >
-                {item.file.name}
+                {item.path}
               </Link>
             ) : (
-              item.file.name
+              item.path
             )}
           </p>
           <p
@@ -610,7 +773,7 @@ function FileRow({
                 variant="link"
                 onClick={onSkip}
                 disabled={disabled}
-                aria-label={`Skip ${item.file.name}`}
+                aria-label={`Skip ${item.path}`}
               >
                 Skip
               </Button>
@@ -618,7 +781,7 @@ function FileRow({
                 variant="link"
                 onClick={onUploadAnyway}
                 disabled={disabled}
-                aria-label={`Upload ${item.file.name} anyway`}
+                aria-label={`Upload ${item.path} anyway`}
               >
                 Upload anyway
               </Button>
@@ -629,7 +792,7 @@ function FileRow({
             <Button
               variant="link"
               onClick={onPause}
-              aria-label={`Pause ${item.file.name}`}
+              aria-label={`Pause ${item.path}`}
             >
               Pause
             </Button>
@@ -639,7 +802,7 @@ function FileRow({
               variant="link"
               onClick={onRetry}
               disabled={disabled}
-              aria-label={`Resume ${item.file.name}`}
+              aria-label={`Resume ${item.path}`}
             >
               Resume
             </Button>
@@ -649,7 +812,7 @@ function FileRow({
               variant="link"
               onClick={onRetry}
               disabled={disabled}
-              aria-label={`Retry ${item.file.name}`}
+              aria-label={`Retry ${item.path}`}
             >
               Retry
             </Button>
@@ -666,7 +829,7 @@ function FileRow({
               variant="link"
               onClick={onRemove}
               disabled={disabled}
-              aria-label={`Remove ${item.file.name}`}
+              aria-label={`Remove ${item.path}`}
             >
               Remove
             </Button>
@@ -676,7 +839,7 @@ function FileRow({
       {['uploading', 'waiting', 'paused'].includes(item.status) && (
         <div
           role="progressbar"
-          aria-label={`Uploading ${item.file.name}`}
+          aria-label={`Uploading ${item.path}`}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={item.progress}
