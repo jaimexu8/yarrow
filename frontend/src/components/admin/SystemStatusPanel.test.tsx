@@ -102,7 +102,7 @@ const GONE = node({
 });
 
 function row(name: string): HTMLTableRowElement {
-  const cell = screen.getByText(name);
+  const cell = screen.getByText(name, { selector: 'span.break-all' });
   const tr = cell.closest('tr');
   if (!tr) throw new Error(`no row for ${name}`);
   return tr;
@@ -152,7 +152,7 @@ it('highlights degraded and down rows and explains why', async () => {
     report([GATEWAY, SLOW, GONE], { overall_status: 'degraded' })
   );
   expect(
-    screen.getByText('Degraded', { selector: 'span.font-medium' })
+    screen.getByText('Degraded', { selector: 'span.text-slate-900' })
   ).toBeTruthy();
 
   const slow = row('celery@worker-2');
