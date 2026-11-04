@@ -47,12 +47,9 @@ function useNearViewport(
   root: HTMLElement | null
 ): boolean {
   const [near, setNear] = useState(false);
+  const observable = typeof IntersectionObserver !== 'undefined';
   useEffect(() => {
-    if (!element || near) return;
-    if (typeof IntersectionObserver === 'undefined') {
-      setNear(true);
-      return;
-    }
+    if (!element || near || !observable) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) setNear(true);
@@ -61,8 +58,8 @@ function useNearViewport(
     );
     observer.observe(element);
     return () => observer.disconnect();
-  }, [element, root, near]);
-  return near;
+  }, [element, root, near, observable]);
+  return near || !observable;
 }
 
 function PageThumbnail({
