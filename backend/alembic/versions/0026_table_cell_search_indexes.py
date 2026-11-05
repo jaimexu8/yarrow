@@ -1,8 +1,8 @@
 """indexes on the join path from documents to table cells, so search can
 match extracted table cell text (US-58)
 
-Revision ID: 0020
-Revises: 0019
+Revision ID: 0026
+Revises: 0025
 Create Date: 2026-11-04 12:00:00.000000
 
 No columns are added. Search joins documents -> pages -> regions ->
@@ -23,8 +23,8 @@ The models declare the same indexes with index=True, so the two agree.
 
 from alembic import op
 
-revision = "0020"
-down_revision = "0019"
+revision = "0026"
+down_revision = "0025"
 branch_labels = None
 depends_on = None
 
