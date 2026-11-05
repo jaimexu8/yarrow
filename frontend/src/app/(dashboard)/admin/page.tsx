@@ -10,7 +10,9 @@ import { useAuth } from '@/context/AuthContext';
 import {
   deleteAdminAccount,
   getAdminStats,
+  isActiveJob,
   jobQueuePlace,
+  JOBS_POLL_INTERVAL_MS,
   jobStage,
   listAccounts,
   listAdminJobs,
@@ -26,6 +28,12 @@ import { formatBytes } from '@/lib/uploads';
 import { cn } from '@/lib/cn';
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu';
 import { Ban, Check, Trash, X, ArrowUpFromDot } from 'lucide-react';
+import {
+  JobActionButtons,
+  JobActionModal,
+  StuckBadge,
+  type JobAction,
+} from '@/components/admin/JobActionModals';
 
 const CELL =
   'border-y border-slate-200 bg-white px-3 py-3 sm:px-4 align-middle first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r';
@@ -224,7 +232,13 @@ function jobStatusLabel(status: AdminJob['status']): string {
   return STATUS_LABELS[status] ?? status;
 }
 
-function JobTableRow({ job }: { job: AdminJob }) {
+function JobTableRow({
+  job,
+  onAction,
+}: {
+  job: AdminJob;
+  onAction: (action: JobAction) => void;
+}) {
   return (
     <tr>
       <td className={CELL}>
@@ -236,22 +250,32 @@ function JobTableRow({ job }: { job: AdminJob }) {
         )}
       </td>
       <td className={cn(CELL, 'text-slate-700')}>{job.filename}</td>
-      <td className={cn(CELL, 'text-slate-700')}>
+      <td className={cn(CELL, 'whitespace-nowrap text-slate-700')}>
         {jobStatusLabel(job.status)}
+        {job.is_stuck && <StuckBadge />}
       </td>
       <td className={cn(CELL, 'tabular-nums text-slate-700')}>
         {jobQueuePlace(job)}
       </td>
       <td className={cn(CELL, 'text-slate-700')}>{jobStage(job)}</td>
       <td className={cn(CELL, 'text-slate-600')}>{job.error_message || '—'}</td>
+      <td className={cn(CELL, 'text-right')}>
+        <JobActionButtons job={job} onAction={onAction} />
+      </td>
     </tr>
   );
 }
 
-function JobTable({ jobs }: { jobs: AdminJob[] }) {
+function JobTable({
+  jobs,
+  onAction,
+}: {
+  jobs: AdminJob[];
+  onAction: (action: JobAction) => void;
+}) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[48rem] border-separate border-spacing-y-2 text-sm">
+      <table className="w-full min-w-[56rem] border-separate border-spacing-y-2 text-sm">
         <thead>
           <tr>
             <th className={HEAD}>Owner</th>
@@ -260,11 +284,12 @@ function JobTable({ jobs }: { jobs: AdminJob[] }) {
             <th className={HEAD}>Queue</th>
             <th className={HEAD}>Stage</th>
             <th className={HEAD}>Failure reason</th>
+            <th className={cn(HEAD, 'text-right')}>Actions</th>
           </tr>
         </thead>
         <tbody>
           {jobs.map((job) => (
-            <JobTableRow job={job} key={job.id} />
+            <JobTableRow job={job} key={job.id} onAction={onAction} />
           ))}
         </tbody>
       </table>
@@ -272,7 +297,13 @@ function JobTable({ jobs }: { jobs: AdminJob[] }) {
   );
 }
 
-function JobsSection({ jobs }: { jobs: AdminJob[] }) {
+function JobsSection({
+  jobs,
+  onAction,
+}: {
+  jobs: AdminJob[];
+  onAction: (action: JobAction) => void;
+}) {
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-semibold text-slate-900">Jobs</h2>
@@ -281,7 +312,7 @@ function JobsSection({ jobs }: { jobs: AdminJob[] }) {
           No processing jobs yet.
         </p>
       ) : (
-        <JobTable jobs={jobs} />
+        <JobTable jobs={jobs} onAction={onAction} />
       )}
     </section>
   );
@@ -340,6 +371,17 @@ function AdminBody() {
   const [selfDemotionError, setSelfDemotionError] = useState<string | null>(
     null
   );
+  const [jobAction, setJobAction] = useState<JobAction | null>(null);
+  const [jobsPolls, setJobsPolls] = useState(0);
+
+  async function reloadJobs() {
+    const [nextStats, nextJobs] = await Promise.all([
+      getAdminStats(),
+      listAdminJobs(),
+    ]);
+    setStats(nextStats);
+    setJobs(nextJobs);
+  }
 
   async function changeAccountStatus(accountId: string, isActive: boolean) {
     setPendingAccountId(accountId);
@@ -451,6 +493,27 @@ function AdminBody() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!jobs?.some(isActiveJob)) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      Promise.all([getAdminStats(), listAdminJobs()])
+        .then(([nextStats, nextJobs]) => {
+          if (!current) return;
+          setStats(nextStats);
+          setJobs(nextJobs);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (current) setJobsPolls((count) => count + 1);
+        });
+    }, JOBS_POLL_INTERVAL_MS);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [jobs, jobsPolls]);
+
   if (error) return <Alert>{error}</Alert>;
   if (!stats || !accounts || !jobs) {
     return (
@@ -502,7 +565,15 @@ function AdminBody() {
         )}
       </Modal>
       <StatsSection stats={stats} />
-      <JobsSection jobs={jobs} />
+      <JobsSection jobs={jobs} onAction={setJobAction} />
+      <JobActionModal
+        key={jobAction ? `${jobAction.kind}-${jobAction.job.id}` : 'none'}
+        action={jobAction}
+        onClose={() => setJobAction(null)}
+        onDone={() =>
+          reloadJobs().catch((err) => setActionError(toApiError(err).message))
+        }
+      />
       <div className="space-y-3">
         {actionError && <Alert>{actionError}</Alert>}
         <AccountsSection

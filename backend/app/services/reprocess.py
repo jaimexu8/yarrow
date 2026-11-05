@@ -20,6 +20,7 @@ from app.services.tags import tags_for_documents
 logger = logging.getLogger(__name__)
 
 ACTIVE_JOB_STATES = frozenset({"queued", "processing"})
+LATEST_JOB_FIRST = (Job.created_at.desc().nulls_last(), Job.id.desc())
 # How many page numbers ReprocessInfo lists for display.
 PAGE_NUMBERS_SHOWN = 10
 
@@ -30,15 +31,25 @@ def is_interrupted(job: dict[str, str | datetime | None] | None, now: datetime) 
         return False
     if job["updated_at"] is None:
         return True
-    return now - job["updated_at"] > timedelta(seconds=settings.JOB_INTERRUPTED_AFTER_SECONDS)
+    return now - job["updated_at"] > timedelta(
+        seconds=settings.JOB_INTERRUPTED_AFTER_SECONDS
+    )
 
 
 def is_running(job: dict[str, str | datetime | None] | None, now: datetime) -> bool:
     """A job is queued or processing and still alive."""
-    return job is not None and job["status"] in ACTIVE_JOB_STATES and not is_interrupted(job, now)
+    return (
+        job is not None
+        and job["status"] in ACTIVE_JOB_STATES
+        and not is_interrupted(job, now)
+    )
 
 
-def interrupted(document_status: str | None, job: dict[str, str | datetime | None] | None, now: datetime) -> bool:
+def interrupted(
+    document_status: str | None,
+    job: dict[str, str | datetime | None] | None,
+    now: datetime,
+) -> bool:
     """The document says it is in progress, but nothing is working on it."""
     if is_interrupted(job, now):
         return True
@@ -58,20 +69,28 @@ def reprocess_scope(
         return None
     if interrupted(document_status, job, now) or document_status == "failed":
         return "incomplete"
-    if document_status == "completed" and page_count is not None and completed_pages < page_count:
+    if (
+        document_status == "completed"
+        and page_count is not None
+        and completed_pages < page_count
+    ):
         return "incomplete"
     # Fully completed, or canceled before anything was kept.
     return "all"
 
 
-def pages_to_process(page_count: int | None, completed: Iterable[int]) -> list[int] | None:
+def pages_to_process(
+    page_count: int | None, completed: Iterable[int]
+) -> list[int] | None:
     if page_count is None:
         return None
     done = set(completed)
     return [number for number in range(1, page_count + 1) if number not in done]
 
 
-async def reprocess_info_for(db: AsyncSession, documents: Sequence[Document]) -> dict[UUID, ReprocessInfo | None]:
+async def reprocess_info_for(
+    db: AsyncSession, documents: Sequence[Document]
+) -> dict[UUID, ReprocessInfo | None]:
     """ReprocessInfo for each document, in a few queries however many there are."""
     if not documents:
         return {}
@@ -84,13 +103,18 @@ async def reprocess_info_for(db: AsyncSession, documents: Sequence[Document]) ->
         .distinct(Job.document_id)
         .order_by(Job.document_id, Job.created_at.desc())
     )
-    jobs = {row.document_id: {"status": row.status, "updated_at": row.updated_at} for row in job_rows}
+    jobs = {
+        row.document_id: {"status": row.status, "updated_at": row.updated_at}
+        for row in job_rows
+    }
 
     # Counts for completed pages per document
     completed_counts = dict(
         (
             await db.execute(
-                select(Page.document_id, func.count()).where(Page.document_id.in_(ids), Page.status == "completed").group_by(Page.document_id)
+                select(Page.document_id, func.count())
+                .where(Page.document_id.in_(ids), Page.status == "completed")
+                .group_by(Page.document_id)
             )
         ).all()
     )
@@ -110,10 +134,18 @@ async def reprocess_info_for(db: AsyncSession, documents: Sequence[Document]) ->
     }
 
     # Page numbers only for the documents whose unfinished pages are listed.
-    numbered = [document.id for document in documents if scopes[document.id] == "incomplete" and document.page_count is not None]
+    numbered = [
+        document.id
+        for document in documents
+        if scopes[document.id] == "incomplete" and document.page_count is not None
+    ]
     completed: dict[UUID, list[int]] = {}
     if numbered:
-        rows = await db.execute(select(Page.document_id, Page.page_number).where(Page.document_id.in_(numbered), Page.status == "completed"))
+        rows = await db.execute(
+            select(Page.document_id, Page.page_number).where(
+                Page.document_id.in_(numbered), Page.status == "completed"
+            )
+        )
         for row in rows:
             completed.setdefault(row.document_id, []).append(row.page_number)
 
@@ -133,12 +165,16 @@ async def reprocess_info_for(db: AsyncSession, documents: Sequence[Document]) ->
             scope=scope,
             interrupted=interrupted(document.status, jobs.get(document.id), now),
             pages=None if pages is None else len(pages),
-            page_numbers=(pages or [])[:PAGE_NUMBERS_SHOWN] if scope == "incomplete" else [],
+            page_numbers=(pages or [])[:PAGE_NUMBERS_SHOWN]
+            if scope == "incomplete"
+            else [],
         )
     return info
 
 
-async def documents_out(db: AsyncSession, documents: Sequence[Document]) -> list[DocumentOut]:
+async def documents_out(
+    db: AsyncSession, documents: Sequence[Document]
+) -> list[DocumentOut]:
     """DocumentOut for each document, with its reprocess info filled in."""
     info = await reprocess_info_for(db, documents)
     tags = await tags_for_documents(db, [document.id for document in documents])
@@ -163,6 +199,7 @@ class ReprocessOutcome:
     scope: Literal["incomplete", "all"] | None = None
     # The 1-based pages queued, or None for the whole document.
     pages: list[int] | None = None
+    job_id: UUID | None = None
 
     @property
     def ok(self) -> bool:
@@ -173,6 +210,9 @@ async def reprocess_document(
     db: AsyncSession,
     document_id: UUID,
     enqueue: Callable[..., str],
+    *,
+    requested_by_id: UUID | None = None,
+    retry_of_job_id: UUID | None = None,
 ) -> ReprocessOutcome:
     """Queue a job that reprocesses the document; see the module docstring
     for which pages it covers
@@ -180,13 +220,18 @@ async def reprocess_document(
     # Document row first, then job: the same order as cancel, document
     # deletion and the worker, so none of them can deadlock with this.
     document = (
-        await db.execute(select(Document).where(Document.id == document_id).with_for_update().execution_options(populate_existing=True))
+        await db.execute(
+            select(Document)
+            .where(Document.id == document_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
     ).scalar_one()
     job = (
         await db.execute(
             select(Job)
             .where(Job.document_id == document_id)
-            .order_by(Job.created_at.desc())
+            .order_by(*LATEST_JOB_FIRST)
             .limit(1)
             .with_for_update()
             .execution_options(populate_existing=True)
@@ -194,7 +239,9 @@ async def reprocess_document(
     ).scalar_one_or_none()
 
     now = datetime.now(UTC).replace(tzinfo=None)
-    latest: dict[str, str | datetime | None] | None = {"status": job.status, "updated_at": job.updated_at} if job else None
+    latest: dict[str, str | datetime | None] | None = (
+        {"status": job.status, "updated_at": job.updated_at} if job else None
+    )
 
     # If the latest job is still running, we cannot reprocess the document yet
     if is_running(latest, now):
@@ -204,9 +251,21 @@ async def reprocess_document(
             detail="This document is already being processed.",
         )
 
-    completed = list(await db.scalars(select(Page.page_number).where(Page.document_id == document_id, Page.status == "completed")))
-    scope = reprocess_scope(document.status, document.page_count, len(completed), latest, now)
-    pages = pages_to_process(document.page_count, completed) if scope == "incomplete" else None
+    completed = list(
+        await db.scalars(
+            select(Page.page_number).where(
+                Page.document_id == document_id, Page.status == "completed"
+            )
+        )
+    )
+    scope = reprocess_scope(
+        document.status, document.page_count, len(completed), latest, now
+    )
+    pages = (
+        pages_to_process(document.page_count, completed)
+        if scope == "incomplete"
+        else None
+    )
 
     if job is not None and job.status in ACTIVE_JOB_STATES:
         # Job is active but not running, indicates that it was interrupted or failed mid-run.
@@ -214,7 +273,7 @@ async def reprocess_document(
         job.error_message = INTERRUPTED_MESSAGE
 
     previous_state = (document.status, document.error_message)
-    
+
     new_job = Job(
         id=uuid4(),
         document_id=document_id,
@@ -222,8 +281,10 @@ async def reprocess_document(
         current_stage="queued",
         pages_processed=0,
         total_pages=len(pages) if pages is not None else (document.page_count or 0),
+        requested_by_id=requested_by_id,
+        retry_of_job_id=retry_of_job_id,
     )
-    
+
     db.add(new_job)
     document.status = "queued"
     document.error_message = None
@@ -253,4 +314,4 @@ async def reprocess_document(
 
     new_job.celery_task_id = task_id
     await db.commit()
-    return ReprocessOutcome(scope=scope, pages=pages)
+    return ReprocessOutcome(scope=scope, pages=pages, job_id=new_job.id)

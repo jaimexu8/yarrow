@@ -420,6 +420,7 @@ async def sync_credential_documents(
             current_stage="queued",
             pages_processed=0,
             total_pages=0,
+            requested_by_id=user.id,
         )
         db.add_all([doc, job])
         used_bytes += size

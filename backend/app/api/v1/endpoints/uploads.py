@@ -644,6 +644,7 @@ async def finalize_upload(
         current_stage="queued",
         pages_processed=0,
         total_pages=0,
+        requested_by_id=user.id,
     )
     db.add_all([document, job])
     # Flushed before the session points at it (documents FK).

@@ -98,6 +98,7 @@ from app.services.failure_messages import (
 )
 from app.services.job_progress import cancel_open_job_pages, document_progress
 from app.services.reprocess import (
+    LATEST_JOB_FIRST,
     ReprocessError,
     documents_out,
     reprocess_document,
@@ -495,6 +496,7 @@ async def upload_documents(
             current_stage="queued",
             pages_processed=0,
             total_pages=0,
+            requested_by_id=current_user.id,
         )
         db.add_all([document, job])
         kept_by_sha256.setdefault(content_sha256, document)
@@ -876,6 +878,7 @@ async def move_document_to_folder(
 async def reprocess_document_endpoint(
     access: DocumentAccess = Depends(require_edit_access),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Reprocess a document without uploading it again
 
@@ -884,7 +887,12 @@ async def reprocess_document_endpoint(
     Fully processed (or canceled) documents are processed again in full.
     """
     document_id = access.document.id
-    outcome = await reprocess_document(db, document_id, enqueue_document_processing)
+    outcome = await reprocess_document(
+        db,
+        document_id,
+        enqueue_document_processing,
+        requested_by_id=current_user.id,
+    )
     if not outcome.ok:
         raise HTTPException(
             status_code=(
@@ -902,6 +910,7 @@ async def reprocess_document_endpoint(
 async def cancel_document_processing(
     access: DocumentAccess = Depends(require_edit_access),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Cancel a document's processing while it is queued or processing (US-42).
 
@@ -927,7 +936,7 @@ async def cancel_document_processing(
             await db.execute(
                 select(Job)
                 .where(Job.document_id == document_id)
-                .order_by(Job.created_at.desc())
+                .order_by(*LATEST_JOB_FIRST)
                 .limit(1)
                 .with_for_update()
                 .execution_options(populate_existing=True)
@@ -957,6 +966,7 @@ async def cancel_document_processing(
     now = datetime.now(UTC).replace(tzinfo=None)
     job.status = "canceled"
     job.current_stage = "canceled"
+    job.canceled_by_id = current_user.id
     job.updated_at = now
     await db.execute(cancel_open_job_pages([job.id], now))
     document.status = "canceled"
@@ -1094,7 +1104,7 @@ async def bulk_reprocess_documents(
             # document the user cannot reprocess.
             await get_document_access(document_id, db=db, current_user=user)
             outcome = await reprocess_document(
-                db, document_id, enqueue_document_processing
+                db, document_id, enqueue_document_processing, requested_by_id=user_id
             )
         except HTTPException as exc:
             # 404 (not the caller's) or 403 (read-only share): reported per item.
