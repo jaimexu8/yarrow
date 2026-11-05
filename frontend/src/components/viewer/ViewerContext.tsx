@@ -99,6 +99,9 @@ type ViewerState = {
   setThumbnailsOpen: (open: boolean) => void;
   toggleThumbnails: () => void;
 
+  shortcutsHelpOpen: boolean;
+  setShortcutsHelpOpen: (open: boolean) => void;
+
   showLowConfidence: boolean;
   setShowLowConfidence: (show: boolean) => void;
 
@@ -169,6 +172,7 @@ export function ViewerProvider({
       return !open;
     });
   }, []);
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
   const [showLowConfidence, setShowLowConfidence] = useState(false);
   const [regionFilter, setRegionFilter] = useState<string | null>(null);
   const [originalPages, setOriginalPages] = useState<Set<number>>(new Set());
@@ -326,6 +330,8 @@ export function ViewerProvider({
       thumbnailsOpen,
       setThumbnailsOpen,
       toggleThumbnails,
+      shortcutsHelpOpen,
+      setShortcutsHelpOpen,
       showLowConfidence,
       setShowLowConfidence,
       regionFilter,
@@ -358,6 +364,7 @@ export function ViewerProvider({
       thumbnailsOpen,
       setThumbnailsOpen,
       toggleThumbnails,
+      shortcutsHelpOpen,
       showLowConfidence,
       regionFilter,
       originalPages,

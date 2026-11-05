@@ -35,6 +35,7 @@ export function BoundingBoxCanvas({
         return (
           <div
             key={region.id}
+            data-region-id={region.id}
             className={cn(
               'absolute border-2 pointer-events-auto transition-colors cursor-pointer',
               isActive
