@@ -16,32 +16,6 @@ export const THUMBNAIL_SIDEBAR_ID = 'viewer-thumbnails';
 const LAZY_LOAD_MARGIN = '200px';
 const LETTER_ASPECT_RATIO = 8.5 / 11;
 
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.isContentEditable ||
-    ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
-  );
-}
-
-function useThumbnailShortcut(toggle: () => void) {
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== 't' && event.key !== 'T') return;
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.isComposing || event.defaultPrevented) return;
-      if (isTypingTarget(event.target)) return;
-      if (window.document.querySelector('[role="dialog"][aria-modal="true"]')) {
-        return;
-      }
-      event.preventDefault();
-      toggle();
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toggle]);
-}
-
 function useNearViewport(
   element: HTMLElement | null,
   root: HTMLElement | null
@@ -164,12 +138,9 @@ export function ThumbnailSidebar() {
     currentPage,
     scrollToPage,
     thumbnailsOpen,
-    toggleThumbnails,
   } = useViewer();
   const [root, setRoot] = useState<HTMLElement | null>(null);
   const list = useRef<HTMLOListElement>(null);
-
-  useThumbnailShortcut(toggleThumbnails);
 
   useEffect(() => () => revokePageThumbnails(), []);
 

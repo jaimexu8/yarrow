@@ -15,7 +15,9 @@ import {
 } from '@/components/viewer/ReprocessBar';
 import { BoundingBoxCanvas } from '@/components/viewer/BoundingBoxCanvas';
 import { SplitViewer } from '@/components/viewer/SplitViewer';
+import { KeyboardShortcutsModal } from '@/components/viewer/KeyboardShortcutsModal';
 import { ThumbnailSidebar } from '@/components/viewer/ThumbnailSidebar';
+import { useViewerShortcuts } from '@/components/viewer/useViewerShortcuts';
 import { ViewerHeader } from '@/components/viewer/ViewerHeader';
 import {
   ViewerProvider,
@@ -158,9 +160,18 @@ function DocumentViewer({ documentId }: { documentId: string }) {
 }
 
 function DocumentViewerLayout({ refresh }: { refresh: () => void }) {
-  const { showBoundingBoxes } = useViewer();
+  const { showBoundingBoxes, shortcutsHelpOpen, setShortcutsHelpOpen } =
+    useViewer();
+  const announcement = useViewerShortcuts();
   return (
     <div className="flex h-full flex-col">
+      <p aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
+      <KeyboardShortcutsModal
+        open={shortcutsHelpOpen}
+        onClose={() => setShortcutsHelpOpen(false)}
+      />
       <ViewerHeader
         actions={
           <>

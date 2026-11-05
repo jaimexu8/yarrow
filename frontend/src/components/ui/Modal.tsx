@@ -47,6 +47,8 @@ export function Modal({
   return (
     <dialog
       ref={ref}
+      role="dialog"
+      aria-modal={open ? 'true' : undefined}
       aria-labelledby={titleId}
       onCancel={(event) => {
         event.preventDefault();

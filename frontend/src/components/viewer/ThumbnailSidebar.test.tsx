@@ -18,6 +18,7 @@ import {
   usePageTracking,
   useViewer,
 } from './ViewerContext';
+import { useViewerShortcuts } from './useViewerShortcuts';
 
 vi.mock('@/lib/api', () => ({ default: { get: vi.fn() } }));
 
@@ -132,9 +133,15 @@ function Pane() {
   );
 }
 
+function Shortcuts() {
+  useViewerShortcuts();
+  return null;
+}
+
 function renderViewer() {
   return render(
     <ViewerProvider document={DOCUMENT} tree={TREE} refresh={() => {}}>
+      <Shortcuts />
       <ThumbnailSidebar />
       <Pane />
     </ViewerProvider>
@@ -238,10 +245,24 @@ test('the sidebar starts closed on narrow screens until opened', () => {
   renderViewer();
   expect(sidebar().hidden).toBe(true);
 
-  fireEvent.keyDown(window, { key: 'T' });
+  act(() => {
+    fireEvent.keyDown(window, { key: 'T' });
+  });
 
   expect(sidebar().hidden).toBe(false);
   expect(localStorage.getItem(THUMBNAILS_OPEN_STORAGE_KEY)).toBe('true');
+});
+
+test('one T press toggles the sidebar exactly once', () => {
+  renderViewer();
+  expect(sidebar().hidden).toBe(false);
+
+  act(() => {
+    fireEvent.keyDown(document.body, { key: 't' });
+  });
+
+  expect(sidebar().hidden).toBe(true);
+  expect(localStorage.getItem(THUMBNAILS_OPEN_STORAGE_KEY)).toBe('false');
 });
 
 test('typing in a field does not toggle the sidebar', () => {
