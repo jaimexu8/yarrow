@@ -3,6 +3,7 @@ import api from './api';
 import type { UploadOutcome } from './documents';
 import { toApiError } from './errors';
 import { Sha256, sha256Hex } from './sha256';
+import { notifyStorageChanged } from './storage';
 
 /**
  * Resumable uploads of large files (US-80).
@@ -155,6 +156,7 @@ export async function createUploadSession(
     chunk_size_bytes: chunkSizeBytes,
     ...(batchId && { batch_id: batchId }),
   });
+  notifyStorageChanged();
   return res.data;
 }
 
@@ -165,6 +167,7 @@ export async function getUploadSession(id: string): Promise<UploadSession> {
 
 export async function abortUploadSession(id: string): Promise<void> {
   await api.delete(`/api/v1/uploads/${id}`);
+  notifyStorageChanged();
 }
 
 /** A chunk's bytes. One chunk at a time, so memory stays at one chunk. */
@@ -453,6 +456,7 @@ export async function uploadResumable(
       }
     );
     forgetSession(file);
+    notifyStorageChanged();
     return accepted(res.data);
   } catch (err) {
     if (err instanceof Paused) return { kind: 'paused' };

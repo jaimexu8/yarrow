@@ -1,6 +1,7 @@
 import { isAxiosError } from 'axios';
 import api from './api';
 import { toApiError } from './errors';
+import { notifyStorageChanged } from './storage';
 
 /** Matches Document.status on the backend. */
 export type DocumentStatus =
@@ -288,6 +289,7 @@ export async function uploadDocument(
     );
     const accepted = res.data.accepted[0];
     if (accepted) {
+      notifyStorageChanged();
       return {
         kind: 'accepted',
         documentId: accepted.document_id,
@@ -316,6 +318,7 @@ export async function uploadDocument(
  */
 export async function deleteDocument(id: string): Promise<void> {
   await api.delete(`/api/v1/documents/${id}`);
+  notifyStorageChanged();
 }
 
 export async function listTrash(): Promise<DocumentSummary[]> {
@@ -327,16 +330,19 @@ export async function restoreDocument(id: string): Promise<DocumentSummary> {
   const res = await api.post<DocumentSummary>(
     `/api/v1/documents/${id}/restore`
   );
+  notifyStorageChanged();
   return res.data;
 }
 
 /** Permanently wipe a trashed document without waiting out the 7 days. */
 export async function permanentlyDeleteDocument(id: string): Promise<void> {
   await api.delete(`/api/v1/documents/${id}/permanent`);
+  notifyStorageChanged();
 }
 
 export async function emptyTrash(): Promise<void> {
   await api.delete('/api/v1/documents/trash');
+  notifyStorageChanged();
 }
 
 export function trashExpiresAt(deletedAt: string): Date {
@@ -379,6 +385,7 @@ export async function bulkDelete(documentIds: string[]): Promise<BulkResult[]> {
   const res = await api.post<BulkResult[]>('/api/v1/documents/bulk-delete', {
     document_ids: documentIds,
   });
+  notifyStorageChanged();
   return res.data;
 }
 

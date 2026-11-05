@@ -25,7 +25,7 @@ import {
 } from '@/lib/admin';
 import { parseApiDate, STATUS_LABELS } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
-import { formatBytes } from '@/lib/uploads';
+import { formatBytes } from '@/lib/storage';
 import { cn } from '@/lib/cn';
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu';
 import { Ban, Check, Trash, X, ArrowUpFromDot } from 'lucide-react';

@@ -20,7 +20,7 @@ from uuid import UUID, uuid4
 import filetype
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.models import (
     Batch,
@@ -56,6 +56,7 @@ from app.schemas import (
     UploadSessionOut,
 )
 from app.services.failure_messages import QUEUE_FAILED_MESSAGE
+from app.services.storage_usage import get_storage_usage
 from app.services.upload_sessions import (
     chunk_key,
     delete_objects,
@@ -182,22 +183,6 @@ def _require_open(upload: UploadSession) -> None:
         raise _error(status.HTTP_410_GONE, EXPIRED_MESSAGE)
 
 
-async def _reserved_bytes(db: AsyncSession, owner_id: UUID) -> int:
-    """Bytes promised to this user's unfinished uploads.
-
-    Counted against the quota when a new session starts, so that temporary
-    chunks can never add up to more than the space the user has left.
-    """
-    total = await db.scalar(
-        select(func.coalesce(func.sum(UploadSession.total_size_bytes), 0)).where(
-            UploadSession.owner_id == owner_id,
-            UploadSession.status == "processing",
-            UploadSession.expires_at > utcnow(),
-        )
-    )
-    return int(total or 0)
-
-
 async def _lock_user(db: AsyncSession, user_id: UUID) -> User:
     """The user row, locked until commit, like the single-request upload."""
     result = await db.execute(
@@ -285,12 +270,11 @@ async def create_upload_session(
         await _check_batch(db, payload.batch_id, current_user.id)
 
     user = await _lock_user(db, current_user.id)
-    used = user.storage_used_bytes or 0
-    reserved = await _reserved_bytes(db, user.id)
-    if used + reserved + payload.total_size_bytes > settings.STORAGE_QUOTA_BYTES:
+    usage = await get_storage_usage(db, user)
+    if payload.total_size_bytes > usage.remaining_bytes:
         message = QUOTA_MESSAGE
-        if reserved and used + payload.total_size_bytes <= (
-            settings.STORAGE_QUOTA_BYTES
+        if usage.reserved_bytes and (
+            usage.used_bytes + payload.total_size_bytes <= usage.quota_bytes
         ):
             message += (
                 " Uploads you have not finished count toward it until they "

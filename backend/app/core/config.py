@@ -24,6 +24,8 @@ class Settings(DatabaseSettings):
     # The design document (3.1, option 4) bounds user uploads by total bytes,
     # because a file count says nothing about how many pages it holds.
     STORAGE_QUOTA_BYTES: int = 1024 * 1024 * 1024  # 1 GiB per user
+    STORAGE_WARNING_RATIO: float = 0.80
+    STORAGE_CRITICAL_RATIO: float = 0.95
 
     # A job still queued or processing with no update for this long was lost
     # Just over the worker's Celery task_time_limit (3600s)

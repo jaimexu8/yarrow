@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { BatchProgressPanel } from '@/components/documents/BatchProgressPanel';
 import { DocumentList } from '@/components/documents/DocumentList';
+import { StorageQuotaBanner } from '@/components/storage/StorageQuotaBanner';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { announceBatchActivity, sealBatch } from '@/lib/batchNotifications';
@@ -36,13 +37,13 @@ import {
   subscribeStoredSessions,
   uploadResumable,
 } from '@/lib/resumableUpload';
+import { formatBytes } from '@/lib/storage';
 import { storeBatchId, useStoredBatchId } from '@/lib/useBatchProgress';
 import {
   ACCEPT_ATTRIBUTE,
   ACCEPTED_TYPES_TEXT,
   MAX_UPLOAD_BYTES,
   checkFile,
-  formatBytes,
 } from '@/lib/uploads';
 
 type ItemStatus =
@@ -395,6 +396,8 @@ export default function UploadPage() {
           resumed.
         </p>
       </div>
+
+      <StorageQuotaBanner />
 
       {resumable.length > 0 && (
         <Alert tone="info">
