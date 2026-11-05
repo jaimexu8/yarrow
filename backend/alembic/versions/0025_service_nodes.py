@@ -2,7 +2,7 @@
 server, so the admin dashboard can show each one (US-76)
 
 Revision ID: 0025
-Revises: 0019
+Revises: 0023
 Create Date: 2026-11-04 12:00:00.000000
 
 A live Celery ping only lists workers that answer. Keeping a row per node
@@ -35,7 +35,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision = "0025"
-down_revision = "0019"
+down_revision = "0023"
 branch_labels = None
 depends_on = None
 
