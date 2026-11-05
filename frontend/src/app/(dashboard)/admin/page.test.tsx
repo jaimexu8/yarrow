@@ -19,6 +19,10 @@ vi.mock('@/context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'admin-1', is_admin: true } }),
 }));
 
+vi.mock('@/components/admin/SystemStatusPanel', () => ({
+  SystemStatusPanel: () => <section aria-label="System status" />,
+}));
+
 vi.mock('@/lib/admin', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/admin')>();
   return {
@@ -408,4 +412,9 @@ it('keeps polling after a failed refresh', async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('shows the system status panel', async () => {
+  await renderAdmin();
+  expect(screen.getByRole('region', { name: 'System status' })).toBeTruthy();
 });

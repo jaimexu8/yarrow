@@ -121,3 +121,93 @@ export async function retryJob(jobId: string): Promise<AdminJobActionResult> {
   );
   return res.data;
 }
+
+export type NodeKind = 'worker' | 'inference';
+export type NodeHealth = 'healthy' | 'degraded' | 'down' | 'unknown';
+
+export type AdminNodeStatus = {
+  id: string;
+  kind: NodeKind;
+  name: string;
+  hostname: string;
+  url: string | null;
+  status: NodeHealth;
+  latency_ms: number | null;
+  last_checked_at: string | null;
+  last_seen_at: string | null;
+  last_error: string | null;
+  details: Record<string, number | string | null>;
+};
+
+export type NodeStatusSummary = Record<NodeHealth, number>;
+
+export type NodeStatusReport = {
+  checked_at: string;
+  overall_status: Exclude<NodeHealth, 'unknown'>;
+  summary: NodeStatusSummary;
+  nodes: AdminNodeStatus[];
+};
+
+export async function getNodeStatus(
+  refresh = false
+): Promise<NodeStatusReport> {
+  const res = await api.get<NodeStatusReport>('/api/v1/admin/nodes', {
+    params: refresh ? { refresh: true } : undefined,
+  });
+  return res.data;
+}
+
+export async function forgetNode(nodeId: string): Promise<void> {
+  await api.delete(`/api/v1/admin/nodes/${nodeId}`);
+}
+
+export const NODE_HEALTH_LABELS: Record<NodeHealth, string> = {
+  healthy: 'Healthy',
+  degraded: 'Degraded',
+  down: 'Down',
+  unknown: 'Unknown',
+};
+
+export const NODE_KIND_LABELS: Record<NodeKind, string> = {
+  worker: 'Worker',
+  inference: 'Inference server',
+};
+
+export function nodeLatency(node: AdminNodeStatus): string {
+  return node.latency_ms == null ? '-' : `${node.latency_ms} ms`;
+}
+
+export function nodeDetails(node: AdminNodeStatus): string {
+  const { details } = node;
+  if (node.kind === 'worker') {
+    const active = details.active_tasks;
+    const concurrency = details.concurrency;
+    if (typeof active !== 'number' || typeof concurrency !== 'number') {
+      return '-';
+    }
+    return `${active} / ${concurrency} tasks`;
+  }
+  const model = [details.model_name, details.model_version]
+    .filter((part): part is string => typeof part === 'string' && part !== '')
+    .join(' ');
+  return model || '-';
+}
+
+const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['day', 86_400],
+  ['hour', 3_600],
+  ['minute', 60],
+  ['second', 1],
+];
+
+export function relativeTime(value: Date, now: Date): string {
+  const seconds = Math.round((now.getTime() - value.getTime()) / 1000);
+  if (seconds < 10) return 'just now';
+  const format = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  for (const [unit, size] of RELATIVE_UNITS) {
+    if (seconds >= size) {
+      return format.format(-Math.floor(seconds / size), unit);
+    }
+  }
+  return 'just now';
+}

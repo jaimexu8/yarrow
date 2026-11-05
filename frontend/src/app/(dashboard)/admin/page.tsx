@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { SystemStatusPanel } from '@/components/admin/SystemStatusPanel';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { RequireAdmin } from '@/components/auth/RequireAdmin';
@@ -565,6 +566,7 @@ function AdminBody() {
         )}
       </Modal>
       <StatsSection stats={stats} />
+      <SystemStatusPanel />
       <JobsSection jobs={jobs} onAction={setJobAction} />
       <JobActionModal
         key={jobAction ? `${jobAction.kind}-${jobAction.job.id}` : 'none'}
@@ -640,7 +642,8 @@ export default function AdminPage() {
             Admin
           </h1>
           <p className="text-sm text-slate-600">
-            System totals, every user account, and processing jobs.
+            System totals, service health, every user account, and processing
+            jobs.
           </p>
         </div>
         <AdminBody />
