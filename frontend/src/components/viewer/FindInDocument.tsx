@@ -23,19 +23,27 @@ export function FindInDocument() {
     mode,
     highlightRegionId,
     highlightQuery,
+    highlightCellId,
     setHighlight,
     setMode,
   } = useViewer();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const regionRef = useRef(highlightRegionId);
+  const highlightRef = useRef({
+    regionId: highlightRegionId,
+    cellId: highlightCellId,
+  });
   const draftRef = useRef(highlightQuery);
   const [draft, setDraft] = useState(highlightQuery);
   const [hits, setHits] = useState<DocumentHit[]>([]);
   const [active, setActive] = useState(0);
 
-  // eslint-disable-next-line react-hooks/refs -- Latest-value ref tracking highlightRegionId for the search effect; never read during render.
-  regionRef.current = highlightRegionId;
+  useEffect(() => {
+    highlightRef.current = {
+      regionId: highlightRegionId,
+      cellId: highlightCellId,
+    };
+  }, [highlightRegionId, highlightCellId]);
 
   useEffect(() => {
     if (!tree) return;
@@ -53,11 +61,18 @@ export function FindInDocument() {
     }
 
     const keep = nextHits.findIndex(
-      (hit) => hit.regionId === regionRef.current
+      (hit) => hit.regionId === highlightRef.current.regionId
     );
     const index = !draftChanged && keep >= 0 ? keep : 0;
     setActive(index);
-    setHighlight(nextHits[index]?.regionId ?? null, term);
+    const regionId = nextHits[index]?.regionId ?? null;
+    setHighlight(
+      regionId,
+      term,
+      regionId !== null && regionId === highlightRef.current.regionId
+        ? highlightRef.current.cellId
+        : null
+    );
     if (nextHits.length > 0 && mode === 'original') {
       showExtracted(setMode);
     }

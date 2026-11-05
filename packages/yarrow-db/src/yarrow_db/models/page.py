@@ -11,7 +11,9 @@ class Page(Base):
     __tablename__ = "pages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    document_id = Column(
+        UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False, index=True
+    )
     page_number = Column(Integer, nullable=False)
     width = Column(Float)
     height = Column(Float)

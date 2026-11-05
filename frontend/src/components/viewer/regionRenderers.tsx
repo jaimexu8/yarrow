@@ -1,4 +1,10 @@
-import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import { ImageIcon, Pencil, Undo2 } from 'lucide-react';
 import { HighlightedText } from '@/lib/highlight';
 import { correctionErrorDetail } from '@/lib/corrections';
@@ -194,6 +200,20 @@ function TableBlock({
   captioned: boolean;
   query?: string;
 }) {
+  const { highlightCellId } = useViewer();
+  const highlightedCell = useRef<HTMLTableCellElement | null>(null);
+  const showsHighlightedCell =
+    highlightCellId !== null &&
+    table.cells.some((cell) => cell.id === highlightCellId);
+
+  useEffect(() => {
+    if (!showsHighlightedCell) return;
+    const timer = window.setTimeout(() => {
+      highlightedCell.current?.scrollIntoView({ block: 'center' });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [highlightCellId, showsHighlightedCell]);
+
   const rows = new Map<number, TableCellNode[]>();
 
   // Organize the table cells by their row number.
@@ -227,9 +247,16 @@ function TableBlock({
         .sort((a, b) => a.col - b.col)
         .map((cell) => {
           const Cell = header || cell.is_header ? 'th' : 'td';
+          const highlighted = cell.id === highlightCellId;
           return (
             <Cell
-              key={`${cell.row}:${cell.col}`}
+              key={cell.id}
+              ref={highlighted ? highlightedCell : undefined}
+              data-cell-id={cell.id}
+              className={cn(
+                Cell === 'th' && 'bg-slate-50',
+                highlighted && 'ring-2 ring-amber-400 bg-amber-50 ring-inset'
+              )}
               rowSpan={cell.row_span > 1 ? cell.row_span : undefined}
               colSpan={cell.col_span > 1 ? cell.col_span : undefined}
               scope={Cell === 'th' && header ? 'col' : undefined}
@@ -249,7 +276,7 @@ function TableBlock({
         </figcaption>
       )}
       <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="w-full border-collapse text-left text-sm text-slate-700 [&_td]:border-t [&_td]:border-slate-200 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_th]:bg-slate-50 [&_th]:px-3 [&_th]:py-2 [&_th]:font-semibold [&_th]:text-slate-900">
+        <table className="w-full border-collapse text-left text-sm text-slate-700 [&_td]:border-t [&_td]:border-slate-200 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_th]:px-3 [&_th]:py-2 [&_th]:font-semibold [&_th]:text-slate-900">
           {headRows > 0 && (
             <thead>
               {rowNumbers.slice(0, headRows).map((row) => renderRow(row, true))}

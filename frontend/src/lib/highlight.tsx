@@ -64,3 +64,19 @@ export function documentHitHref(
   const params = new URLSearchParams({ region: regionId, q: query });
   return `/documents/${documentId}?${params.toString()}`;
 }
+
+export function tableCellHitHref(
+  documentId: string,
+  pageNumber: number,
+  regionId: string,
+  cellId: string,
+  query: string
+): string {
+  const params = new URLSearchParams({
+    page: String(pageNumber),
+    region: regionId,
+    cell: cellId,
+    q: query,
+  });
+  return `/documents/${documentId}?${params.toString()}`;
+}

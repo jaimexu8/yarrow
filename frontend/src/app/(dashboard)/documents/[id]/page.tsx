@@ -46,6 +46,7 @@ function DocumentViewer({ documentId }: { documentId: string }) {
   const searchParams = useSearchParams();
   const regionId = searchParams.get('region');
   const query = searchParams.get('q') ?? '';
+  const cellId = searchParams.get('cell');
 
   const requestedPage = Number(searchParams.get('page'));
   const [load, setLoad] = useState<Load>({ state: 'loading' });
@@ -153,6 +154,7 @@ function DocumentViewer({ documentId }: { documentId: string }) {
       refresh={refresh}
       highlightRegionId={regionId}
       highlightQuery={query}
+      highlightCellId={cellId}
     >
       <DocumentViewerLayout refresh={refresh} />
     </ViewerProvider>

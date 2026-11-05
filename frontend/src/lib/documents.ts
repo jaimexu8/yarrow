@@ -86,12 +86,15 @@ export async function reprocessDocument(id: string): Promise<DocumentSummary> {
  * folder.
  */
 export async function listDocuments(
-  folderId?: string | null
+  folderId?: string | null,
+  tagId?: string
 ): Promise<DocumentSummary[]> {
-  const params =
-    folderId === undefined
-      ? undefined
-      : { folder_id: folderId === null ? 'null' : folderId };
+  const filters: Record<string, string> = {};
+  if (folderId !== undefined) {
+    filters.folder_id = folderId === null ? 'null' : folderId;
+  }
+  if (tagId !== undefined) filters.tag_id = tagId;
+  const params = Object.keys(filters).length > 0 ? filters : undefined;
   const res = await api.get<DocumentSummary[]>('/api/v1/documents/', {
     params,
   });

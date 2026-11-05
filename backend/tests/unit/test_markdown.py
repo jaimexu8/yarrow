@@ -1,5 +1,7 @@
 """Renderer tests. Does not depend on the database or fixtures."""
 
+from uuid import uuid4
+
 from app.schemas.table import TableCellNode
 from app.services.markdown import (
     render_markdown,
@@ -95,6 +97,7 @@ class TestTables:
         table = simple_table([["x", "y"], ["a", "b"]], header=False)
         table.cells = [
             TableCellNode(
+                id=uuid4(),
                 row=0,
                 col=0,
                 row_span=1,
@@ -106,6 +109,7 @@ class TestTables:
                 region_table_id=table.parts[0].region_table_id,
             ),
             TableCellNode(
+                id=uuid4(),
                 row=1,
                 col=0,
                 row_span=1,

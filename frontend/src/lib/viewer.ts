@@ -78,6 +78,7 @@ export type TablePart = {
 };
 
 export type TableCellNode = {
+  id: string;
   // Global row within the logical table
   row: number;
   col: number;

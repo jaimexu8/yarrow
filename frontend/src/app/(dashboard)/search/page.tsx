@@ -8,12 +8,18 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
 import { toApiError } from '@/lib/errors';
-import { documentHitHref, HighlightedText } from '@/lib/highlight';
+import {
+  documentHitHref,
+  HighlightedText,
+  tableCellHitHref,
+} from '@/lib/highlight';
 import {
   searchDocuments,
   viewerHighlightTerm,
   isApproxMatch,
   type SearchHit,
+  type SearchScope,
+  type SearchSnippet,
 } from '@/lib/search';
 
 const DOCUMENT_TYPES = [
@@ -23,12 +29,36 @@ const DOCUMENT_TYPES = [
   { value: 'image/gif', label: 'GIF' },
 ];
 
+const SEARCH_SCOPES: { value: SearchScope; label: string }[] = [
+  { value: 'all', label: 'Text and tables' },
+  { value: 'text', label: 'Text only' },
+  { value: 'tables', label: 'Tables only' },
+];
+
+function isSearchScope(value: string): value is SearchScope {
+  return SEARCH_SCOPES.some((scope) => scope.value === value);
+}
+
+function snippetHref(hitId: string, snippet: SearchSnippet, term: string) {
+  if (snippet.table_cell) {
+    return tableCellHitHref(
+      hitId,
+      snippet.page_number,
+      snippet.region_id,
+      snippet.table_cell.cell_id,
+      term
+    );
+  }
+  return documentHitHref(hitId, snippet.region_id, term);
+}
+
 export default function SearchPage() {
   const [query, setQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [fileType, setFileType] = useState('');
   const [sort, setSort] = useState<'date' | 'name'>('date');
+  const [scope, setScope] = useState<SearchScope>('all');
   const [results, setResults] = useState<SearchHit[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +77,7 @@ export default function SearchPage() {
           dateTo: dateTo || undefined,
           fileType: fileType || undefined,
           sort,
+          scope,
         })
       );
     } catch (err) {
@@ -90,7 +121,7 @@ export default function SearchPage() {
             Search
           </Button>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Input
             id="search-date-from"
             label="From date"
@@ -133,6 +164,22 @@ export default function SearchPage() {
             <option value="date">Date</option>
             <option value="name">Name</option>
           </Select>
+          <Select
+            id="search-scope"
+            label="Search in"
+            value={scope}
+            onChange={(event) =>
+              setScope(
+                isSearchScope(event.target.value) ? event.target.value : 'all'
+              )
+            }
+          >
+            {SEARCH_SCOPES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
         </div>
       </form>
 
@@ -171,19 +218,28 @@ export default function SearchPage() {
                 <ul>
                   {hit.snippets.map((snippet) => (
                     <li
-                      key={snippet.region_id}
+                      key={snippet.table_cell?.cell_id ?? snippet.region_id}
                       className="border-t border-slate-100 first:border-t-0"
                     >
                       <Link
-                        href={documentHitHref(
-                          hit.id,
-                          snippet.region_id,
-                          submittedTerm
-                        )}
+                        href={snippetHref(hit.id, snippet, submittedTerm)}
                         className="block px-4 py-3 hover:bg-slate-50"
                       >
                         <p className="text-xs font-medium text-slate-500">
                           Page {snippet.page_number}
+                          {snippet.table_cell && (
+                            <>
+                              <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                                Table
+                              </span>
+                              <span className="ml-1.5">
+                                Row {snippet.table_cell.row + 1}, Column{' '}
+                                {snippet.table_cell.col + 1}
+                                {snippet.table_cell.column_header &&
+                                  ` · ${snippet.table_cell.column_header}`}
+                              </span>
+                            </>
+                          )}
                           {isApproxMatch(snippet, submittedTerm) && (
                             <span
                               title="Approximate match: the text differs slightly from your search (e.g. an OCR error like 1/l or 0/O)"
