@@ -52,6 +52,7 @@ export type PageNode = {
   width: number | null;
   height: number | null;
   status: string | null;
+  error_code?: string | null;
   error_message: string | null;
   // Set only when the page was rotated before OCR. The viewer shows the
   // corrected upright image for those pages; null for everything else.

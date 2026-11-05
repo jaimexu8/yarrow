@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { toApiError } from '@/lib/errors';
 import { getOriginalFile } from '@/lib/viewer';
+import { PageErrorBanner } from './PageErrorBanner';
+import { PageHeader } from './PageHeader';
 import {
   CorrectedPageView,
   PageFrame,
@@ -180,18 +182,22 @@ export function OriginalPane({
                   />
                 );
                 return (
-                  <div key={index} className="relative">
-                    {pageView}
-                    {parsedPage?.image_key && (
-                      <OriginalToggle
-                        label={
-                          isCorrected
-                            ? 'Auto-rotated: show original'
-                            : 'Showing original: show corrected'
-                        }
-                        onClick={() => toggleOriginalPage(pageNumber)}
-                      />
-                    )}
+                  <div key={index} className="space-y-2">
+                    <PageHeader pageNumber={pageNumber} />
+                    <PageErrorBanner pageNumber={pageNumber} />
+                    <div className="relative">
+                      {pageView}
+                      {parsedPage?.image_key && (
+                        <OriginalToggle
+                          label={
+                            isCorrected
+                              ? 'Auto-rotated: show original'
+                              : 'Showing original: show corrected'
+                          }
+                          onClick={() => toggleOriginalPage(pageNumber)}
+                        />
+                      )}
+                    </div>
                   </div>
                 );
               })
@@ -221,18 +227,22 @@ export function OriginalPane({
                   </PageFrame>
                 );
                 return (
-                  <div className="relative">
-                    {pageView}
-                    {parsedPage?.image_key && (
-                      <OriginalToggle
-                        label={
-                          isCorrected
-                            ? 'Auto-rotated: show original'
-                            : 'Showing original: show corrected'
-                        }
-                        onClick={() => toggleOriginalPage(1)}
-                      />
-                    )}
+                  <div className="space-y-2">
+                    <PageHeader pageNumber={1} />
+                    <PageErrorBanner pageNumber={1} />
+                    <div className="relative">
+                      {pageView}
+                      {parsedPage?.image_key && (
+                        <OriginalToggle
+                          label={
+                            isCorrected
+                              ? 'Auto-rotated: show original'
+                              : 'Showing original: show corrected'
+                          }
+                          onClick={() => toggleOriginalPage(1)}
+                        />
+                      )}
+                    </div>
                   </div>
                 );
               })()}

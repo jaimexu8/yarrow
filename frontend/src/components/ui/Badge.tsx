@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { STATUS_LABELS, type DocumentStatus } from '@/lib/documents';
 import { cn } from '@/lib/cn';
 
@@ -41,10 +42,12 @@ const INTERRUPTED_STYLE = {
 export function StatusBadge({
   status,
   interrupted = false,
+  icon,
   className,
 }: {
   status: DocumentStatus | null;
   interrupted?: boolean;
+  icon?: ReactNode;
   className?: string;
 }) {
   const style = interrupted
@@ -55,11 +58,12 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium',
+        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
         style?.className ?? 'border-slate-300 bg-white text-slate-600',
         className
       )}
     >
+      {icon}
       {style?.label ?? 'Unknown'}
     </span>
   );
