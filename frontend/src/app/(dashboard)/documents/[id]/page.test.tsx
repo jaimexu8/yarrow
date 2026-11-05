@@ -109,6 +109,7 @@ function tree(): DocumentTree {
         width: null,
         height: null,
         status: 'completed',
+        has_thumbnail: false,
         error_message: null,
         image_key: null,
         regions: [
