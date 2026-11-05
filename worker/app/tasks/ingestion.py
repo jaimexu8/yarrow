@@ -26,10 +26,11 @@ from yarrow_db.utils.table_utils import (
     merge_two_tables,
     split_at_gaps,
 )
-from yarrow_storage import ObjectNotFoundError, get_storage
+from yarrow_storage import ObjectNotFoundError, get_storage, thumbnail_key
 
 from app.celery_app import celery_app
 from app.pipeline.document_parser import DocumentParser, PageEvent
+from app.pipeline.thumbnails import build_thumbnail
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,35 @@ def _delete_stored(keys: list[str]) -> None:
             get_storage().delete_file(key)
         except Exception:
             logger.exception(f"Could not delete stored object {key}")
+
+
+def _store_thumbnails(document_id: UUID, parser: DocumentParser, page_numbers: list[int]) -> dict[int, str]:
+    stored: dict[int, str] = {}
+    for number in page_numbers:
+        key = thumbnail_key(document_id, number)
+        try:
+            get_storage().upload_file(io.BytesIO(build_thumbnail(parser.pages[number - 1])), key)
+        except Exception:
+            logger.exception(f"Could not store thumbnail {key}")
+            continue
+        stored[number] = key
+    return stored
+
+
+def _discard_thumbnails(document_id: UUID | None, keys: list[str]) -> None:
+    if document_id is None or not keys:
+        return
+    try:
+        with session_scope() as session:
+            kept = set(
+                session.execute(
+                    select(Page.thumbnail_key).where(Page.document_id == document_id, Page.thumbnail_key.in_(keys))
+                ).scalars()
+            )
+    except Exception:
+        logger.exception(f"Could not check thumbnails of document {document_id}")
+        return
+    _delete_stored([key for key in keys if key not in kept])
 
 
 def _job_deleted(job_id: str) -> bool:
@@ -219,6 +249,8 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
     uploaded_image_keys: list[str] = []
     replaced_image_keys: list[str] = []
     committed = False
+    document_id: UUID | None = None
+    thumbnail_keys: dict[int, str] = {}
     try:
         with session_scope() as session:
             # Locked so that this and a cancel (US-42) cannot both win. Document
@@ -260,9 +292,11 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
         # viewer) sees the same upright page.
         parser.correct_orientations()
 
+        run_page_numbers = _run_page_numbers(len(parser.pages), page_to_process)
+        thumbnail_keys = _store_thumbnails(document_id, parser, run_page_numbers)
+
         with session_scope() as session:
             job = _lock_running_job(session, job_id)
-            run_page_numbers = _run_page_numbers(len(parser.pages), page_to_process)
             session.execute(delete(JobPage).where(JobPage.job_id == job.id))
             session.add_all([JobPage(job_id=job.id, page_number=number, status="queued") for number in run_page_numbers])
             job.total_pages = len(run_page_numbers)
@@ -384,6 +418,8 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
             for obj in all_objects:
                 if isinstance(obj, Page) and obj.page_image_key in failed_page_keys:
                     obj.page_image_key = None
+                if isinstance(obj, Page):
+                    obj.thumbnail_key = thumbnail_keys.get(obj.page_number)
 
             # A page image this run is re-storing reuses its old key, and a
             # page that is no longer rotated keeps no key; the rest are
@@ -500,9 +536,11 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
     except JobCanceledError:
         logger.info(f"Job {job_id} was canceled while processing; discarding its results")
         _delete_stored(uploaded_image_keys)
+        _discard_thumbnails(document_id, list(thumbnail_keys.values()))
     except JobDeletedError:
         logger.info(f"Job {job_id} was deleted while processing; discarding its results")
         _delete_stored(uploaded_image_keys)
+        _discard_thumbnails(document_id, list(thumbnail_keys.values()))
     except AllPagesFailedError:
         logger.error(f"All pages failed for job {job_id}")
         raise
@@ -519,6 +557,7 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
     except Exception as e:
         if not committed:
             _delete_stored(uploaded_image_keys)
+            _discard_thumbnails(document_id, list(thumbnail_keys.values()))
         if _job_deleted(job_id):
             logger.info(f"Job {job_id} was deleted while processing; discarding its results")
             return

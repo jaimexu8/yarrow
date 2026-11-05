@@ -8,6 +8,8 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  PanelLeftClose,
+  PanelLeftOpen,
   Share2,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/Badge';
@@ -16,6 +18,7 @@ import { DocumentDetails } from './DocumentDetails';
 import { FindInDocument } from './FindInDocument';
 import { RegionFilterDropdown } from './RegionFilter';
 import { ShareModal } from './ShareModal';
+import { THUMBNAIL_SIDEBAR_ID } from './ThumbnailSidebar';
 import { useViewer } from './ViewerContext';
 
 const ICON_BUTTON =
@@ -56,6 +59,31 @@ function PageIndicator() {
   );
 }
 
+function ThumbnailsToggle() {
+  const { thumbnailsOpen, toggleThumbnails } = useViewer();
+  const label = thumbnailsOpen
+    ? 'Hide page thumbnails'
+    : 'Show page thumbnails';
+  return (
+    <button
+      type="button"
+      className={ICON_BUTTON}
+      onClick={toggleThumbnails}
+      title={label}
+      aria-expanded={thumbnailsOpen}
+      aria-controls={THUMBNAIL_SIDEBAR_ID}
+      aria-keyshortcuts="t"
+    >
+      {thumbnailsOpen ? (
+        <PanelLeftClose aria-hidden="true" className="size-4" />
+      ) : (
+        <PanelLeftOpen aria-hidden="true" className="size-4" />
+      )}
+      <span className="sr-only">Page thumbnails</span>
+    </button>
+  );
+}
+
 function BoundingBoxToggle() {
   const { showBoundingBoxes, setShowBoundingBoxes } = useViewer();
   return (
@@ -91,6 +119,7 @@ export function ViewerHeader({ actions }: { actions?: ReactNode }) {
         <ArrowLeft aria-hidden="true" className="size-4" />
         <span className="sr-only">Back to documents</span>
       </Link>
+      <ThumbnailsToggle />
       <div className="flex min-w-[10rem] flex-1 items-center gap-3">
         <h1
           title={document.filename}

@@ -138,6 +138,15 @@ async def delete_document_rows(
         )
     )
 
+    for column in (Page.page_image_key, Page.thumbnail_key):
+        keys.extend(
+            await db.scalars(
+                select(column).where(
+                    Page.document_id.in_(document_ids), column.is_not(None)
+                )
+            )
+        )
+
     for statement in (
         delete(TableCell).where(TableCell.region_table_id.in_(region_table_ids)),
         delete(RegionTable).where(RegionTable.id.in_(region_table_ids)),

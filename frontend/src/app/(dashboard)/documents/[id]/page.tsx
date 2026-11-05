@@ -15,6 +15,7 @@ import {
 } from '@/components/viewer/ReprocessBar';
 import { BoundingBoxCanvas } from '@/components/viewer/BoundingBoxCanvas';
 import { SplitViewer } from '@/components/viewer/SplitViewer';
+import { ThumbnailSidebar } from '@/components/viewer/ThumbnailSidebar';
 import { ViewerHeader } from '@/components/viewer/ViewerHeader';
 import {
   ViewerProvider,
@@ -171,20 +172,23 @@ function DocumentViewerLayout({ refresh }: { refresh: () => void }) {
       />
       <ProcessingProgressBar />
       <ReprocessBar onReprocessed={refresh} />
-      <SplitViewer
-        original={
-          <OriginalPane
-            // Rendered as an element, not called, so BoundingBoxCanvas's hooks
-            // belong to it rather than to the PageFrame that draws it
-            renderPageOverlay={
-              showBoundingBoxes
-                ? (info) => <BoundingBoxCanvas {...info} />
-                : undefined
-            }
-          />
-        }
-        extracted={<ExtractedContentList />}
-      />
+      <div className="flex min-h-0 flex-1">
+        <ThumbnailSidebar />
+        <SplitViewer
+          original={
+            <OriginalPane
+              // Rendered as an element, not called, so BoundingBoxCanvas's hooks
+              // belong to it rather than to the PageFrame that draws it
+              renderPageOverlay={
+                showBoundingBoxes
+                  ? (info) => <BoundingBoxCanvas {...info} />
+                  : undefined
+              }
+            />
+          }
+          extracted={<ExtractedContentList />}
+        />
+      </div>
     </div>
   );
 }

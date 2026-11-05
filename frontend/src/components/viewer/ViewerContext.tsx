@@ -18,6 +18,23 @@ export type ViewMode = 'original' | 'split' | 'extracted';
 
 // Margin left alone on top of a page when navigating to it
 const PAGE_SCROLL_MARGIN = 16;
+
+export const THUMBNAILS_OPEN_STORAGE_KEY = 'yarrow.viewer.thumbnailsOpen';
+const THUMBNAILS_DEFAULT_OPEN_QUERY = '(min-width: 1024px)';
+
+function initialThumbnailsOpen(): boolean {
+  try {
+    const stored = window.localStorage.getItem(THUMBNAILS_OPEN_STORAGE_KEY);
+    if (stored === 'true' || stored === 'false') return stored === 'true';
+  } catch {}
+  return window.matchMedia?.(THUMBNAILS_DEFAULT_OPEN_QUERY).matches ?? false;
+}
+
+function storeThumbnailsOpen(open: boolean) {
+  try {
+    window.localStorage.setItem(THUMBNAILS_OPEN_STORAGE_KEY, String(open));
+  } catch {}
+}
 export type Pane = 'original' | 'extracted';
 
 type ViewerState = {
@@ -78,6 +95,10 @@ type ViewerState = {
   showBoundingBoxes: boolean;
   setShowBoundingBoxes: (show: boolean) => void;
 
+  thumbnailsOpen: boolean;
+  setThumbnailsOpen: (open: boolean) => void;
+  toggleThumbnails: () => void;
+
   showLowConfidence: boolean;
   setShowLowConfidence: (show: boolean) => void;
 
@@ -133,6 +154,21 @@ export function ViewerProvider({
   const [highlightQuery, setHighlightQuery] = useState(initialHighlightQuery);
   const [activeRegionId, setActiveRegionId] = useState<string | null>(null);
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
+  const [thumbnailsOpen, setThumbnailsOpenState] = useState(
+    initialThumbnailsOpen
+  );
+
+  const setThumbnailsOpen = useCallback((open: boolean) => {
+    setThumbnailsOpenState(open);
+    storeThumbnailsOpen(open);
+  }, []);
+
+  const toggleThumbnails = useCallback(() => {
+    setThumbnailsOpenState((open) => {
+      storeThumbnailsOpen(!open);
+      return !open;
+    });
+  }, []);
   const [showLowConfidence, setShowLowConfidence] = useState(false);
   const [regionFilter, setRegionFilter] = useState<string | null>(null);
   const [originalPages, setOriginalPages] = useState<Set<number>>(new Set());
@@ -287,6 +323,9 @@ export function ViewerProvider({
       setActiveRegionId,
       showBoundingBoxes,
       setShowBoundingBoxes,
+      thumbnailsOpen,
+      setThumbnailsOpen,
+      toggleThumbnails,
       showLowConfidence,
       setShowLowConfidence,
       regionFilter,
@@ -316,6 +355,9 @@ export function ViewerProvider({
       setHighlight,
       activeRegionId,
       showBoundingBoxes,
+      thumbnailsOpen,
+      setThumbnailsOpen,
+      toggleThumbnails,
       showLowConfidence,
       regionFilter,
       originalPages,

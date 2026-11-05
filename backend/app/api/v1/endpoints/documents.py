@@ -35,7 +35,7 @@ from yarrow_db.models import (
     User,
 )
 from yarrow_db.models.region import RegionImage
-from yarrow_storage import ObjectNotFoundError, get_storage
+from yarrow_storage import ObjectNotFoundError, get_storage, thumbnail_key
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -1275,6 +1275,64 @@ async def get_region_image(
         media_type="image/png",
         # Region ids are new on every reprocess, so a crop never changes
         headers={"Cache-Control": "private, max-age=86400, immutable"},
+    )
+
+
+def _thumbnail_not_available() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={
+            "detail": "This page has no thumbnail",
+            "code": "THUMBNAIL_NOT_AVAILABLE",
+        },
+    )
+
+
+@router.get("/{document_id}/pages/{page_number}/thumbnail")
+async def get_page_thumbnail(
+    page_number: int,
+    access: DocumentAccess = Depends(require_read_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Streams the WebP thumbnail of a page for the viewer's sidebar.
+
+    While a job is running, a page without a row yet is served from its
+    deterministic key, since the worker uploads thumbnails before OCR.
+    """
+    document_id = access.document.id
+    page = (
+        await db.execute(
+            select(Page.thumbnail_key).where(
+                Page.document_id == document_id,
+                Page.page_number == page_number,
+            )
+        )
+    ).first()
+    if page is not None:
+        image_key = page.thumbnail_key
+    elif page_number >= 1 and await db.scalar(
+        select(Job.id)
+        .where(
+            Job.document_id == document_id,
+            Job.status.in_(("queued", "processing")),
+        )
+        .limit(1)
+    ):
+        image_key = thumbnail_key(document_id, page_number)
+    else:
+        image_key = None
+    if image_key is None:
+        raise _thumbnail_not_available()
+
+    try:
+        handle = await run_in_threadpool(get_storage().download_file, image_key)
+    except ObjectNotFoundError:
+        raise _thumbnail_not_available() from None
+
+    return StreamingResponse(
+        _iter_object(handle),
+        media_type="image/webp",
+        headers={"Cache-Control": "private, max-age=3600"},
     )
 
 
