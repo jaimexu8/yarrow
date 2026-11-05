@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from yarrow_db.models import Page
 
 from app.core.config import PIPELINE_VERSION, settings
 from app.pipeline.document_parser import DocumentParser, ModelInfo
@@ -69,7 +70,7 @@ def test_run_records_model_on_pages_job_and_document(job, session, storage, pars
 
     process_document_task(str(job.id))
 
-    pages = sorted(session.added, key=lambda page: page.page_number)
+    pages = sorted((obj for obj in session.added if isinstance(obj, Page)), key=lambda page: page.page_number)
     assert [(page.model_name, page.model_version) for page in pages] == [PREVIOUS, CURRENT, CURRENT]
     assert (job.model_name, job.model_version, job.pipeline_version) == (*CURRENT, PIPELINE_VERSION)
     document = job.document
@@ -82,7 +83,7 @@ def test_failed_page_records_no_model(job, session, storage, parser):
 
     process_document_task(str(job.id))
 
-    pages = sorted(session.added, key=lambda page: page.page_number)
+    pages = sorted((obj for obj in session.added if isinstance(obj, Page)), key=lambda page: page.page_number)
     assert [(page.model_name, page.model_version) for page in pages] == [CURRENT, (None, None)]
     assert job.document.status == "completed"
     assert (job.document.model_name, job.document.model_version) == CURRENT
