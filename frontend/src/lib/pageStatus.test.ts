@@ -14,6 +14,7 @@ function treePage(
     height: null,
     status,
     error_message,
+    has_thumbnail: false,
     image_key: null,
     regions: [],
     warnings: [],
