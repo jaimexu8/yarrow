@@ -21,7 +21,9 @@ import {
   useViewer,
   type ViewMode,
 } from '@/components/viewer/ViewerContext';
+import { isWorkingOn } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
+import { useDocumentProgress } from '@/lib/useDocumentProgress';
 import { getDocumentTree, type DocumentTree } from '@/lib/viewer';
 import { TableOperationsDropdown } from '@/components/viewer/TableOperationsMenu';
 import { ExportMenu } from '@/components/viewer/ExportMenu';
@@ -76,6 +78,8 @@ function DocumentViewer({ documentId }: { documentId: string }) {
 
   // Fetch the document again, for instance, after starting a reprocess.
   const refresh = useCallback(() => setAttempt((count) => count + 1), []);
+  const working = load.state === 'ready' && isWorkingOn(load.tree.document);
+  const progress = useDocumentProgress(documentId, working);
 
   if (load.state === 'loading') {
     return (
@@ -140,6 +144,7 @@ function DocumentViewer({ documentId }: { documentId: string }) {
     <ViewerProvider
       document={load.tree.document}
       tree={load.tree}
+      progress={working ? progress : null}
       initialMode={defaultMode()}
       initialPage={initialPage}
       refresh={refresh}

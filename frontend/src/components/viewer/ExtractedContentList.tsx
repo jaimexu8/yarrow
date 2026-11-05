@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, FileSearch, Merge } from 'lucide-react';
+import { FileSearch, Merge } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
 import { isInterrupted } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
@@ -12,6 +12,8 @@ import {
   type MergeCandidates,
 } from '@/lib/tableOperations';
 import type { DocumentTree, PageNode, TableNode } from '@/lib/viewer';
+import { PageErrorBanner } from './PageErrorBanner';
+import { PageHeader } from './PageHeader';
 import { RegionFilterPills } from './RegionFilter';
 import { RegionBlock, regionKind } from './regionRenderers';
 import { usePageTracking, useViewer } from './ViewerContext';
@@ -125,7 +127,8 @@ function PageSection({
   pending?: Pending;
   mergeCandidate?: MergeCandidate;
 }) {
-  const { registerPage } = useViewer();
+  const { registerPage, pageStates } = useViewer();
+  const status = pageStates.get(pageNumber)?.status ?? null;
   const regions = [...(page?.regions ?? [])].sort(
     (a, b) => a.reading_order - b.reading_order
   );
@@ -137,9 +140,6 @@ function PageSection({
       data-pane="extracted"
       aria-labelledby={`extracted-page-${pageNumber}`}
     >
-      <h2 id={`extracted-page-${pageNumber}`} className="sr-only">
-        Page {pageNumber}
-      </h2>
       {pageNumber > 1 && (
         <PageBoundary
           // A new candidate gets a fresh boundary, so a finished merge's
@@ -153,46 +153,47 @@ function PageSection({
           candidate={mergeCandidate}
         />
       )}
+      <PageHeader
+        as="h2"
+        pageNumber={pageNumber}
+        headingId={`extracted-page-${pageNumber}`}
+        className="mb-4"
+      />
+      <PageErrorBanner pageNumber={pageNumber} className="my-4" />
 
       {pending ? (
-        <p className="not-prose my-4 flex items-center gap-2 text-sm text-slate-500">
-          {pending === 'processing' ? (
-            <>
-              <Spinner label={null} className="text-slate-400" />
-              Processing this page…
-            </>
-          ) : (
-            "This page hasn't been processed yet."
-          )}
-        </p>
+        status === 'failed' ? null : (
+          <p className="not-prose my-4 flex items-center gap-2 text-sm text-slate-500">
+            {pending === 'unfinished' ? (
+              "This page hasn't been processed yet."
+            ) : status === 'queued' ? (
+              'Waiting to be processed…'
+            ) : status === 'canceled' ? (
+              'Processing was canceled before this page.'
+            ) : (
+              <>
+                <Spinner label={null} className="text-slate-400" />
+                Processing this page…
+              </>
+            )}
+          </p>
+        )
       ) : (
-        <PageContent page={page} regions={regions} placements={placements} />
+        <PageContent regions={regions} placements={placements} />
       )}
     </section>
   );
 }
 
 function PageContent({
-  page,
   regions,
   placements,
 }: {
-  page: PageNode | undefined;
   regions: PageNode['regions'];
   placements: Map<string, TableNode>;
 }) {
   return (
     <>
-      {page?.error_message && (
-        <p className="not-prose my-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <AlertTriangle
-            aria-hidden="true"
-            className="mt-0.5 size-4 shrink-0"
-          />
-          {page.error_message}
-        </p>
-      )}
-
       {regions.map((region, index) => {
         const previous = regions[index - 1];
         return (
@@ -244,6 +245,7 @@ export function ExtractedContentList() {
     highlightQuery,
     initialPage,
     scrollToPage,
+    pageStates,
   } = useViewer();
   const onScroll = usePageTracking('extracted');
   const openedAtPage = useRef(false);
@@ -329,7 +331,9 @@ export function ExtractedContentList() {
   );
 
   let body: React.ReactNode;
-  if (inProgress && finished.size === 0) {
+  const hasPageStates = [...pageStates.values()].some((state) => state.status);
+
+  if (inProgress && finished.size === 0 && !hasPageStates) {
     body = isInterrupted(document) ? (
       <PaneMessage>
         Processing stopped before any page was finished.
@@ -349,7 +353,8 @@ export function ExtractedContentList() {
     );
     const lastPage = Math.max(
       pageCount ?? 0,
-      ...tree.pages.map((p) => p.page_number)
+      ...tree.pages.map((p) => p.page_number),
+      ...pageStates.keys()
     );
     body = (
       <article className="prose prose-slate prose-sm mx-auto max-w-2xl px-6 py-8 sm:px-10 2xl:prose-base">

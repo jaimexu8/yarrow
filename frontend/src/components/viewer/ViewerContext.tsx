@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from 'react';
 import type { DocumentSummary } from '@/lib/documents';
+import { mergePageStates, type PageState } from '@/lib/pageStatus';
+import type { DocumentProgress } from '@/lib/progress';
 import type { DocumentTree } from '@/lib/viewer';
 
 export type ViewMode = 'original' | 'split' | 'extracted';
@@ -27,6 +29,8 @@ type ViewerState = {
 
   // Whether the viewer may correct text or edit tables (owner or reviewer).
   canEdit: boolean;
+
+  pageStates: Map<number, PageState>;
 
   // Page count in the document, once known from either the file or the tree.
   pageCount: number | null;
@@ -100,6 +104,7 @@ const ViewerContext = createContext<ViewerState | null>(null);
 export function ViewerProvider({
   document,
   tree,
+  progress = null,
   initialMode = 'split',
   initialPage = 1,
   refresh,
@@ -109,6 +114,7 @@ export function ViewerProvider({
 }: {
   document: DocumentSummary;
   tree: DocumentTree | null;
+  progress?: DocumentProgress | null;
   initialMode?: ViewMode;
   initialPage?: number;
   refresh: () => void;
@@ -254,11 +260,17 @@ export function ViewerProvider({
     return true;
   }, []);
 
+  const pageStates = useMemo(
+    () => mergePageStates(treeWithCorrections?.pages ?? [], progress),
+    [treeWithCorrections, progress]
+  );
+
   const value = useMemo<ViewerState>(
     () => ({
       document,
       tree: treeWithCorrections,
       canEdit: treeWithCorrections?.can_edit ?? false,
+      pageStates,
       pageCount: pageCount ?? treeWithCorrections?.stats.page_count ?? null,
       setPageCount,
       mode,
@@ -290,6 +302,7 @@ export function ViewerProvider({
     [
       document,
       treeWithCorrections,
+      pageStates,
       pageCount,
       mode,
       currentPage,
