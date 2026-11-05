@@ -1,7 +1,7 @@
 """Record OCR model name and version on pages, jobs, and documents (US-85)
 
 Revision ID: 0022
-Revises: 0025
+Revises: 0026
 Create Date: 2026-11-04 22:00:00.000000
 
 - pages.model_name: the inference model name that produced this page's current
@@ -33,7 +33,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0022"
-down_revision = "0025"
+down_revision = "0026"
 branch_labels = None
 depends_on = None
 
