@@ -7,7 +7,7 @@ import {
   type ModelUsage,
 } from '@/lib/documents';
 import type { DocumentTree } from '@/lib/viewer';
-import { DocumentDetails } from './DocumentDetails';
+import { DocumentDetails, ModelInfo } from './DocumentDetails';
 import { ViewerProvider } from './ViewerContext';
 
 vi.mock('@/lib/documents', async (importOriginal) => ({
@@ -22,10 +22,7 @@ afterEach(() => {
 
 const NAME = 'PP-StructureV3+PaddleOCR-VL';
 
-function renderDetails(
-  fields: Partial<DocumentSummary>,
-  models: ModelUsage[] = []
-) {
+function viewerProps(fields: Partial<DocumentSummary>) {
   const document: DocumentSummary = {
     id: 'doc-1',
     filename: 'scan.pdf',
@@ -43,10 +40,18 @@ function renderDetails(
     stats: { page_count: 2, high_confidence_page_count: 2, warning_count: 0 },
     pages: [],
   } as unknown as DocumentTree;
-  vi.mocked(getDocument).mockResolvedValue({ ...document, models });
+  return { document, tree, refresh: () => {} };
+}
+
+function renderDetails(
+  fields: Partial<DocumentSummary>,
+  models: ModelUsage[] = []
+) {
+  const props = viewerProps(fields);
+  vi.mocked(getDocument).mockResolvedValue({ ...props.document, models });
 
   render(
-    <ViewerProvider document={document} tree={tree} refresh={() => {}}>
+    <ViewerProvider {...props}>
       <DocumentDetails />
     </ViewerProvider>
   );
@@ -99,13 +104,43 @@ describe('DocumentDetails model information', () => {
     expect(screen.getByText('1 page')).toBeDefined();
   });
 
-  it('shows Not recorded when the model was never recorded', () => {
+  it('shows Unknown when the model was never recorded', () => {
     renderDetails({
       model_name: null,
       model_version: null,
       processed_at: null,
     });
 
-    expect(screen.getAllByText('Not recorded')).toHaveLength(2);
+    expect(screen.getByText('Unknown')).toBeDefined();
+    expect(screen.getByText('Not recorded')).toBeDefined();
+  });
+});
+
+describe('ModelInfo', () => {
+  function renderModelInfo(fields: Partial<DocumentSummary>) {
+    render(
+      <ViewerProvider {...viewerProps(fields)}>
+        <ModelInfo />
+      </ViewerProvider>
+    );
+  }
+
+  it('shows the model name and version without opening anything', () => {
+    renderModelInfo({ model_name: NAME, model_version: '3.2.0+vl-0.9b' });
+
+    expect(screen.getByText(`Model: ${NAME} 3.2.0+vl-0.9b`)).toBeDefined();
+    expect(screen.getByTitle(`Model: ${NAME} 3.2.0+vl-0.9b`)).toBeDefined();
+  });
+
+  it('shows Unknown for documents processed before models were recorded', () => {
+    renderModelInfo({ model_name: null, model_version: null });
+
+    expect(screen.getByText('Model: Unknown')).toBeDefined();
+  });
+
+  it('shows Unknown when the model fields are missing', () => {
+    renderModelInfo({});
+
+    expect(screen.getByText('Model: Unknown')).toBeDefined();
   });
 });

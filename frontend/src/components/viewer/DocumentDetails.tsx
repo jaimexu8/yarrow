@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { ChevronDown, Gauge } from 'lucide-react';
+import { ChevronDown, Cpu, Gauge } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { getDocument, parseApiDate, type ModelUsage } from '@/lib/documents';
 import { formatBytes } from '@/lib/storage';
@@ -9,7 +9,25 @@ import { isLowConfidence } from '@/lib/viewer';
 import { useViewer } from './ViewerContext';
 
 function modelLabel(name?: string | null, version?: string | null): string {
-  return [name, version].filter(Boolean).join(' ') || 'Not recorded';
+  return [name, version].filter(Boolean).join(' ') || 'Unknown';
+}
+
+export function ModelInfo({ className }: { className?: string }) {
+  const { document } = useViewer();
+  const label = modelLabel(document.model_name, document.model_version);
+
+  return (
+    <span
+      title={`Model: ${label}`}
+      className={cn(
+        'inline-flex min-w-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700',
+        className
+      )}
+    >
+      <Cpu aria-hidden="true" className="size-3.5 shrink-0" />
+      <span className="truncate">Model: {label}</span>
+    </span>
+  );
 }
 
 // The header chip summarizing how many pages were read with high confidence
