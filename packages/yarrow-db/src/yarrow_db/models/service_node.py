@@ -38,9 +38,7 @@ class ServiceNode(Base):
     last_checked_at = Column(DateTime)
     last_seen_at = Column(DateTime)
     last_error = Column(String(500))
-    details = Column(
-        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
-    )
+    details = Column(JSONB, nullable=False, default=dict, server_default=text("'{}'"))
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
