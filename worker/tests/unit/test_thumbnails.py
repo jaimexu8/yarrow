@@ -91,7 +91,7 @@ def pages(monkeypatch, storage):
     def load_file(self, file_data):
         self.pages = [_page_image(number) for number in range(1, page_count["value"] + 1)]
 
-    def process_page(self, page_data):
+    def process_page(self, page_data, page_index):
         storage.uploaded_before_ocr.update(storage.objects)
         page_number = self.pages.index(page_data) + 1
         for hook in hooks:

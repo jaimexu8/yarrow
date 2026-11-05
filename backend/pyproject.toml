@@ -38,6 +38,7 @@ pytest-asyncio = "*"
 ruff = "*"
 mypy = "*"
 respx = "*"
+requests = "^2.34.2"
 
 [tool.ruff]
 line-length = 88

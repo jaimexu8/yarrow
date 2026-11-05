@@ -55,6 +55,8 @@ class PageNode(StrictModel):
     # Storage key of the upright page image
     image_key: str | None = None
     has_thumbnail: bool = False
+    model_name: str | None = None
+    model_version: str | None = None
     regions: list[RegionNode] = Field(default_factory=list)
     warnings: list[WarningNode] = Field(default_factory=list)
 

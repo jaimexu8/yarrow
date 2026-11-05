@@ -24,6 +24,9 @@ class JobOut(BaseModel):
     pages_processed: int | None = None
     total_pages: int | None = None
     error_message: str | None = None
+    model_name: str | None = None
+    model_version: str | None = None
+    pipeline_version: str | None = None
 
     @model_validator(mode="after")
     def _only_user_facing_errors(self):
@@ -44,6 +47,8 @@ class PageOut(BaseModel):
     error_code: str | None = None
     error_message: str | None = None
     has_thumbnail: bool = False
+    model_name: str | None = None
+    model_version: str | None = None
 
     @model_validator(mode="after")
     def _only_user_facing_errors(self):
@@ -65,6 +70,12 @@ class ReprocessInfo(BaseModel):
     page_numbers: list[int] = Field(default_factory=list)
 
 
+class ModelUsage(BaseModel):
+    model_name: str | None
+    model_version: str | None
+    page_count: int
+
+
 class DocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -84,6 +95,10 @@ class DocumentOut(BaseModel):
     reprocess: ReprocessInfo | None = None
     # filled in by documents_out from document_tags; not a column.
     tags: list[TagOut] = Field(default_factory=list)
+    model_name: str | None = None
+    model_version: str | None = None
+    pipeline_version: str | None = None
+    processed_at: datetime | None = None
 
     @model_validator(mode="after")
     def _only_user_facing_errors(self):
@@ -116,6 +131,7 @@ class DocumentRename(BaseModel):
 class DocumentDetail(DocumentOut):
     jobs: list[JobOut] = []
     pages: list[PageOut] = []
+    models: list[ModelUsage] = []
 
 
 class UploadAccepted(BaseModel):

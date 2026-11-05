@@ -22,6 +22,8 @@ class Page(Base):
     error_code = Column(String(32))
     page_image_key = Column(String) # Storage key of the upright page image
     thumbnail_key = Column(String)
+    model_name = Column(String(128))
+    model_version = Column(String(64))
 
     document = relationship("Document")
 

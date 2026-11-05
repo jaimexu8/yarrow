@@ -197,6 +197,8 @@ async def load_document_tree(
             error_code=row.error_code,
             image_key=row.page_image_key,
             has_thumbnail=row.thumbnail_key is not None,
+            model_name=row.model_name,
+            model_version=row.model_version,
             regions=regions_by_page.get(row.id, []),
             warnings=warnings_by_page.get(row.id, []),
         )

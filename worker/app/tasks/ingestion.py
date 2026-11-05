@@ -29,7 +29,8 @@ from yarrow_db.utils.table_utils import (
 from yarrow_storage import ObjectNotFoundError, get_storage, thumbnail_key
 
 from app.celery_app import celery_app
-from app.pipeline.document_parser import DocumentParser, PageEvent
+from app.core.config import PIPELINE_VERSION
+from app.pipeline.document_parser import DocumentParser, ModelInfo, PageEvent
 from app.pipeline.thumbnails import build_thumbnail
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,15 @@ def _document_state(page_states: list[tuple[int, str | None]], total_pages: int)
         "completed" if any_completed else "failed",
         _describe_failed_pages(failed, total_pages) if failed else None,
     )
+
+
+def _run_model(page_models: dict[int, ModelInfo]) -> ModelInfo | None:
+    counts: dict[ModelInfo, int] = {}
+    latest: dict[ModelInfo, int] = {}
+    for order, model in enumerate(page_models.values()):
+        counts[model] = counts.get(model, 0) + 1
+        latest[model] = order
+    return max(counts, key=lambda model: (counts[model], latest[model]), default=None)
 
 
 def _delete_stored(keys: list[str]) -> None:
@@ -515,12 +525,21 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
                 job_page.error_message = page.error_message
                 job_page.finished_at = job_page.finished_at or finished_at
 
+            run_model = _run_model(parser.page_models)
+            job.model_name = run_model.name if run_model else None
+            job.model_version = run_model.version if run_model else None
+            job.pipeline_version = PIPELINE_VERSION
             job.pages_processed = sum(job_page.status in ("completed", "failed") for job_page in job_pages)
             job.error_message = summary
             job.current_stage = "failed" if run_failed else "finished"
             job.status = "failed" if run_failed else "completed"
 
             document.status, document.error_message = _document_state(page_states, document.page_count or total_pages)
+            if run_model is not None:
+                document.model_name = job.model_name
+                document.model_version = job.model_version
+                document.pipeline_version = job.pipeline_version
+                document.processed_at = datetime.now(UTC).replace(tzinfo=None)
 
         committed = True
         _delete_stored(replaced_image_keys)

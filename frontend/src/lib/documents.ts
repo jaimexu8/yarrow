@@ -35,6 +35,12 @@ export type DocumentTag = {
   name: string;
 };
 
+export type ModelUsage = {
+  model_name: string | null;
+  model_version: string | null;
+  page_count: number;
+};
+
 export type DocumentSummary = {
   id: string;
   filename: string;
@@ -48,6 +54,14 @@ export type DocumentSummary = {
   folder_id: string | null;
   reprocess?: ReprocessInfo | null;
   tags?: DocumentTag[];
+  model_name?: string | null;
+  model_version?: string | null;
+  pipeline_version?: string | null;
+  processed_at?: string | null;
+};
+
+export type DocumentDetail = DocumentSummary & {
+  models: ModelUsage[];
 };
 
 /** Keep in sync with backend TRASH_RETENTION_DAYS. Not a user setting. */
@@ -75,6 +89,11 @@ export async function reprocessDocument(id: string): Promise<DocumentSummary> {
   const res = await api.post<DocumentSummary>(
     `/api/v1/documents/${id}/reprocess`
   );
+  return res.data;
+}
+
+export async function getDocument(id: string): Promise<DocumentDetail> {
+  const res = await api.get<DocumentDetail>(`/api/v1/documents/${id}`);
   return res.data;
 }
 

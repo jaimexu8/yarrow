@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/Badge';
 import { cn } from '@/lib/cn';
-import { DocumentDetails } from './DocumentDetails';
+import { DocumentDetails, ModelInfo } from './DocumentDetails';
 import { FindInDocument } from './FindInDocument';
 import { RegionFilterDropdown } from './RegionFilter';
 import { ShareModal } from './ShareModal';
@@ -148,6 +148,7 @@ export function ViewerHeader({ actions }: { actions?: ReactNode }) {
           {document.filename}
         </h1>
         <StatusBadge status={document.status} className="shrink-0" />
+        <ModelInfo className="max-w-[18rem]" />
       </div>
       <DocumentDetails />
       <FindInDocument />

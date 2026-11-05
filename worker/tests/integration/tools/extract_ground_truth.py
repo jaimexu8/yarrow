@@ -236,7 +236,7 @@ def pruned_for(parser):
     responses = []
     for index, page in enumerate(parser.pages, start=1):
         print(f"    page {index}/{len(parser.pages)}", flush=True)
-        responses.append(parser.process_page(page))
+        responses.append(parser.process_page(page, index - 1))
     parser.parsed_result = responses
     return parser.get_pruned_result()
 
