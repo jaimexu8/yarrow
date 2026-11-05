@@ -76,6 +76,12 @@ export async function listAdminJobs(): Promise<AdminJob[]> {
   return res.data;
 }
 
+export const JOBS_POLL_INTERVAL_MS = 4000;
+
+export function isActiveJob(job: AdminJob): boolean {
+  return job.status === 'queued' || job.status === 'processing';
+}
+
 export function jobQueuePlace(job: AdminJob): string {
   if (job.status === 'processing') return 'Running';
   if (job.queue_position != null) return String(job.queue_position);

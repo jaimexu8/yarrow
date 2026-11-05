@@ -10,7 +10,9 @@ import { useAuth } from '@/context/AuthContext';
 import {
   deleteAdminAccount,
   getAdminStats,
+  isActiveJob,
   jobQueuePlace,
+  JOBS_POLL_INTERVAL_MS,
   jobStage,
   listAccounts,
   listAdminJobs,
@@ -370,6 +372,7 @@ function AdminBody() {
     null
   );
   const [jobAction, setJobAction] = useState<JobAction | null>(null);
+  const [jobsPolls, setJobsPolls] = useState(0);
 
   async function reloadJobs() {
     const [nextStats, nextJobs] = await Promise.all([
@@ -489,6 +492,27 @@ function AdminBody() {
       current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!jobs?.some(isActiveJob)) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      Promise.all([getAdminStats(), listAdminJobs()])
+        .then(([nextStats, nextJobs]) => {
+          if (!current) return;
+          setStats(nextStats);
+          setJobs(nextJobs);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (current) setJobsPolls((count) => count + 1);
+        });
+    }, JOBS_POLL_INTERVAL_MS);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [jobs, jobsPolls]);
 
   if (error) return <Alert>{error}</Alert>;
   if (!stats || !accounts || !jobs) {

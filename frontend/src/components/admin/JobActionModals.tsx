@@ -86,7 +86,9 @@ export function JobActionModal({
       onClose();
       await onDone();
     } catch (err) {
-      setError(toApiError(err).message);
+      const apiError = toApiError(err);
+      setError(apiError.message);
+      if (apiError.status === 409) await onDone();
     } finally {
       setPending(false);
     }

@@ -98,6 +98,7 @@ from app.services.failure_messages import (
 )
 from app.services.job_progress import cancel_open_job_pages, document_progress
 from app.services.reprocess import (
+    LATEST_JOB_FIRST,
     ReprocessError,
     documents_out,
     reprocess_document,
@@ -935,7 +936,7 @@ async def cancel_document_processing(
             await db.execute(
                 select(Job)
                 .where(Job.document_id == document_id)
-                .order_by(Job.created_at.desc())
+                .order_by(*LATEST_JOB_FIRST)
                 .limit(1)
                 .with_for_update()
                 .execution_options(populate_existing=True)

@@ -4,6 +4,7 @@ import {
   deleteAdminAccount,
   forceCancelJob,
   jobQueuePlace,
+  isActiveJob,
   jobStage,
   listAdminJobs,
   retryJob,
@@ -90,4 +91,12 @@ it('retries a job', async () => {
   vi.mocked(api.post).mockResolvedValue({ data: { new_job_id: 'j2' } });
   await expect(retryJob('j1')).resolves.toEqual({ new_job_id: 'j2' });
   expect(api.post).toHaveBeenCalledWith('/api/v1/admin/jobs/j1/retry');
+});
+
+it('treats queued and processing jobs as active', () => {
+  expect(isActiveJob(job({ status: 'queued' }))).toBe(true);
+  expect(isActiveJob(job({ status: 'processing' }))).toBe(true);
+  expect(isActiveJob(job({ status: 'failed' }))).toBe(false);
+  expect(isActiveJob(job({ status: 'completed' }))).toBe(false);
+  expect(isActiveJob(job({ status: 'canceled' }))).toBe(false);
 });

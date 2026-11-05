@@ -27,6 +27,7 @@ from app.services.account import delete_account
 from app.services.job_progress import cancel_open_job_pages
 from app.services.reprocess import (
     ACTIVE_JOB_STATES,
+    LATEST_JOB_FIRST,
     ReprocessError,
     is_interrupted,
     reprocess_document,
@@ -117,6 +118,38 @@ def _job_time(value: datetime | None) -> datetime:
     return value or datetime.min
 
 
+def _latest_key(job: Job) -> tuple[bool, datetime, UUID]:
+    return (job.created_at is not None, _job_time(job.created_at), job.id)
+
+
+CANCEL_REFUSALS = {
+    "completed": "This job has already finished, so there is nothing left to cancel.",
+    "failed": "This job has already failed, so there is nothing left to cancel.",
+    "canceled": "This job has already been canceled.",
+}
+SUPERSEDED_CANCEL = (
+    "A newer job has replaced this one, so it can no longer be canceled."
+)
+SUPERSEDED_RETRY = "A newer job has replaced this one, so it can no longer be retried."
+NOT_FAILED_RETRY = "Only a failed job can be retried, and this one is {status}."
+
+
+def _cancel_refusal(job: Job, latest: Job | None) -> str | None:
+    if job.status not in ACTIVE_JOB_STATES:
+        return CANCEL_REFUSALS.get(job.status, "This job can no longer be canceled.")
+    if latest is None or latest.id != job.id:
+        return SUPERSEDED_CANCEL
+    return None
+
+
+def _retry_refusal(job: Job, latest: Job | None) -> str | None:
+    if job.status != "failed":
+        return NOT_FAILED_RETRY.format(status=job.status)
+    if latest is None or latest.id != job.id:
+        return SUPERSEDED_RETRY
+    return None
+
+
 @router.get("/jobs", response_model=list[AdminJob])
 async def list_jobs(
     db: AsyncSession = Depends(get_db),
@@ -148,13 +181,13 @@ async def list_jobs(
     latest: dict[UUID, Job] = {}
     for job, _, _ in rows:
         current = latest.get(job.document_id)
-        if current is None or _job_time(job.created_at) > _job_time(current.created_at):
+        if current is None or _latest_key(job) > _latest_key(current):
             latest[job.document_id] = job
     now = datetime.now(UTC).replace(tzinfo=None)
 
     out: list[AdminJob] = []
     for job, document, user in processing + queued + rest:
-        is_latest = latest[job.document_id].id == job.id
+        document_latest = latest[job.document_id]
         out.append(
             AdminJob(
                 id=job.id,
@@ -173,8 +206,8 @@ async def list_jobs(
                 is_stuck=is_interrupted(
                     {"status": job.status, "updated_at": job.updated_at}, now
                 ),
-                can_cancel=is_latest and job.status in ACTIVE_JOB_STATES,
-                can_retry=is_latest and job.status == "failed",
+                can_cancel=_cancel_refusal(job, document_latest) is None,
+                can_retry=_retry_refusal(job, document_latest) is None,
                 canceled_by_id=job.canceled_by_id,
                 cancel_reason=job.cancel_reason,
                 retry_of_job_id=job.retry_of_job_id,
@@ -303,7 +336,7 @@ async def _lock_job_for_action(
             await db.execute(
                 select(Job)
                 .where(Job.document_id == document_id)
-                .order_by(Job.created_at.desc())
+                .order_by(*LATEST_JOB_FIRST)
                 .limit(1)
                 .with_for_update()
                 .execution_options(populate_existing=True)
@@ -333,12 +366,9 @@ async def force_cancel_job(
 ):
     admin_id = admin.id
     document, job, latest = await _lock_job_for_action(db, job_id)
-    if latest is None or latest.id != job.id or job.status not in ACTIVE_JOB_STATES:
-        raise _job_error(
-            status.HTTP_409_CONFLICT,
-            "Only the latest queued or processing job of a document can be canceled.",
-            "JOB_NOT_CANCELABLE",
-        )
+    refusal = _cancel_refusal(job, latest)
+    if refusal is not None:
+        raise _job_error(status.HTTP_409_CONFLICT, refusal, "JOB_NOT_CANCELABLE")
 
     now = datetime.now(UTC).replace(tzinfo=None)
     job.status = "canceled"
@@ -359,7 +389,9 @@ async def force_cancel_job(
         except Exception:
             logger.exception(f"Force-revoking task {task_id} failed")
 
-    return AdminJobActionResult(job_id=job_id, document_id=document_id, status="canceled")
+    return AdminJobActionResult(
+        job_id=job_id, document_id=document_id, status="canceled"
+    )
 
 
 @router.post(
@@ -374,12 +406,9 @@ async def retry_job(
 ):
     admin_id = admin.id
     document, job, latest = await _lock_job_for_action(db, job_id)
-    if latest is None or latest.id != job.id or job.status != "failed":
-        raise _job_error(
-            status.HTTP_409_CONFLICT,
-            "Only the latest failed job of a document can be retried.",
-            "JOB_NOT_RETRYABLE",
-        )
+    refusal = _retry_refusal(job, latest)
+    if refusal is not None:
+        raise _job_error(status.HTTP_409_CONFLICT, refusal, "JOB_NOT_RETRYABLE")
 
     document_id = document.id
     outcome = await reprocess_document(

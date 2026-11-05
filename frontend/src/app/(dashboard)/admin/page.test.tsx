@@ -7,7 +7,13 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import type { AdminAccount, AdminJob, AdminStats } from '@/lib/admin';
+import { AxiosError, AxiosHeaders } from 'axios';
+import {
+  JOBS_POLL_INTERVAL_MS,
+  type AdminAccount,
+  type AdminJob,
+  type AdminStats,
+} from '@/lib/admin';
 
 vi.mock('@/context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'admin-1', is_admin: true } }),
@@ -308,4 +314,98 @@ it('disables both buttons while a retry is pending', async () => {
       .getByRole('button', { name: 'Cancel' })
       .hasAttribute('disabled')
   ).toBe(true);
+});
+
+function conflict(detail: string, code: string) {
+  const headers = new AxiosHeaders();
+  return new AxiosError('Conflict', 'ERR_BAD_REQUEST', { headers }, null, {
+    status: 409,
+    statusText: 'Conflict',
+    headers: {},
+    config: { headers },
+    data: { detail: { detail, code } },
+  });
+}
+
+it('explains a refused force cancel and drops the stale button', async () => {
+  vi.mocked(forceCancelJob).mockRejectedValue(
+    conflict(
+      'This job has already failed, so there is nothing left to cancel.',
+      'JOB_NOT_CANCELABLE'
+    )
+  );
+  await renderAdmin({
+    jobs: [job({ status: 'processing', current_stage: 'preparing' })],
+    accounts: [],
+  });
+  vi.mocked(listAdminJobs).mockResolvedValue([job(FAILED)]);
+
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Force cancel notes.pdf' })
+  );
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Force cancel' }));
+
+  await waitFor(() => {
+    expect(within(dialog).getByRole('alert').textContent).toBe(
+      'This job has already failed, so there is nothing left to cancel.'
+    );
+  });
+  await waitFor(() => {
+    expect(
+      screen.queryByRole('button', { name: 'Force cancel notes.pdf' })
+    ).toBeNull();
+  });
+  expect(screen.getByRole('button', { name: 'Retry notes.pdf' })).toBeTruthy();
+});
+
+it('keeps polling jobs while one is active so its actions stay current', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    await renderAdmin({ jobs: [job()], accounts: [] });
+    expect(
+      screen.getByRole('button', { name: 'Force cancel notes.pdf' })
+    ).toBeTruthy();
+    vi.mocked(listAdminJobs).mockResolvedValue([job(FAILED)]);
+
+    await vi.advanceTimersByTimeAsync(JOBS_POLL_INTERVAL_MS);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: 'Force cancel notes.pdf' })
+      ).toBeNull();
+    });
+    expect(
+      screen.getByRole('button', { name: 'Retry notes.pdf' })
+    ).toBeTruthy();
+    const calls = vi.mocked(listAdminJobs).mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(JOBS_POLL_INTERVAL_MS * 2);
+    expect(listAdminJobs).toHaveBeenCalledTimes(calls);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('keeps polling after a failed refresh', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    await renderAdmin({ jobs: [job()], accounts: [] });
+    vi.mocked(listAdminJobs).mockRejectedValueOnce(new Error('offline'));
+
+    await vi.advanceTimersByTimeAsync(JOBS_POLL_INTERVAL_MS);
+    await waitFor(() => {
+      expect(listAdminJobs).toHaveBeenCalledTimes(2);
+    });
+    vi.mocked(listAdminJobs).mockResolvedValue([job(FAILED)]);
+
+    await vi.advanceTimersByTimeAsync(JOBS_POLL_INTERVAL_MS);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Retry notes.pdf' })
+      ).toBeTruthy();
+    });
+  } finally {
+    vi.useRealTimers();
+  }
 });
