@@ -19,7 +19,9 @@ class Region(Base):
     __tablename__ = "regions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    page_id = Column(UUID(as_uuid=True), ForeignKey("pages.id"), nullable=False)
+    page_id = Column(
+        UUID(as_uuid=True), ForeignKey("pages.id"), nullable=False, index=True
+    )
     page_number = Column(Integer)
     reading_order = Column(Integer)
     region_type = Column(Enum("header", "paragraph", "figure", "table", name="region_type_enum", create_constraint=False))

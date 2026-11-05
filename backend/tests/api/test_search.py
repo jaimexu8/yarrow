@@ -1,10 +1,20 @@
-"""us-14/us-27: search extracted text, snippets, only the caller's documents."""
+"""us-14/us-27/us-58: search extracted text and table cells, snippets, only the
+caller's documents."""
 
 import uuid
 from datetime import UTC, datetime
 
+import pytest
 from sqlalchemy import select
-from yarrow_db.models import Document, Page, Region, RegionText
+from yarrow_db.models import (
+    Document,
+    Page,
+    Region,
+    RegionTable,
+    RegionText,
+    Table,
+    TableCell,
+)
 
 from tests.conftest import FIXTURES_DIR
 
@@ -24,7 +34,7 @@ async def _upload(client, headers, name="sample.pdf"):
     return uuid.UUID(response.json()["accepted"][0]["document_id"])
 
 
-async def _add_text(db_session, document_id, text, page_number=1, reading_order=0):
+async def _page(db_session, document_id, page_number):
     result = await db_session.execute(
         select(Page).where(
             Page.document_id == document_id, Page.page_number == page_number
@@ -35,6 +45,11 @@ async def _add_text(db_session, document_id, text, page_number=1, reading_order=
         page = Page(id=uuid.uuid4(), document_id=document_id, page_number=page_number)
         db_session.add(page)
         await db_session.flush()
+    return page
+
+
+async def _add_text(db_session, document_id, text, page_number=1, reading_order=0):
+    page = await _page(db_session, document_id, page_number)
     region = Region(id=uuid.uuid4(), page_id=page.id, reading_order=reading_order)
     db_session.add_all([region, RegionText(region_id=region.id, text_content=text)])
     document = await db_session.get(Document, document_id)
@@ -715,3 +730,443 @@ class TestSearchSort:
             headers=auth_headers,
         )
         assert response.status_code == 422
+
+
+async def _add_table_part(
+    db_session,
+    document_id,
+    rows,
+    *,
+    table_id=None,
+    page_number=1,
+    reading_order=0,
+    row_start=0,
+    col_start=0,
+    header_rows=1,
+    spans=None,
+):
+    """One RegionTable of a logical table. Cell rows are local to the part,
+    as the worker writes them; returns the ids a search hit points at."""
+    page = await _page(db_session, document_id, page_number)
+    if table_id is None:
+        table = Table(id=uuid.uuid4(), document_id=document_id)
+        db_session.add(table)
+        await db_session.flush()
+        table_id = table.id
+    region = Region(
+        id=uuid.uuid4(),
+        page_id=page.id,
+        page_number=page_number,
+        reading_order=reading_order,
+        region_type="table",
+    )
+    region_table = RegionTable(
+        id=uuid.uuid4(),
+        region_id=region.id,
+        table_id=table_id,
+        reading_order=0,
+        row_start=row_start,
+        row_end=row_start + len(rows) - 1,
+        col_start=col_start,
+        col_end=col_start + max(len(row) for row in rows) - 1,
+    )
+    cells = [
+        TableCell(
+            id=uuid.uuid4(),
+            region_table_id=region_table.id,
+            row_idx=row_index,
+            col_idx=col_index,
+            row_span=1,
+            col_span=(spans or {}).get((row_index, col_index), 1),
+            text_content=value,
+            is_header=row_index < header_rows,
+        )
+        for row_index, row in enumerate(rows)
+        for col_index, value in enumerate(row)
+        if value is not None
+    ]
+    db_session.add_all([region, region_table, *cells])
+    document = await db_session.get(Document, document_id)
+    document.status = "completed"
+    document.page_count = max(document.page_count or 0, page_number)
+    await db_session.flush()
+    return {
+        "table_id": table_id,
+        "region_table_id": region_table.id,
+        "region_id": region.id,
+        "cells": {(cell.row_idx, cell.col_idx): cell.id for cell in cells},
+    }
+
+
+async def _search(client, headers, **params):
+    response = await client.get(SEARCH, params=params, headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _matched(snippet):
+    return snippet["text"][snippet["match_start"] : snippet["match_end"]]
+
+
+@pytest.mark.usefixtures("fake_storage", "fake_queue")
+class TestTableCellSearch:
+    async def test_cell_match_has_global_position_and_column_header(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers, "q3-report.pdf")
+        first = await _add_table_part(
+            db_session,
+            document_id,
+            [["Metric", "Value"], ["Gross margin", "41%"], ["Headcount", "120"]],
+            page_number=1,
+        )
+        second = await _add_table_part(
+            db_session,
+            document_id,
+            [["Operating cost", "880"], ["Net revenue", "1,204"]],
+            table_id=first["table_id"],
+            page_number=2,
+            row_start=3,
+            header_rows=0,
+        )
+
+        body = await _search(client, auth_headers, q="revenue")
+
+        assert [hit["id"] for hit in body] == [str(document_id)]
+        [snippet] = body[0]["snippets"]
+        assert snippet["source"] == "table_cell"
+        assert snippet["region_id"] == str(second["region_id"])
+        assert snippet["page_number"] == 2
+        assert snippet["text"] == "Net revenue"
+        assert _matched(snippet) == "revenue"
+        assert snippet["edited"] is False
+        assert snippet["table_cell"] == {
+            "table_id": str(first["table_id"]),
+            "region_table_id": str(second["region_table_id"]),
+            "cell_id": str(second["cells"][(1, 0)]),
+            "row": 4,
+            "col": 0,
+            "row_span": 1,
+            "col_span": 1,
+            "is_header": False,
+            "column_header": "Metric",
+        }
+
+    async def test_global_column_adds_the_part_column_offset(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        part = await _add_table_part(
+            db_session,
+            document_id,
+            [["Region", "Total"], ["North", "quarterly 12"]],
+            col_start=2,
+        )
+
+        body = await _search(client, auth_headers, q="quarterly")
+
+        cell = body[0]["snippets"][0]["table_cell"]
+        assert cell["cell_id"] == str(part["cells"][(1, 1)])
+        assert (cell["row"], cell["col"]) == (1, 3)
+        assert cell["column_header"] == "Total"
+
+    async def test_column_header_comes_from_a_spanning_header(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        await _add_table_part(
+            db_session,
+            document_id,
+            [["Name", "Amounts", None], ["Rent", "100", "quarterly fee"]],
+            spans={(0, 1): 2},
+        )
+
+        body = await _search(client, auth_headers, q="quarterly")
+
+        cell = body[0]["snippets"][0]["table_cell"]
+        assert cell["col"] == 2
+        assert cell["column_header"] == "Amounts"
+
+    async def test_header_cell_match_has_no_column_header(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        await _add_table_part(
+            db_session,
+            document_id,
+            [["Quarterly total", "Notes"], ["10", "fine"]],
+        )
+
+        body = await _search(client, auth_headers, q="quarterly")
+
+        cell = body[0]["snippets"][0]["table_cell"]
+        assert cell["is_header"] is True
+        assert cell["column_header"] is None
+
+    async def test_cell_without_header_has_no_column_header(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        await _add_table_part(
+            db_session, document_id, [["quarterly", "10"]], header_rows=0
+        )
+
+        body = await _search(client, auth_headers, q="quarterly")
+
+        assert body[0]["snippets"][0]["table_cell"]["column_header"] is None
+
+    async def test_phrase_query_inside_a_cell(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        part = await _add_table_part(
+            db_session,
+            document_id,
+            [["Line", "Item"], ["1", "net operating revenue"]],
+        )
+
+        body = await _search(client, auth_headers, q='"operating revenue"')
+        snippet = body[0]["snippets"][0]
+        assert snippet["table_cell"]["cell_id"] == str(part["cells"][(1, 1)])
+        assert _matched(snippet) == "operating revenue"
+
+        assert await _search(client, auth_headers, q='"revenue operating"') == []
+
+    async def test_all_terms_must_match_the_same_cell(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        await _add_table_part(
+            db_session, document_id, [["Metric", "Value"], ["revenue", "quarterly"]]
+        )
+
+        assert await _search(client, auth_headers, q="revenue quarterly") == []
+
+    async def test_ocr_confusable_inside_a_cell(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        await _add_table_part(
+            db_session, document_id, [["Year", "Total"], ["2O24", "1,204"]]
+        )
+
+        body = await _search(client, auth_headers, q="2024")
+
+        snippet = body[0]["snippets"][0]
+        assert snippet["source"] == "table_cell"
+        assert _matched(snippet) == "2O24"
+
+    async def test_long_cell_text_is_trimmed_like_region_snippets(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        await _add_table_part(
+            db_session,
+            document_id,
+            [["Notes"], [("a" * 80) + " quarterly " + ("b" * 80)]],
+        )
+
+        body = await _search(client, auth_headers, q="quarterly")
+
+        snippet = body[0]["snippets"][0]
+        assert snippet["text"].startswith("...")
+        assert snippet["text"].endswith("...")
+        assert _matched(snippet) == "quarterly"
+
+    async def test_text_snippets_keep_text_source(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        await _add_text(db_session, document_id, "the quarterly summary")
+
+        body = await _search(client, auth_headers, q="quarterly")
+
+        snippet = body[0]["snippets"][0]
+        assert snippet["source"] == "text"
+        assert snippet["table_cell"] is None
+
+    async def test_scope_text_excludes_cells(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        paragraph = await _add_text(db_session, document_id, "quarterly plan")
+        await _add_table_part(
+            db_session, document_id, [["Metric"], ["quarterly cost"]], reading_order=1
+        )
+
+        body = await _search(client, auth_headers, q="quarterly", scope="text")
+
+        assert [row["region_id"] for row in body[0]["snippets"]] == [str(paragraph)]
+        assert [row["source"] for row in body[0]["snippets"]] == ["text"]
+
+    async def test_scope_tables_excludes_paragraphs(
+        self, client, auth_headers, db_session
+    ):
+        text_only = await _upload(client, auth_headers, "text-only.pdf")
+        await _add_text(db_session, text_only, "quarterly plan")
+        with_table = await _upload(client, auth_headers, "with-table.pdf")
+        await _add_text(db_session, with_table, "quarterly plan")
+        part = await _add_table_part(
+            db_session, with_table, [["Metric"], ["quarterly cost"]], reading_order=1
+        )
+
+        body = await _search(client, auth_headers, q="quarterly", scope="tables")
+
+        assert [hit["id"] for hit in body] == [str(with_table)]
+        assert [row["source"] for row in body[0]["snippets"]] == ["table_cell"]
+        assert body[0]["snippets"][0]["region_id"] == str(part["region_id"])
+
+    async def test_scope_all_is_the_default(self, client, auth_headers, db_session):
+        document_id = await _upload(client, auth_headers)
+        await _add_text(db_session, document_id, "quarterly plan")
+        await _add_table_part(
+            db_session, document_id, [["Metric"], ["quarterly cost"]], reading_order=1
+        )
+
+        default = await _search(client, auth_headers, q="quarterly")
+        explicit = await _search(client, auth_headers, q="quarterly", scope="all")
+
+        assert [row["source"] for row in default[0]["snippets"]] == [
+            "text",
+            "table_cell",
+        ]
+        assert explicit == default
+
+    async def test_unknown_scope_is_422(self, client, auth_headers):
+        response = await client.get(
+            SEARCH, params={"q": "quarterly", "scope": "cells"}, headers=auth_headers
+        )
+        assert response.status_code == 422
+
+    async def test_other_users_cells_are_never_returned(
+        self, client, auth_headers, register, verify, login, db_session
+    ):
+        other = await _other_headers(register, verify, login)
+        theirs = await _upload(client, other, "secret.pdf")
+        await _add_table_part(db_session, theirs, [["Metric"], ["quarterly cost"]])
+
+        for scope in ("all", "tables"):
+            assert (
+                await _search(client, auth_headers, q="quarterly", scope=scope) == []
+            )
+        assert len(await _search(client, other, q="quarterly", scope="tables")) == 1
+
+    async def test_trashed_document_cells_are_excluded(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        await _add_table_part(db_session, document_id, [["Metric"], ["quarterly"]])
+        document = await db_session.get(Document, document_id)
+        document.deleted_at = datetime.now(UTC).replace(tzinfo=None)
+        await db_session.flush()
+
+        assert await _search(client, auth_headers, q="quarterly", scope="tables") == []
+
+    async def test_filters_apply_to_cell_matches(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        await _add_table_part(db_session, document_id, [["Metric"], ["quarterly"]])
+
+        matching = await _search(
+            client, auth_headers, q="quarterly", file_type="application/pdf"
+        )
+        other_type = await _search(
+            client, auth_headers, q="quarterly", file_type="image/png"
+        )
+
+        assert [hit["id"] for hit in matching] == [str(document_id)]
+        assert other_type == []
+
+    async def test_text_and_cell_snippets_are_interleaved_in_reading_order(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        intro = await _add_text(
+            db_session, document_id, "quarterly intro", page_number=1, reading_order=0
+        )
+        part = await _add_table_part(
+            db_session,
+            document_id,
+            [["Metric", "Note"], ["quarterly a", "x"], ["y", "quarterly b"]],
+            page_number=1,
+            reading_order=1,
+        )
+        outro = await _add_text(
+            db_session, document_id, "quarterly outro", page_number=1, reading_order=2
+        )
+        later = await _add_text(
+            db_session, document_id, "quarterly later", page_number=2, reading_order=0
+        )
+
+        body = await _search(client, auth_headers, q="quarterly")
+
+        assert [
+            (row["region_id"], (row["table_cell"] or {}).get("cell_id"))
+            for row in body[0]["snippets"]
+        ] == [
+            (str(intro), None),
+            (str(part["region_id"]), str(part["cells"][(1, 0)])),
+            (str(part["region_id"]), str(part["cells"][(2, 1)])),
+            (str(outro), None),
+            (str(later), None),
+        ]
+
+    async def test_snippet_cap_holds_across_both_sources(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        for order in range(3):
+            await _add_text(
+                db_session, document_id, f"quarterly {order}", reading_order=order * 2
+            )
+        await _add_table_part(
+            db_session,
+            document_id,
+            [["Metric"], ["quarterly a"], ["quarterly b"], ["quarterly c"]],
+            reading_order=1,
+        )
+
+        body = await _search(client, auth_headers, q="quarterly")
+
+        snippets = body[0]["snippets"]
+        assert len(snippets) == 5
+        assert [row["source"] for row in snippets] == [
+            "text",
+            "table_cell",
+            "table_cell",
+            "table_cell",
+            "text",
+        ]
+
+    async def test_documents_keep_the_requested_sort_across_sources(
+        self, client, auth_headers, db_session
+    ):
+        zeta = await _upload(client, auth_headers, "zeta.pdf")
+        await _add_text(db_session, zeta, "quarterly plan")
+        alpha = await _upload(client, auth_headers, "alpha.pdf")
+        await _add_table_part(db_session, alpha, [["Metric"], ["quarterly cost"]])
+
+        by_name = await _search(client, auth_headers, q="quarterly", sort="name")
+
+        assert [hit["id"] for hit in by_name] == [str(alpha), str(zeta)]
+
+    async def test_parsed_tree_exposes_the_matched_cell_id(
+        self, client, auth_headers, db_session
+    ):
+        document_id = await _upload(client, auth_headers)
+        part = await _add_table_part(
+            db_session, document_id, [["Metric"], ["quarterly cost"]]
+        )
+
+        body = await _search(client, auth_headers, q="quarterly")
+        cell_id = body[0]["snippets"][0]["table_cell"]["cell_id"]
+        parsed = await client.get(
+            f"/api/v1/documents/{document_id}/parsed", headers=auth_headers
+        )
+
+        assert parsed.status_code == 200, parsed.text
+        [table] = parsed.json()["tables"]
+        by_id = {cell["id"]: cell for cell in table["cells"]}
+        assert set(by_id) == {str(cell) for cell in part["cells"].values()}
+        assert by_id[cell_id]["text"] == "quarterly cost"

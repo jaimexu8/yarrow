@@ -69,10 +69,15 @@ type ViewerState = {
   // Returns true only when the page differs from the one already current.
   reportVisiblePage: (page: number) => boolean;
 
-  // current find hit; starts from a /search link's ?region=&q=
+  // current find hit; starts from a /search link's ?region=&q=&cell=
   highlightRegionId: string | null;
   highlightQuery: string;
-  setHighlight: (regionId: string | null, query: string) => void;
+  highlightCellId: string | null;
+  setHighlight: (
+    regionId: string | null,
+    query: string,
+    cellId?: string | null
+  ) => void;
 
   // Pages the reader has switched back to the raw original in the original
   // pane. A rotated page (image_key set) shows its corrected upright image by
@@ -134,6 +139,7 @@ export function ViewerProvider({
   refresh,
   highlightRegionId: initialHighlightRegionId = null,
   highlightQuery: initialHighlightQuery = '',
+  highlightCellId: initialHighlightCellId = null,
   children,
 }: {
   document: DocumentSummary;
@@ -144,6 +150,7 @@ export function ViewerProvider({
   refresh: () => void;
   highlightRegionId?: string | null;
   highlightQuery?: string;
+  highlightCellId?: string | null;
   children: ReactNode;
 }) {
   const [mode, setMode] = useState<ViewMode>(initialMode);
@@ -155,6 +162,9 @@ export function ViewerProvider({
     initialHighlightRegionId
   );
   const [highlightQuery, setHighlightQuery] = useState(initialHighlightQuery);
+  const [highlightCellId, setHighlightCellId] = useState<string | null>(
+    initialHighlightCellId
+  );
   const [activeRegionId, setActiveRegionId] = useState<string | null>(null);
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
   const [thumbnailsOpen, setThumbnailsOpenState] = useState(
@@ -254,10 +264,14 @@ export function ViewerProvider({
     });
   }, []);
 
-  const setHighlight = useCallback((regionId: string | null, query: string) => {
-    setHighlightRegionId(regionId);
-    setHighlightQuery(query);
-  }, []);
+  const setHighlight = useCallback(
+    (regionId: string | null, query: string, cellId: string | null = null) => {
+      setHighlightRegionId(regionId);
+      setHighlightQuery(query);
+      setHighlightCellId(cellId);
+    },
+    []
+  );
 
   // Read synchronously by scroll handlers, which can fire before a re-render
   const currentPageRef = useRef(initialPage);
@@ -322,6 +336,7 @@ export function ViewerProvider({
       reportVisiblePage,
       highlightRegionId,
       highlightQuery,
+      highlightCellId,
       setHighlight,
       activeRegionId,
       setActiveRegionId,
@@ -358,6 +373,7 @@ export function ViewerProvider({
       reportVisiblePage,
       highlightRegionId,
       highlightQuery,
+      highlightCellId,
       setHighlight,
       activeRegionId,
       showBoundingBoxes,

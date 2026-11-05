@@ -76,6 +76,7 @@ def simple_table(
     region_table_id = region_table_id or uuid4()
     cells = [
         TableCellNode(
+            id=uuid4(),
             row=row_index,
             col=col_index,
             row_span=1,
@@ -158,6 +159,7 @@ def stitched_table(
             for col_index, value in enumerate(row):
                 cells.append(
                     TableCellNode(
+                        id=uuid4(),
                         row=offset + local_row,
                         col=col_index,
                         row_span=1,

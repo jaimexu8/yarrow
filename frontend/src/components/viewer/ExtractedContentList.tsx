@@ -243,6 +243,7 @@ export function ExtractedContentList() {
     pageCount,
     highlightRegionId,
     highlightQuery,
+    highlightCellId,
     initialPage,
     scrollToPage,
     pageStates,
@@ -298,6 +299,14 @@ export function ExtractedContentList() {
       .find((item) => item.id === highlightRegionId);
     if (!region) return;
     scrollToPage(region.page_number);
+    if (
+      highlightCellId &&
+      tree.tables.some((table) =>
+        table.cells.some((cell) => cell.id === highlightCellId)
+      )
+    ) {
+      return;
+    }
     const timer = window.setTimeout(() => {
       window.document
         .getElementById(`region-${highlightRegionId}`)
@@ -307,7 +316,7 @@ export function ExtractedContentList() {
         });
     }, 50);
     return () => window.clearTimeout(timer);
-  }, [tree, highlightRegionId, highlightQuery, scrollToPage]);
+  }, [tree, highlightRegionId, highlightQuery, highlightCellId, scrollToPage]);
 
   // Opened from a ?page= link
   useEffect(() => {

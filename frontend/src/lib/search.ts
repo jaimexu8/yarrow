@@ -1,5 +1,17 @@
 import api from './api';
 
+export type TableCellMatch = {
+  table_id: string;
+  region_table_id: string;
+  cell_id: string;
+  row: number;
+  col: number;
+  row_span: number;
+  col_span: number;
+  is_header: boolean;
+  column_header: string | null;
+};
+
 export type SearchSnippet = {
   region_id: string;
   page_number: number;
@@ -7,6 +19,8 @@ export type SearchSnippet = {
   match_start: number;
   match_end: number;
   edited?: boolean;
+  source: 'text' | 'table_cell';
+  table_cell: TableCellMatch | null;
 };
 
 export type SearchHit = {
@@ -17,6 +31,8 @@ export type SearchHit = {
 
 export type SearchSort = 'date' | 'name';
 
+export type SearchScope = 'all' | 'text' | 'tables';
+
 export type SearchFilters = {
   /** UTC calendar date, YYYY-MM-DD. Documents uploaded on or after this day. */
   dateFrom?: string;
@@ -26,6 +42,7 @@ export type SearchFilters = {
   fileType?: string;
   /** date = newest first. name = a-z. omitted means date. */
   sort?: SearchSort;
+  scope?: SearchScope;
 };
 
 export async function searchDocuments(
@@ -37,6 +54,7 @@ export async function searchDocuments(
   if (filters?.dateTo) params.date_to = filters.dateTo;
   if (filters?.fileType) params.file_type = filters.fileType;
   if (filters?.sort) params.sort = filters.sort;
+  if (filters?.scope) params.scope = filters.scope;
   const res = await api.get<SearchHit[]>('/api/v1/search/', { params });
   return res.data;
 }

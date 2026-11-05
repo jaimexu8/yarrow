@@ -24,8 +24,12 @@ class RegionTable(Base):
     __tablename__ = "region_tables"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    region_id = Column(UUID(as_uuid=True), ForeignKey("regions.id"), nullable=False)
-    table_id = Column(UUID(as_uuid=True), ForeignKey("tables.id"), nullable=False)
+    region_id = Column(
+        UUID(as_uuid=True), ForeignKey("regions.id"), nullable=False, index=True
+    )
+    table_id = Column(
+        UUID(as_uuid=True), ForeignKey("tables.id"), nullable=False, index=True
+    )
     reading_order = Column(Integer)
     row_start = Column(Integer)
     row_end = Column(Integer)
@@ -41,7 +45,7 @@ class TableCell(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     region_table_id = Column(
-        UUID(as_uuid=True), ForeignKey("region_tables.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("region_tables.id"), nullable=False, index=True
     )
     row_idx = Column(Integer)
     col_idx = Column(Integer)

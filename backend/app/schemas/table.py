@@ -38,6 +38,7 @@ class RowSource(StrictModel):
 
 
 class TableCellNode(StrictModel):
+    id: UUID
     row: int = Field(description="Global row: part.row_start + TableCell.row_idx")
     col: int
     row_span: int
