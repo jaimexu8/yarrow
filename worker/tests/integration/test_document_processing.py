@@ -287,7 +287,7 @@ class TestDocumentProcessing:
                     assert job.status == expected_status, f"{gt['file']}: {job.error_message}"
                     assert job.error_message == expected_summary, gt["file"]
                     assert job.total_pages == expected_pages, gt["file"]
-                    assert job.pages_processed == expected_succeeded, gt["file"]
+                    assert job.pages_processed == expected_pages, gt["file"]
                     assert document.status == expected_status, gt["file"]
                     assert document.page_count == expected_pages, gt["file"]
 
@@ -303,7 +303,8 @@ class TestDocumentProcessing:
                     document = session.get(Document, seeded_document.document_id)
 
                     assert job.status == "completed", f"{gt['file']}: {job.error_message}"
-                    assert job.pages_processed == expected_pages, gt["file"]
+                    assert job.total_pages == len(expected_failed_pages), gt["file"]
+                    assert job.pages_processed == len(expected_failed_pages), gt["file"]
                     assert document.status == "completed", gt["file"]
                     assert document.page_count == expected_pages, gt["file"]
 

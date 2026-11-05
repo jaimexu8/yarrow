@@ -34,3 +34,18 @@ def public_error_message(message: str | None, status: str | None, fallback: str)
         return fallback
     # Not failed and nothing safe to say: show no reason at all.
     return None
+
+
+PAGE_ERROR_MESSAGES: dict[str, str] = {
+    "inference_timeout": "The text recognition service took too long on this page.",
+    "inference_unavailable": "The text recognition service was unavailable while this page was processed.",
+    "inference_error": "The text recognition service could not read this page.",
+    "invalid_page_image": "This page's image could not be read.",
+    "unknown": PAGE_FAILED_MESSAGE,
+}
+
+
+def page_error_message(code: str | None, status: str | None) -> str | None:
+    if status != "failed":
+        return None
+    return PAGE_ERROR_MESSAGES.get(code or "unknown", PAGE_FAILED_MESSAGE)

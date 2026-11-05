@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { ExtractedContentList } from '@/components/viewer/ExtractedContentList';
 import { OriginalPane } from '@/components/viewer/OriginalPane';
+import { ProcessingProgressBar } from '@/components/viewer/ProcessingProgressBar';
 import {
   ReprocessBar,
   ReprocessButton,
@@ -20,13 +21,10 @@ import {
   useViewer,
   type ViewMode,
 } from '@/components/viewer/ViewerContext';
-import { isWorkingOn } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
 import { getDocumentTree, type DocumentTree } from '@/lib/viewer';
 import { TableOperationsDropdown } from '@/components/viewer/TableOperationsMenu';
 import { ExportMenu } from '@/components/viewer/ExportMenu';
-
-const POLL_INTERVAL_MS = 5000;
 
 type Load =
   | { state: 'loading' }
@@ -50,18 +48,12 @@ function DocumentViewer({ documentId }: { documentId: string }) {
 
   useEffect(() => {
     let current = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
 
     async function fetchTree() {
       try {
         const tree = await getDocumentTree(documentId);
         if (!current) return;
         setLoad({ state: 'ready', tree });
-
-        // Only refresh tree if the document is still being worked on
-        if (isWorkingOn(tree.document)) {
-          timer = setTimeout(fetchTree, POLL_INTERVAL_MS);
-        }
       } catch (err) {
         if (!current) return;
         const apiError = toApiError(err);
@@ -79,7 +71,6 @@ function DocumentViewer({ documentId }: { documentId: string }) {
     fetchTree();
     return () => {
       current = false;
-      clearTimeout(timer);
     };
   }, [documentId, attempt]);
 
@@ -173,6 +164,7 @@ function DocumentViewerLayout({ refresh }: { refresh: () => void }) {
           </>
         }
       />
+      <ProcessingProgressBar />
       <ReprocessBar onReprocessed={refresh} />
       <SplitViewer
         original={

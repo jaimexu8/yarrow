@@ -76,11 +76,11 @@ it('listTags fetches this user tags', async () => {
   expect(api.get).toHaveBeenCalledWith('/api/v1/tags/');
 });
 
-it('listDocuments can filter by tag_id', async () => {
+it('listDocuments loads the whole library for tags to filter in the browser', async () => {
   vi.mocked(api.get).mockResolvedValue({ data: [] });
-  await listDocuments('tag-1');
+  await listDocuments();
   expect(api.get).toHaveBeenCalledWith('/api/v1/documents/', {
-    params: { tag_id: 'tag-1' },
+    params: undefined,
   });
 });
 

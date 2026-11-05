@@ -194,7 +194,7 @@ async def load_document_tree(
             width=row.width,
             height=row.height,
             status=row.status,
-            error_message=row.error_message,
+            error_code=row.error_code,
             image_key=row.page_image_key,
             regions=regions_by_page.get(row.id, []),
             warnings=warnings_by_page.get(row.id, []),

@@ -44,12 +44,8 @@ class TestDocumentState:
 
 
 class TestPartialReprocessAccounting:
-    def test_job_status_is_per_run_but_progress_is_per_document(self, session, storage, parser, job):
-        """Reprocessing page 2 alone and failing is a failed job.
-
-        pages_processed stays document-level so it remains comparable with
-        total_pages, while status and error_message describe only this run.
-        """
+    def test_job_status_and_progress_describe_only_the_run(self, session, storage, parser, job):
+        """Reprocessing page 2 alone and failing is a failed job."""
         parser.configure(page_count=3, failed=(2,))
 
         with pytest.raises(AllPagesFailedError):
@@ -57,8 +53,8 @@ class TestPartialReprocessAccounting:
 
         assert job.status == "failed"
         assert job.error_message == "1 of 1 page(s) failed: 2"
-        # Pages 1 and 3 were parsed earlier and are untouched by this run.
-        assert job.pages_processed == 2
+        assert job.total_pages == 1
+        assert job.pages_processed == 1
 
         # The other two pages were never touched and still hold content.
         assert job.document.status == "completed"
@@ -76,4 +72,5 @@ class TestPartialReprocessAccounting:
 
         assert job.status == "completed"
         assert job.error_message is None
-        assert job.pages_processed == 1
+        assert job.total_pages == 0
+        assert job.pages_processed == 0

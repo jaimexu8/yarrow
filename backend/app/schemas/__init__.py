@@ -56,6 +56,7 @@ from .parsed import (
     RegionNode,
     WarningNode,
 )
+from .progress import DocumentProgress, PageProgress, PageStatus
 from .sharing import (
     DocumentShareOut,
     ShareDocumentRequest,
@@ -95,6 +96,7 @@ __all__ = [
     "DocumentDetail",
     "DocumentFolderUpdate",
     "DocumentOut",
+    "DocumentProgress",
     "DocumentRename",
     "DocumentShareOut",
     "DocumentStats",
@@ -114,6 +116,8 @@ __all__ = [
     "OAuthCallbackRequest",
     "PageNode",
     "PageOut",
+    "PageProgress",
+    "PageStatus",
     "PasswordResetConfirm",
     "PasswordResetRequest",
     "RegionNode",

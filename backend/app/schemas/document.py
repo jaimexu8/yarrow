@@ -10,7 +10,7 @@ from app.schemas.common import StrictModel
 from app.schemas.tag import TagOut
 from app.services.failure_messages import (
     DOCUMENT_FAILED_MESSAGE,
-    PAGE_FAILED_MESSAGE,
+    page_error_message,
     public_error_message,
 )
 
@@ -41,14 +41,12 @@ class PageOut(BaseModel):
     status: str | None = None
     width: float | None = None
     height: float | None = None
+    error_code: str | None = None
     error_message: str | None = None
 
     @model_validator(mode="after")
     def _only_user_facing_errors(self):
-        # The worker may store raw exception text here (US-11, NFR-6).
-        self.error_message = public_error_message(
-            self.error_message, self.status, PAGE_FAILED_MESSAGE
-        )
+        self.error_message = page_error_message(self.error_code, self.status)
         return self
 
 

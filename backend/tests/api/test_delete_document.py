@@ -9,6 +9,7 @@ from yarrow_db.models import (
     Document,
     DocumentShare,
     Job,
+    JobPage,
     Page,
     Region,
     RegionImage,
@@ -228,6 +229,37 @@ class TestDeleteInAnyState:
         assert job.status == "canceled"
         assert document.status == "canceled"
         assert document.deleted_at is not None
+
+    async def test_deleting_a_running_document_cancels_its_open_pages(
+        self, client, auth_headers, fake_storage, fake_queue, revoked, db_session
+    ):
+        document_id, job_id = await _upload(client, auth_headers)
+        job = await db_session.get(Job, job_id)
+        job.status = "processing"
+        db_session.add_all(
+            [
+                JobPage(job_id=job_id, page_number=1, status="completed"),
+                JobPage(job_id=job_id, page_number=2, status="processing"),
+            ]
+        )
+        await db_session.flush()
+
+        response = await client.delete(
+            f"{DOCUMENTS}{document_id}", headers=auth_headers
+        )
+
+        assert response.status_code == 204, response.text
+        await db_session.refresh(job)
+        assert job.status == "canceled"
+        assert job.current_stage == "canceled"
+        statuses = (
+            await db_session.execute(
+                select(JobPage.status)
+                .where(JobPage.job_id == job_id)
+                .order_by(JobPage.page_number)
+            )
+        ).scalars().all()
+        assert statuses == ["completed", "canceled"]
 
     @pytest.mark.parametrize("status", ["processing", "failed", "canceled"])
     async def test_document_in_other_states_is_deleted(
