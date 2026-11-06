@@ -74,8 +74,10 @@ jobs:
           VALKEY_HOST: localhost
           VALKEY_PORT: ${{ job.services.valkey.ports[6379] }}
         run: |
+          # Two workers for the 2-core runner; each worker uses its own
+          # test database (see tests/conftest.py).
           cd backend
-          pytest
+          pytest -n 2
       - name: Run worker tests
         run: |
           cd worker

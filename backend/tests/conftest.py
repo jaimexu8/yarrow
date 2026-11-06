@@ -26,7 +26,24 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 os.environ.setdefault("POSTGRES_HOST", "localhost")
 os.environ.setdefault("VALKEY_HOST", "localhost")
+# Under pytest-xdist each worker migrates and uses its own test database.
+# Sharing one would make the session fixture race on CREATE DATABASE, and
+# whole-table assertions (e.g. "no Batch rows") would see other workers' rows.
+_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER")
+if _xdist_worker is not None:
+    os.environ.setdefault("POSTGRES_TEST_DB", f"yarrow_test_{_xdist_worker}")
 os.environ["POSTGRES_DB"] = os.environ.get("POSTGRES_TEST_DB", "yarrow_test")
+
+# bcrypt's default cost 12 takes ~0.17s per operation here, and the suite
+# runs ~944 bcrypt operations (484 hashes plus 460 password checks), so at
+# the default cost the whole run spends over two minutes just hashing. Cost 4
+# is ~0.7ms per operation, dropping that to under a second, and it still
+# exercises the same hashing code path (the $2b$ prefix and length handling
+# are the same). Test-only: production code is untouched.
+import bcrypt
+
+_real_gensalt = bcrypt.gensalt
+bcrypt.gensalt = lambda: _real_gensalt(rounds=4)
 
 import asyncpg
 import pytest
@@ -321,7 +338,13 @@ def fake_queue(monkeypatch: pytest.MonkeyPatch) -> EnqueuedJobs:
         enqueued.priorities[job_id] = priority
         return f"task-{len(enqueued)}"
 
+    def _revoke(task_id, *args, **kwargs):
+        # A real revoke would dial the Celery broker; there is none in tests,
+        # and an unreachable broker makes Celery retry for over two minutes.
+        return None
+
     monkeypatch.setattr(documents, "enqueue_document_processing", _enqueue)
+    monkeypatch.setattr(documents, "revoke_document_processing", _revoke)
     monkeypatch.setattr(uploads, "enqueue_document_processing", _enqueue)
     monkeypatch.setattr(cloud_storage, "enqueue_document_processing", _enqueue)
     return enqueued

@@ -34,6 +34,8 @@ redis = "*"
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
 pytest-asyncio = "*"
+# CI runs the suite with -n 2 (one test DB per worker; see tests/conftest.py).
+pytest-xdist = "*"
 httpx = "*"
 ruff = "*"
 mypy = "*"
