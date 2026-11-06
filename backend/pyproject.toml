@@ -35,6 +35,7 @@ httpx = "*"
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
 pytest-asyncio = "*"
+pytest-xdist = "*"
 ruff = "*"
 mypy = "*"
 respx = "*"
