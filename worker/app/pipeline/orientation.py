@@ -34,6 +34,11 @@ class OrientationCorrector:
     # and gray paper read as "bottom-heavy", so the flip would turn upright
     # pages upside down; it is suppressed below this threshold.
     MIN_NEAR_WHITE = 0.90
+    # How far apart the two upright candidates' scores must be before the
+    # 180-degree flip is applied. A missed flip is preferred over flipping an upright page.
+    # Validated against the rotation test fixture: its genuinely rotated
+    # pages score 0.57-0.64, while observed false flips score 0.09-0.38.
+    MIN_UPRIGHT_GAP = 0.5
 
     def correct_page(self, page_b64: str) -> tuple[str, float, float]:
         """Return (corrected_b64, content_rotation_deg, confidence).
@@ -72,6 +77,14 @@ class OrientationCorrector:
                 # upright page upside down. We still apply a tilt-only
                 # correction for those (the angle is trustworthy); we just
                 # never 180-degree-flip a non-white page.
+                flip = False
+            elif flip and upright_gap < self.MIN_UPRIGHT_GAP:
+                # The scorer is not confident enough to flip: the ink may be
+                # bottom-heavy on a page that is already upright.
+                logger.info(
+                    f"180-degree flip suppressed, upright gap {upright_gap:.3f} "
+                    f"below {self.MIN_UPRIGHT_GAP}"
+                )
                 flip = False
             if flip:
                 angle = (angle + 180.0) % 360.0
