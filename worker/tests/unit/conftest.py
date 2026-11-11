@@ -19,16 +19,12 @@ class FakeResult:
 
     def scalar_one(self):
         if len(self.rows) != 1:
-            raise ValueError(
-                f"Expected exactly one result, got {len(self.rows)}"
-            )
+            raise ValueError(f"Expected exactly one result, got {len(self.rows)}")
         return self.rows[0]
 
     def scalar_one_or_none(self):
         if len(self.rows) > 1:
-            raise ValueError(
-                f"Expected at most one result, got {len(self.rows)}"
-            )
+            raise ValueError(f"Expected at most one result, got {len(self.rows)}")
         return self.rows[0] if self.rows else None
 
     def all(self):
@@ -36,7 +32,8 @@ class FakeResult:
 
     def scalars(self):
         return FakeScalarResult(self.rows)
-    
+
+
 class FakeScalarResult:
     def __init__(self, rows):
         self.rows = rows
@@ -49,11 +46,9 @@ class FakeScalarResult:
 
     def one(self):
         if len(self.rows) != 1:
-            raise ValueError(
-                f"Expected exactly one result, got {len(self.rows)}"
-            )
+            raise ValueError(f"Expected exactly one result, got {len(self.rows)}")
         return self.rows[0]
-    
+
 
 class FakeSession:
     def __init__(self, store):
@@ -93,20 +88,31 @@ class FakeSession:
         if Page in entities:
             # The page_image_key select reads the stored keys back; answer it
             # from the configured prior-run keys so the replaced-list logic runs.
-            if any(getattr(column, "name", None) == "page_image_key" for column in getattr(statement, "column_descriptions", [])):
+            if any(
+                getattr(column, "name", None) == "page_image_key"
+                for column in getattr(statement, "column_descriptions", [])
+            ):
                 return FakeResult(self.existing_page_image_keys)
             # The manual-rotation select reads the stored overrides back; answer
             # with nothing (no override) unless a test sets one.
-            if any(getattr(column, "name", None) == "manual_rotation_deg" for column in getattr(statement, "column_descriptions", [])):
+            if any(
+                getattr(column, "name", None) == "manual_rotation_deg"
+                for column in getattr(statement, "column_descriptions", [])
+            ):
                 return FakeResult(self.existing_manual_rotations)
             return FakeResult(
-                [(page.page_number, page.status) for page in self.added
-                 if isinstance(page, Page)]
+                [
+                    (page.page_number, page.status)
+                    for page in self.added
+                    if isinstance(page, Page)
+                ]
             )
         if RegionImage in entities:
             return FakeResult(self.existing_image_keys)
         if JobPage in entities:
-            return FakeResult([job_page for job_page in self.added if isinstance(job_page, JobPage)])
+            return FakeResult(
+                [job_page for job_page in self.added if isinstance(job_page, JobPage)]
+            )
         return FakeResult()
 
     def scalar(self, statement):
@@ -114,11 +120,12 @@ class FakeSession:
 
     def flush(self):
         return
-        
+
+
 class FakeStorage:
     def __init__(self, store: dict[str, bytes]):
         self.store = store
-    
+
     def download_bytes(self, storage_key) -> bytes:
         return b"fake"
 
@@ -127,11 +134,11 @@ class FakeStorage:
 
     def delete_file(self, key) -> None:
         self.store.pop(key, None)
-        
+
 
 class FakeDocumentParser:
     page_count = 1
-    
+
     failed = ()
     load_error = None
     inference_error = None
@@ -139,7 +146,7 @@ class FakeDocumentParser:
     # 1-based page number -> content rotation, for pages the fake corrects
     corrected_pages: ClassVar[dict[int, float]] = {}
     models: ClassVar[dict[int, ModelInfo]] = {}
-    
+
     def __init__(self, on_page_event=None) -> None:
         self.on_page_event = on_page_event
         self.pages: list[str] = []
@@ -152,9 +159,18 @@ class FakeDocumentParser:
         self.page_orientations: dict[int, float] = {}
         self.manual_rotations: dict[int, int] = {}
         self.page_models: dict[int, ModelInfo] = {}
-            
+
     @classmethod
-    def configure(cls, page_count=1, failed=(), load_error=None, inference_error=None, figures=None, corrected_pages=None, models=None):
+    def configure(
+        cls,
+        page_count=1,
+        failed=(),
+        load_error=None,
+        inference_error=None,
+        figures=None,
+        corrected_pages=None,
+        models=None,
+    ):
         cls.page_count = page_count
         cls.failed = failed
         cls.load_error = load_error
@@ -163,18 +179,19 @@ class FakeDocumentParser:
         cls.figures = dict(figures or {})
         cls.corrected_pages = dict(corrected_pages or {})
         cls.models = dict(models or {})
-    
+
     @property
     def failed_page_numbers(self) -> list[int]:
         return sorted(FakeDocumentParser.failed)
-    
+
     def load_file(self, file_data):
         if FakeDocumentParser.load_error is not None:
             raise FakeDocumentParser.load_error
-        
+
         self.pages = [f"page_{i}" for i in range(FakeDocumentParser.page_count)]
-    
-    def correct_orientations(self):
+
+    def correct_orientations(self, pages_to_process=None):
+        self.orientations_scope = pages_to_process
         # The real parser rewrites self.pages in place; the fake keeps its
         # placeholder pages and only records which were "corrected".
         for page_number, angle in FakeDocumentParser.corrected_pages.items():
@@ -184,8 +201,8 @@ class FakeDocumentParser:
         # The real parser rotates the page image in place; the fake keeps its
         # placeholder pages and only records which were manually rotated.
         self.manual_rotations.update(rotations)
-    
-    def process_sync(self, page_to_process = None):
+
+    def process_sync(self, page_to_process=None):
         if FakeDocumentParser.inference_error is not None:
             raise FakeDocumentParser.inference_error
         self.page_models = {
@@ -193,8 +210,10 @@ class FakeDocumentParser:
             for index, model in FakeDocumentParser.models.items()
             if index + 1 not in FakeDocumentParser.failed
         }
-    
-    def to_model_objects(self, document, target_pages = None, merge_consecutive_tables=False):
+
+    def to_model_objects(
+        self, document, target_pages=None, merge_consecutive_tables=False
+    ):
         output = []
         self.page_images = {}
         for number in range(1, len(self.pages) + 1):
@@ -217,7 +236,7 @@ class FakeDocumentParser:
             if number - 1 in self.manual_rotations:
                 page.manual_rotation_deg = self.manual_rotations[number - 1]
             output.append(page)
-        
+
         document.page_count = len(self.pages)
 
         self.figure_images = dict(FakeDocumentParser.figures)
@@ -225,9 +244,10 @@ class FakeDocumentParser:
             RegionImage(id=uuid4(), region_id=uuid4(), image_key=key)
             for key in self.figure_images
         )
-        
+
         return output
-    
+
+
 @pytest.fixture
 def job(store):
     document = Document(
@@ -253,28 +273,31 @@ def job(store):
     store[("Document", document.id)] = document
     return job
 
+
 @pytest.fixture
 def store():
     return {}
 
+
 @pytest.fixture
 def session(store, monkeypatch):
     fake_session = FakeSession(store)
-    
+
     @contextmanager
     def session_scope():
         yield fake_session
-        
+
     monkeypatch.setattr(ingestion, "session_scope", session_scope)
     return fake_session
+
 
 @pytest.fixture
 def storage(store, monkeypatch):
     fake_storage = FakeStorage(store)
-    
+
     def get_storage():
         return fake_storage
-        
+
     monkeypatch.setattr(ingestion, "get_storage", get_storage)
     return fake_storage
 
