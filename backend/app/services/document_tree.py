@@ -196,6 +196,7 @@ async def load_document_tree(
             status=row.status,
             error_code=row.error_code,
             image_key=row.page_image_key,
+            manual_rotation_deg=row.manual_rotation_deg,
             has_thumbnail=row.thumbnail_key is not None,
             model_name=row.model_name,
             model_version=row.model_version,

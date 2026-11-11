@@ -57,6 +57,7 @@ export type PageNode = {
   // Set only when the page was rotated before OCR. The viewer shows the
   // corrected upright image for those pages; null for everything else.
   image_key: string | null;
+  manual_rotation_deg?: number | null;
   has_thumbnail: boolean;
   model_name?: string | null;
   model_version?: string | null;
@@ -171,14 +172,18 @@ export async function getRegionImage(
 /**
  * The corrected upright image of a page that was rotated before OCR, for
  * pages with an image_key. Fetched through the API client for the same
- * reason as the original file.
+ * reason as the original file. `version` (the tree's generated_at) busts the
+ * browser cache after a rotation re-stores the image at the same key.
  */
 export async function getPageImage(
   documentId: string,
-  pageNumber: number
+  pageNumber: number,
+  version?: string
 ): Promise<Blob> {
   const res = await api.get<Blob>(
-    `/api/v1/documents/${documentId}/pages/${pageNumber}/image`,
+    `/api/v1/documents/${documentId}/pages/${pageNumber}/image${
+      version ? `?v=${encodeURIComponent(version)}` : ''
+    }`,
     { responseType: 'blob' }
   );
   return res.data;

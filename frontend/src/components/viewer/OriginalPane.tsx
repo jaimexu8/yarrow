@@ -171,6 +171,7 @@ export function OriginalPane({
                     documentId={document.id}
                     pageNumber={pageNumber}
                     fallbackAspectRatio={aspectRatio}
+                    version={tree?.generated_at}
                     renderOverlay={renderPageOverlay}
                   />
                 ) : (

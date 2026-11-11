@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { RotateCw } from 'lucide-react';
+import { RotateCcw, RotateCw } from 'lucide-react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
+import { isWorkingOn } from '@/lib/documents';
 import { cn } from '@/lib/cn';
 import { getPageImage, type PageNode } from '@/lib/viewer';
 import { useViewer } from './ViewerContext';
@@ -39,10 +42,23 @@ export function PageFrame({
   children: ReactNode;
   renderOverlay?: RenderPageOverlay;
 }) {
-  const { tree, registerPage, pageRotations, rotatePage } = useViewer();
+  const {
+    document,
+    tree,
+    canEdit,
+    registerPage,
+    pageRotations,
+    rotatePage,
+    savePageRotation,
+    resetPageRotation,
+  } = useViewer();
   const frame = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [rotationError, setRotationError] = useState<string | null>(null);
   const rotation = pageRotations[pageNumber] ?? 0;
+  const busy = saving || resetting;
 
   useEffect(() => {
     const element = frame.current;
@@ -113,20 +129,71 @@ export function PageFrame({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          aria-label={`Rotate page ${pageNumber} clockwise`}
-          title="Rotate clockwise"
-          onClick={() => rotatePage(pageNumber)}
-          className="absolute bottom-2 right-2 z-20 flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-white/95 px-2 text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-        >
-          <RotateCw className="size-4" />
-          {rotation > 0 && (
-            <span className="text-xs font-medium tabular-nums">
-              {rotation}°
-            </span>
-          )}
-        </button>
+        {canEdit && !isWorkingOn(document) && (
+          <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1.5">
+            {/* The secondary actions sit to the left of the rotate button, so
+                it always keeps its spot at the right edge and a new button
+                appearing never nudges it (which risks a mis-click when
+                rotating a page several times in a row). */}
+            {rotation > 0 && (
+              <Button
+                variant="secondary"
+                className="h-8 w-auto px-2.5 py-0 text-xs"
+                loading={saving}
+                disabled={busy}
+                onClick={async () => {
+                  setSaving(true);
+                  setRotationError(null);
+                  const error = await savePageRotation(pageNumber);
+                  setSaving(false);
+                  if (error) setRotationError(error);
+                }}
+              >
+                Save rotation
+              </Button>
+            )}
+            {rotation === 0 && page?.manual_rotation_deg != null && (
+              <Button
+                variant="secondary"
+                className="h-8 w-auto px-2.5 py-0 text-xs"
+                loading={resetting}
+                disabled={busy}
+                onClick={async () => {
+                  setResetting(true);
+                  setRotationError(null);
+                  const error = await resetPageRotation(pageNumber);
+                  setResetting(false);
+                  if (error) setRotationError(error);
+                }}
+              >
+                <RotateCcw className="size-4" />
+                Reset
+              </Button>
+            )}
+            <button
+              type="button"
+              aria-label={`Rotate page ${pageNumber} clockwise`}
+              title="Rotate clockwise"
+              onClick={() => {
+                setRotationError(null);
+                rotatePage(pageNumber);
+              }}
+              className="flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-white/95 px-2 text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            >
+              <RotateCw className="size-4" />
+              {rotation > 0 && (
+                <span className="text-xs font-medium tabular-nums">
+                  {rotation}°
+                </span>
+              )}
+            </button>
+            {rotationError && (
+              <Alert tone="error" className="w-auto">
+                {rotationError}
+              </Alert>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -278,6 +345,7 @@ export function CorrectedPageView({
   documentId,
   pageNumber,
   fallbackAspectRatio,
+  version,
   renderOverlay,
 }: {
   documentId: string;
@@ -285,6 +353,9 @@ export function CorrectedPageView({
   // The original page's aspect, used until the corrected image's own aspect
   // is known, so the frame does not jump on load.
   fallbackAspectRatio: number;
+  // Bumps when the page is re-OCRed (e.g. a saved rotation), so the corrected
+  // image is refetched at its new, cache-busted URL.
+  version?: string;
   renderOverlay?: RenderPageOverlay;
 }) {
   const { document } = useViewer();
@@ -298,7 +369,7 @@ export function CorrectedPageView({
     let url: string | null = null;
     let cancelled = false;
 
-    getPageImage(documentId, pageNumber)
+    getPageImage(documentId, pageNumber, version)
       .then((blob) => {
         if (cancelled) return;
         url = URL.createObjectURL(blob);

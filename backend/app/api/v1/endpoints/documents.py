@@ -18,6 +18,7 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import DBAPIError
@@ -104,6 +105,7 @@ from app.services.reprocess import (
     ReprocessError,
     documents_out,
     reprocess_document,
+    rotate_document_page,
 )
 from app.services.upload_sessions import purge_expired_upload_sessions
 
@@ -883,6 +885,51 @@ async def move_document_to_folder(
     document.folder_id = body.folder_id
     await db.commit()
     await db.refresh(document)
+    return (await documents_out(db, [document]))[0]
+
+
+class RotatePageRequest(BaseModel):
+    # The absolute rotation (degrees, clockwise from the original page) the
+    # page should be re-OCRed at. 0/90/180/270, or None to clear the override
+    # and let auto-detection decide again.
+    degrees: int | None = None
+
+
+@router.post("/{document_id}/pages/{page_number}/rotate", response_model=DocumentOut)
+async def rotate_page_endpoint(
+    page_number: int,
+    body: RotatePageRequest,
+    access: DocumentAccess = Depends(require_edit_access),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-OCR one page at the user's chosen rotation.
+
+    The page is re-run through the pipeline rotated to `degrees` (CW from the
+    original), which replaces its stored text, regions, tables, warnings and
+    corrected image. A `null` degrees clears the override so auto-detection
+    decides the page's orientation again. A document whose job is still
+    running is refused with a 409.
+    """
+    document_id = access.document.id
+    outcome = await rotate_document_page(
+        db,
+        document_id,
+        enqueue_document_processing,
+        page_number,
+        body.degrees,
+        requested_by_id=current_user.id,
+    )
+    if not outcome.ok:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+                if outcome.error is ReprocessError.QUEUE_UNAVAILABLE
+                else status.HTTP_409_CONFLICT
+            ),
+            detail={"detail": outcome.detail, "code": outcome.error.value},
+        )
+    document = await db.get(Document, document_id, populate_existing=True)
     return (await documents_out(db, [document]))[0]
 
 

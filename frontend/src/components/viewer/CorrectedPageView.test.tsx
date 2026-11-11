@@ -14,9 +14,12 @@ const { viewer } = vi.hoisted(() => ({
   viewer: {
     document: null as unknown as DocumentSummary,
     tree: null as unknown,
+    canEdit: true,
     registerPage: vi.fn(),
     pageRotations: {} as Record<number, number>,
     rotatePage: vi.fn(),
+    savePageRotation: vi.fn(async () => null),
+    resetPageRotation: vi.fn(async () => null),
   },
 }));
 
@@ -71,6 +74,8 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  viewer.tree = null;
+  viewer.pageRotations = {};
 });
 
 test('shows the corrected upright image from the page-image endpoint', async () => {
@@ -95,7 +100,7 @@ test('shows the corrected upright image from the page-image endpoint', async () 
 
   // The corrected page is fetched through the page-image endpoint for this page.
   await waitFor(() => {
-    expect(getPageImage).toHaveBeenCalledWith('doc-1', 3);
+    expect(getPageImage).toHaveBeenCalledWith('doc-1', 3, undefined);
   });
 
   // The upright image is rendered, not the raw original.
@@ -158,4 +163,74 @@ test('the rotate button turns the page clockwise by 90 degrees at a time', async
   expect(vi.mocked(viewer.rotatePage)).toHaveBeenNthCalledWith(1, 3);
   expect(vi.mocked(viewer.rotatePage)).toHaveBeenNthCalledWith(2, 3);
   expect(vi.mocked(viewer.rotatePage)).toHaveBeenNthCalledWith(3, 3);
+});
+
+function treeWithPage(overrides: Record<string, unknown> = {}): unknown {
+  return {
+    pages: [
+      {
+        page_number: 3,
+        image_key: null,
+        manual_rotation_deg: null,
+        warnings: [],
+        ...overrides,
+      },
+    ],
+  };
+}
+
+test('the save rotation button persists the on-screen rotation', async () => {
+  vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+  vi.stubGlobal('Image', FakeImage);
+  vi.stubGlobal('URL', {
+    createObjectURL: vi.fn(() => 'blob:corrected-url'),
+    revokeObjectURL: vi.fn(),
+  });
+  viewer.document = documentSummary();
+  viewer.tree = treeWithPage();
+  viewer.pageRotations = { 3: 90 };
+  vi.mocked(getPageImage).mockResolvedValueOnce(
+    new Blob(['png'], { type: 'image/png' })
+  );
+
+  render(
+    <CorrectedPageView
+      documentId="doc-1"
+      pageNumber={3}
+      fallbackAspectRatio={0.8}
+    />
+  );
+
+  // A turned page offers a save button; clicking it persists the rotation.
+  const save = await screen.findByRole('button', { name: /save rotation/i });
+  fireEvent.click(save);
+  expect(vi.mocked(viewer.savePageRotation)).toHaveBeenCalledWith(3);
+});
+
+test('the reset button clears a stored manual rotation', async () => {
+  vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+  vi.stubGlobal('Image', FakeImage);
+  vi.stubGlobal('URL', {
+    createObjectURL: vi.fn(() => 'blob:corrected-url'),
+    revokeObjectURL: vi.fn(),
+  });
+  viewer.document = documentSummary();
+  viewer.tree = treeWithPage({ manual_rotation_deg: 90 });
+  viewer.pageRotations = {};
+  vi.mocked(getPageImage).mockResolvedValueOnce(
+    new Blob(['png'], { type: 'image/png' })
+  );
+
+  render(
+    <CorrectedPageView
+      documentId="doc-1"
+      pageNumber={3}
+      fallbackAspectRatio={0.8}
+    />
+  );
+
+  // A page with a stored override and no on-screen rotation offers a reset.
+  const reset = await screen.findByRole('button', { name: /reset/i });
+  fireEvent.click(reset);
+  expect(vi.mocked(viewer.resetPageRotation)).toHaveBeenCalledWith(3);
 });
