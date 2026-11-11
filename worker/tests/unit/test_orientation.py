@@ -1,5 +1,6 @@
 import base64
 import io
+import os
 
 import pytest
 from PIL import Image, ImageDraw
@@ -140,3 +141,64 @@ class TestOrientationCorrector:
         assert confidence == 0.0
         # The corrected image no longer needs the tag (transposed away).
         assert out.getexif().get(0x0112) in (None, 1)
+
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+TEST_DOCS_DIR = os.path.join(HERE, "..", "integration", "test_docs")
+
+
+def _fixture_b64(name):
+    """Load a rendered page fixture from the integration test_docs directory."""
+    with open(os.path.join(TEST_DOCS_DIR, name), "rb") as handle:
+        return base64.b64encode(handle.read()).decode("utf-8")
+
+
+class TestAscenderCue:
+    """Regression tests for the two-sided 180-degree ascender/descender cue.
+
+    They guard the two failure modes the top-heavy
+    scorer gets wrong, and the abstain behavior on digit-only pages.
+    """
+
+    corrector = OrientationCorrector()
+
+    def test_bottom_heavy_upright_page_is_not_flipped(self):
+        """A bottom-heavy page that is already upright must not be flipped.
+
+        The top-heavy scorer wants a 180-degree flip here (the dense text sits
+        in the bottom), but the ascender cue votes strongly upright and vetoes
+        it.
+        """
+        b64 = _fixture_b64("bottom_heavy_upright.png")
+        corrected, reported, confidence = self.corrector.correct_page(b64)
+
+        assert _deg_diff(reported, 0.0) <= 3.0, f"expected upright, got {reported}"
+        assert corrected == b64, "an upright page must be left unchanged"
+
+    def test_bottom_heavy_upside_down_page_is_flipped(self):
+        """A bottom-heavy page that is upside down must be flipped.
+
+        The mirror of the above: the top-heavy scorer misses the flip (the dense
+        text is at the top of the as-is page), but the ascender cue votes
+        strongly flipped and forces the 180-degree correction.
+        """
+        b64 = _fixture_b64("bottom_heavy_upside_down.png")
+        corrected, reported, confidence = self.corrector.correct_page(b64)
+
+        assert _deg_diff(reported, 180.0) <= 3.0, f"expected a 180 flip, got {reported}"
+        assert corrected != b64, "an upside-down page must be corrected"
+        assert confidence > 0.0
+
+    def test_digit_only_page_abstains_and_is_not_flipped(self):
+        """A full numeric page (lining figures, no ascenders/descenders) abstains.
+
+        The cue cannot tell an upright from a flipped digit page, so it must not
+        guess: the page is left to the top-heavy scorer, which does not flip a
+        centered digit block.
+        """
+        b64 = _fixture_b64("digit_page.png")
+        corrected, reported, confidence = self.corrector.correct_page(b64)
+
+        # The cue abstains; the top-heavy scorer leaves a centered digit block
+        # alone, so the page is not flipped.
+        assert _deg_diff(reported, 0.0) <= 3.0, f"expected no flip, got {reported}"
