@@ -64,10 +64,14 @@ function PageThumbnail({
 
   // When a page is re-OCRed (a saved rotation, a reprocess), its thumbnail is
   // re-stored at the same key and the version (the tree's generated_at) bumps.
-  // Drop the cached image so the effect below refetches the fresh one.
-  useEffect(() => {
+  // Reset the url during render when the token changes (adjusting state when a
+  // prop changes) so the effect below refetches the fresh one. The initializer
+  // above already sets the initial value, so only subsequent changes matter.
+  const [prevToken, setPrevToken] = useState(retryToken);
+  if (prevToken !== retryToken) {
+    setPrevToken(retryToken);
     setUrl(cachedPageThumbnail(documentId, pageNumber, retryToken));
-  }, [documentId, pageNumber, retryToken]);
+  }
 
   useEffect(() => {
     if (!near || !fetchable || url || failedToken === retryToken) return;

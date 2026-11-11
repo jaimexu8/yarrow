@@ -9,10 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import {
-  rotateDocumentPage,
-  type DocumentSummary,
-} from '@/lib/documents';
+import { rotateDocumentPage, type DocumentSummary } from '@/lib/documents';
 import { toApiError } from '@/lib/errors';
 import { mergePageStates, type PageState } from '@/lib/pageStatus';
 import type { DocumentProgress } from '@/lib/progress';
@@ -248,7 +245,7 @@ export function ViewerProvider({
       const base =
         node?.manual_rotation_deg ??
         (auto ? ((Number(auto[1]) % 360) + 360) % 360 : 0);
-      const absolute = ((base + onScreen) % 360 + 360) % 360;
+      const absolute = (((base + onScreen) % 360) + 360) % 360;
       try {
         await rotateDocumentPage(document.id, page, absolute);
         setPageRotations((current) => {
@@ -451,6 +448,7 @@ export function ViewerProvider({
       pageRotations,
       rotatePage,
       savePageRotation,
+      resetPageRotation,
       applyRegionCorrection,
       undoRegionCorrection,
     ]
