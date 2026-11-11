@@ -399,7 +399,7 @@ export function CorrectedPageView({
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [documentId, pageNumber, fallbackAspectRatio]);
+  }, [documentId, pageNumber, fallbackAspectRatio, version]);
 
   const aspectRatio =
     image.state === 'ready' ? image.aspectRatio : fallbackAspectRatio;

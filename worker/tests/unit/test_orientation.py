@@ -20,7 +20,9 @@ def _bar_page(size=(800, 1000)):
     draw = ImageDraw.Draw(img)
     # Distinct, dense title block: a thick title bar plus a shorter subtitle.
     draw.rectangle([50, 40, 50 + 560, 40 + 24], fill="black")
-    draw.rectangle([50, 40 + 24 + 12, 50 + int(560 * 0.7), 40 + 24 + 12 + 12], fill="black")
+    draw.rectangle(
+        [50, 40 + 24 + 12, 50 + int(560 * 0.7), 40 + 24 + 12 + 12], fill="black"
+    )
     # Body lines below; the bottom third stays empty so the page is top-heavy.
     y = 120
     for _ in range(5):
@@ -60,7 +62,9 @@ class TestOrientationCorrector:
         b64 = _rotated_b64(angle)
         _, reported, confidence = self.corrector.correct_page(b64)
 
-        assert _deg_diff(reported, angle) <= 3.0, f"expected ~{angle} deg, got {reported}"
+        assert _deg_diff(reported, angle) <= 3.0, (
+            f"expected ~{angle} deg, got {reported}"
+        )
         assert confidence > 0.0
 
     def test_upright_page_is_unchanged(self):
@@ -105,7 +109,7 @@ class TestOrientationCorrector:
         """A page with very little ink is below the ink threshold and is left alone."""
         img = Image.new("RGB", (800, 1000), "white")
         draw = ImageDraw.Draw(img)
-        for (x, y) in ((100, 100), (300, 500), (500, 800)):
+        for x, y in ((100, 100), (300, 500), (500, 800)):
             draw.rectangle([x, y, x + 20, y + 12], fill="black")
         b64 = _to_b64(img)
 
@@ -170,7 +174,7 @@ class TestAscenderCue:
         it.
         """
         b64 = _fixture_b64("bottom_heavy_upright.png")
-        corrected, reported, confidence = self.corrector.correct_page(b64)
+        corrected, reported, _confidence = self.corrector.correct_page(b64)
 
         assert _deg_diff(reported, 0.0) <= 3.0, f"expected upright, got {reported}"
         assert corrected == b64, "an upright page must be left unchanged"
@@ -197,7 +201,7 @@ class TestAscenderCue:
         centered digit block.
         """
         b64 = _fixture_b64("digit_page.png")
-        corrected, reported, confidence = self.corrector.correct_page(b64)
+        _corrected, reported, _confidence = self.corrector.correct_page(b64)
 
         # The cue abstains; the top-heavy scorer leaves a centered digit block
         # alone, so the page is not flipped.
