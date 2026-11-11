@@ -297,6 +297,23 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
 
         _set_stage(job_id, "preparing")
 
+        # Pages the user has manually rotated override auto-detection, so they
+        # are turned first and then left alone by the corrector.
+        with session_scope() as session:
+            rotation_rows = session.execute(
+                select(Page.page_number, Page.manual_rotation_deg).where(
+                    Page.document_id == document_id,
+                    Page.manual_rotation_deg.is_not(None),
+                )
+            ).all()
+        parser.apply_manual_rotations(
+            {
+                page_number - 1: degrees
+                for page_number, degrees in rotation_rows
+                if page_number is not None and degrees is not None and 1 <= page_number <= len(parser.pages)
+            }
+        )
+
         # Rotate any rotated pages upright before OCR, so the text is readable
         # and every downstream consumer (OCR, quality check, figure crops,
         # viewer) sees the same upright page.

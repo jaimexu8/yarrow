@@ -63,6 +63,9 @@ class FakeSession:
         self.existing_image_keys: list[str] = []
         # Corrected-page image keys already stored for the pages being replaced
         self.existing_page_image_keys: list[str] = []
+        # (page_number, manual_rotation_deg) overrides stored for the pages
+        # being replaced; empty when no page has a manual rotation.
+        self.existing_manual_rotations: list[tuple[int, int]] = []
 
     def get(self, model, key, with_for_update=False):
         # with_for_update is accepted and ignored: there is no concurrency to
@@ -92,6 +95,10 @@ class FakeSession:
             # from the configured prior-run keys so the replaced-list logic runs.
             if any(getattr(column, "name", None) == "page_image_key" for column in getattr(statement, "column_descriptions", [])):
                 return FakeResult(self.existing_page_image_keys)
+            # The manual-rotation select reads the stored overrides back; answer
+            # with nothing (no override) unless a test sets one.
+            if any(getattr(column, "name", None) == "manual_rotation_deg" for column in getattr(statement, "column_descriptions", [])):
+                return FakeResult(self.existing_manual_rotations)
             return FakeResult(
                 [(page.page_number, page.status) for page in self.added
                  if isinstance(page, Page)]
@@ -143,6 +150,7 @@ class FakeDocumentParser:
         self.figure_images: dict[str, bytes] = {}
         self.page_images: dict[str, bytes] = {}
         self.page_orientations: dict[int, float] = {}
+        self.manual_rotations: dict[int, int] = {}
         self.page_models: dict[int, ModelInfo] = {}
             
     @classmethod
@@ -171,6 +179,11 @@ class FakeDocumentParser:
         # placeholder pages and only records which were "corrected".
         for page_number, angle in FakeDocumentParser.corrected_pages.items():
             self.page_orientations[page_number - 1] = angle
+
+    def apply_manual_rotations(self, rotations):
+        # The real parser rotates the page image in place; the fake keeps its
+        # placeholder pages and only records which were manually rotated.
+        self.manual_rotations.update(rotations)
     
     def process_sync(self, page_to_process = None):
         if FakeDocumentParser.inference_error is not None:
@@ -201,6 +214,8 @@ class FakeDocumentParser:
                 key = f"documents/{document.id}/pages/{number}.png"
                 page.page_image_key = key
                 self.page_images[key] = b"corrected"
+            if number - 1 in self.manual_rotations:
+                page.manual_rotation_deg = self.manual_rotations[number - 1]
             output.append(page)
         
         document.page_count = len(self.pages)

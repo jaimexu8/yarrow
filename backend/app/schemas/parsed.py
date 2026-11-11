@@ -54,6 +54,7 @@ class PageNode(StrictModel):
     error_message: str | None = None
     # Storage key of the upright page image
     image_key: str | None = None
+    manual_rotation_deg: int | None = None
     has_thumbnail: bool = False
     model_name: str | None = None
     model_version: str | None = None
