@@ -73,7 +73,7 @@ beforeEach(() => {
   scrollIntoView.mockClear();
   vi.mocked(api.get).mockReset();
   vi.mocked(api.get).mockImplementation(async (url: string) => {
-    if (url.endsWith('/pages/3/thumbnail')) throw new Error('404');
+    if (url.includes('/pages/3/thumbnail')) throw new Error('404');
     return { data: new Blob(['webp']) };
   });
 });
@@ -180,7 +180,7 @@ test('the sidebar renders a numbered list of page thumbnails', async () => {
   );
   expect(thumbnail(2).querySelector('img')).not.toBeNull();
   expect(api.get).toHaveBeenCalledWith(
-    '/api/v1/documents/doc-1/pages/1/thumbnail',
+    expect.stringContaining('/api/v1/documents/doc-1/pages/1/thumbnail'),
     { responseType: 'blob' }
   );
   await waitFor(() =>
@@ -192,7 +192,7 @@ test('the sidebar renders a numbered list of page thumbnails', async () => {
     within(thumbnail(4)).getByTestId('thumbnail-placeholder')
   ).toBeTruthy();
   expect(api.get).not.toHaveBeenCalledWith(
-    '/api/v1/documents/doc-1/pages/4/thumbnail',
+    expect.stringContaining('/api/v1/documents/doc-1/pages/4/thumbnail'),
     expect.anything()
   );
 });
