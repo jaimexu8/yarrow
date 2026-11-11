@@ -34,6 +34,28 @@ class OrientationCorrector:
     # and gray paper read as "bottom-heavy", so the flip would turn upright
     # pages upside down; it is suppressed below this threshold.
     MIN_NEAR_WHITE = 0.90
+    # How far apart the two upright candidates' scores must be before the
+    # 180-degree flip is applied. A missed flip is preferred over flipping an upright page.
+    # Validated against the rotation test fixture: its genuinely rotated
+    # pages score 0.57-0.64, while observed false flips score 0.09-0.38.
+    MIN_UPRIGHT_GAP = 0.5
+    # Two-sided 180-degree ambiguity cue: the share of a line's ink that sits
+    # above its x-height core (ascenders: b, d, f, h, k, l, caps) versus below
+    # it (descenders: g, j, p, q, y). More ink above means upright, so a
+    # strongly positive page-level vote means the page is already upright and a
+    # strongly negative vote means it is upside down.
+    # The cue only decides when coverage (the fraction of line width that
+    # voted) is high enough; pages with few or no letters (digits, all-caps,
+    # non-Latin) produce low coverage and defer to the top-heavy scorer.
+    MIN_ASCENDER_VOTE = 0.25    # |vote| needed for the cue to decide
+    CUE_COVERAGE_MIN = 0.30     # min fraction of line width that voted
+    CUE_MAX_WIDTH = 1275        # bound the cue's work (the 150 dpi raster width)
+    CUE_MIN_LINE_HEIGHT = 8     # min line band height (px)
+    CUE_MIN_LINE_INK = 40       # min total line ink (px) to consider a line
+    CUE_CORE_FRAC = 0.45        # x-height core = rows >= 45% of the peak row ink
+    CUE_EXT_FRAC = 0.20         # a real extension is >= 20% of the core height ...
+    CUE_MIN_ABS_EXT = 3         # ... and >= 3 px (excludes anti-alias fringes)
+    CUE_LINE_TH = 0.35          # per-line |score| needed to count as a vote
 
     def correct_page(self, page_b64: str) -> tuple[str, float, float]:
         """Return (corrected_b64, content_rotation_deg, confidence).
@@ -63,16 +85,8 @@ class OrientationCorrector:
                 return self._unchanged(page_b64, img, exif_applied), 0.0, 0.0
 
             flip, upright_gap = self._upright_scores(small, angle)
-            if flip and self._near_white_fraction(small) < self.MIN_NEAR_WHITE:
-                # The mod-180 estimate is ambiguous: the page is either
-                # rotated by angle or by angle + 180. The upright scorer
-                # picked the latter, but only on clean white paper can we
-                # trust that pick. On a photo of paper the desk, shadow and
-                # gray tone read as "bottom-heavy", so the flip would turn an
-                # upright page upside down. We still apply a tilt-only
-                # correction for those (the angle is trustworthy); we just
-                # never 180-degree-flip a non-white page.
-                flip = False
+            cue = self._ascender_cue(img, angle)
+            flip, confidence = self._resolve_180(flip, upright_gap, small, cue)
             if flip:
                 angle = (angle + 180.0) % 360.0
                 if angle > 180.0:
@@ -82,11 +96,136 @@ class OrientationCorrector:
                 return self._unchanged(page_b64, img, exif_applied), 0.0, 0.0
 
             corrected = self._rotate(img, -angle)
-            return self._reencode(corrected), angle, min(1.0, upright_gap * 2.0)
+            return self._reencode(corrected), angle, confidence
         except Exception:
             # A detection failure only loses its correction, never the page.
             logger.exception("Orientation correction failed; leaving the page unchanged")
             return page_b64, 0.0, 0.0
+
+    def _ascender_cue(self, img: Image.Image, angle: float) -> dict:
+        """Two-sided 180-degree ambiguity cue from ascender/descender ink.
+
+        Deskews the page by the stage-1 angle, then scores each text line by how
+        much of its ink sits above versus below the x-height core (ascenders:
+        b, d, f, h, k, l, caps, digits; descenders: g, j, p, q, y). A strongly
+        positive width-weighted vote means the page is already upright; a
+        strongly negative vote means it is upside down. Returns a dict with the
+        vote, the coverage (fraction of line width that voted), and whether the
+        cue is trusted (coverage high enough to decide).
+        """
+        try:
+            # Bound the work to the 150 dpi raster width; larger rasters add
+            # nothing, the cue only needs the line structure.
+            scale = self.CUE_MAX_WIDTH / img.width
+            if scale < 1.0:
+                img = img.resize((self.CUE_MAX_WIDTH, max(1, round(img.height * scale))), Image.LANCZOS)
+            deskewed = np.array(img.rotate(-angle, expand=True, fillcolor=255, resample=Image.BICUBIC).convert("L"))
+            ink = (cv2.threshold(deskewed, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1] > 0).astype(np.uint8)
+            return self._ascender_vote(ink)
+        except Exception:
+            # A cue failure means "I don't know", so defer to the top-heavy scorer.
+            return {"vote": 0.0, "coverage": 0.0, "trusted": False}
+
+    def _ascender_vote(self, ink: np.ndarray) -> dict:
+        """Score a binarized, deskewed page by ascender/descender asymmetry.
+
+        Per line, score = (above - below) / (above + below), where above/below
+        are the ink strictly above/below the x-height core (the dense central
+        band). A line votes only if it has a real extension (not just an
+        anti-alias fringe), which excludes digits and all-caps. The page vote
+        is the width-weighted sum; the denominator is the total line width, so
+        one noisy line cannot dominate.
+        """
+        # Strip table rules (long horizontal/vertical runs) so they are not
+        # counted as text lines.
+        horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, 100), np.uint8))
+        vertical = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((100, 1), np.uint8))
+        clean = ink & (1 - np.clip(horizontal + vertical, 0, 1))
+
+        # Segment text lines: bands of rows carrying ink.
+        row_ink = clean.sum(axis=1)
+        mask = row_ink > max(2, 0.0005 * clean.sum())
+        bands, start, in_band = [], 0, False
+        for y, on in enumerate(mask):
+            if on and not in_band:
+                start, in_band = y, True
+            elif not on and in_band:
+                bands.append((start, y))
+                in_band = False
+        if in_band:
+            bands.append((start, len(mask)))
+        bands = [(a, b) for a, b in bands if b - a >= self.CUE_MIN_LINE_HEIGHT]
+
+        num, den, voted_w = 0.0, 0, 0
+        for a, b in bands:
+            r = clean[a:b].sum(axis=1).astype(np.float64)
+            total = float(r.sum())
+            width = int(clean[a:b].any(axis=0).sum())
+            den += width
+            if total < self.CUE_MIN_LINE_INK or width == 0:
+                continue
+            peak = r.max()
+            if peak <= 0:
+                continue
+            core = np.where(r >= self.CUE_CORE_FRAC * peak)[0]
+            core_top, core_bottom = int(core.min()), int(core.max())
+            core_h = core_bottom - core_top + 1
+            above = float(r[:core_top].sum())
+            below = float(r[core_bottom + 1:].sum())
+            ext_above = int((r[:core_top] > 0).sum())
+            ext_below = int((r[core_bottom + 1:] > 0).sum())
+            min_ext = max(self.CUE_EXT_FRAC * core_h, self.CUE_MIN_ABS_EXT)
+            real_ext = ext_above >= min_ext or ext_below >= min_ext
+            ad = above + below
+            score = (above - below) / ad if ad > 0 else 0.0
+            if abs(score) >= self.CUE_LINE_TH and real_ext:
+                num += score * width
+                voted_w += width
+        vote = num / den if den else 0.0
+        coverage = voted_w / den if den else 0.0
+        return {
+            "vote": float(vote),
+            "coverage": float(coverage),
+            "trusted": coverage >= self.CUE_COVERAGE_MIN,
+        }
+
+    def _resolve_180(self, flip: bool, upright_gap: float, small: np.ndarray, cue: dict) -> tuple[bool, float]:
+        """Decide the 180-degree flip and its confidence for a reliable page.
+
+        The two-sided ascender cue decides when it is confident (high coverage
+        and a strong vote); otherwise the top-heavy scorer and its existing
+        gates do. Returns (flip, confidence).
+        """
+        if cue["trusted"] and cue["vote"] >= self.MIN_ASCENDER_VOTE:
+            # The cue is confident the page is already upright; withhold the flip.
+            logger.info(f"180-degree: keep upright (ascender cue {cue['vote']:+.3f}, coverage {cue['coverage']:.2f})")
+            return False, min(1.0, cue["vote"])
+        if cue["trusted"] and cue["vote"] <= -self.MIN_ASCENDER_VOTE:
+            # The cue is confident the page is upside down; flip regardless of
+            # the top-heavy scorer, which can miss a flipped bottom-heavy page.
+            logger.info(f"180-degree: flip (ascender cue {cue['vote']:+.3f}, coverage {cue['coverage']:.2f})")
+            return True, min(1.0, -cue["vote"])
+        # The cue abstains; defer to the top-heavy scorer and its existing gates.
+        confidence = min(1.0, upright_gap * 2.0)
+        if flip and self._near_white_fraction(small) < self.MIN_NEAR_WHITE:
+            # On a photo of paper the desk, shadow and gray tone read as
+            # "bottom-heavy", so never 180-degree-flip a non-white page. The
+            # tilt-only correction still applies (the angle is trustworthy).
+            logger.info(f"180-degree: keep upright (not near-white, cue {cue['vote']:+.3f}, coverage {cue['coverage']:.2f})")
+            return False, confidence
+        if flip and upright_gap < self.MIN_UPRIGHT_GAP:
+            # The scorer is not confident enough to flip: the ink may be
+            # bottom-heavy on a page that is already upright.
+            logger.info(
+                f"180-degree: keep upright (gap {upright_gap:.3f} < {self.MIN_UPRIGHT_GAP}, "
+                f"cue {cue['vote']:+.3f}, coverage {cue['coverage']:.2f})"
+            )
+            return False, confidence
+        logger.info(
+            f"180-degree: {'flip' if flip else 'keep upright'} "
+            f"(top-heavy scorer, cue {cue['vote']:+.3f}, coverage {cue['coverage']:.2f})"
+        )
+        return flip, confidence
 
     @staticmethod
     def _unchanged(page_b64: str, img: Image.Image, exif_applied: bool) -> str:

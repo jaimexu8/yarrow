@@ -190,6 +190,7 @@ async def documents_out(
 class ReprocessError(str, Enum):
     ALREADY_PROCESSING = "ALREADY_PROCESSING"
     QUEUE_UNAVAILABLE = "QUEUE_UNAVAILABLE"
+    PAGE_NOT_FOUND = "PAGE_NOT_FOUND"
 
 
 @dataclass
@@ -315,3 +316,114 @@ async def reprocess_document(
     new_job.celery_task_id = task_id
     await db.commit()
     return ReprocessOutcome(scope=scope, pages=pages, job_id=new_job.id)
+
+
+async def rotate_document_page(
+    db: AsyncSession,
+    document_id: UUID,
+    enqueue: Callable[..., str],
+    page_number: int,
+    degrees: int | None,
+    *,
+    requested_by_id: UUID | None = None,
+) -> ReprocessOutcome:
+    """Queue a single-page job that re-OCRs one page at the user's rotation.
+
+    `degrees` is the absolute rotation (0, 90, 180 or 270, CW from the
+    original page); `degrees=None` clears the override so auto-detection
+    decides the page's orientation again.     """
+    # Document row first, then job: the same order as cancel, document
+    # deletion and the worker, so none of them can deadlock with this.
+    document = (
+        await db.execute(
+            select(Document)
+            .where(Document.id == document_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    job = (
+        await db.execute(
+            select(Job)
+            .where(Job.document_id == document_id)
+            .order_by(*LATEST_JOB_FIRST)
+            .limit(1)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    latest: dict[str, str | datetime | None] | None = (
+        {"status": job.status, "updated_at": job.updated_at} if job else None
+    )
+
+    if is_running(latest, now):
+        await db.rollback()
+        return ReprocessOutcome(
+            error=ReprocessError.ALREADY_PROCESSING,
+            detail="This document is already being processed.",
+        )
+
+    if degrees is not None and degrees not in (0, 90, 180, 270):
+        return ReprocessOutcome(
+            error=ReprocessError.PAGE_NOT_FOUND,
+            detail="Rotation must be 0, 90, 180 or 270 degrees.",
+        )
+
+    page = await db.scalar(
+        select(Page).where(
+            Page.document_id == document_id, Page.page_number == page_number
+        )
+    )
+    if page is None:
+        return ReprocessOutcome(
+            error=ReprocessError.PAGE_NOT_FOUND,
+            detail=f"Page {page_number} does not exist in this document.",
+        )
+    page.manual_rotation_deg = degrees
+
+    previous_state = (document.status, document.error_message)
+
+    new_job = Job(
+        id=uuid4(),
+        document_id=document_id,
+        status="queued",
+        current_stage="queued",
+        pages_processed=0,
+        total_pages=1,
+        requested_by_id=requested_by_id,
+    )
+
+    db.add(new_job)
+    document.status = "queued"
+    document.error_message = None
+    size_bytes = document.file_size_bytes
+
+    await db.commit()
+
+    try:
+        # Enqueue the single-page job in the background worker
+        task_id = await run_in_threadpool(
+            enqueue,
+            new_job.id,
+            [page_number],
+            priority=job_priority(size_bytes),
+        )
+    except Exception:
+        logger.exception(f"Queueing rotation job {new_job.id} failed")
+        new_job.status = "failed"
+        new_job.error_message = QUEUE_FAILED_MESSAGE
+        # The override is kept: the user's choice stands, and retrying the
+        # page (or any reprocess) applies it. The document itself is exactly
+        # as it was before the attempt.
+        document.status, document.error_message = previous_state
+        await db.commit()
+        return ReprocessOutcome(
+            error=ReprocessError.QUEUE_UNAVAILABLE,
+            detail="Processing could not be started. Please try again later.",
+        )
+
+    new_job.celery_task_id = task_id
+    await db.commit()
+    return ReprocessOutcome(scope="incomplete", pages=[page_number], job_id=new_job.id)

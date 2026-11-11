@@ -36,6 +36,9 @@ fi
 # commits are not blocked; the frontend checks fall through to CI.
 if [ -n "$python_staged" ]; then
   if command -v poetry >/dev/null 2>&1; then
+    # poetry -C backend runs ruff from backend/, where repo-relative paths do
+    # not resolve. Use absolute paths from the repo top instead.
+    top=$(git rev-parse --show-toplevel)
     # lint-staged would stash unstaged edits before fixing. We do not, so a
     # file with live working-tree edits is checked but left untouched, to avoid
     # pulling work-in-progress into the commit. Files whose working tree
@@ -44,10 +47,10 @@ if [ -n "$python_staged" ]; then
     for f in $python_staged; do
       if [ -n "$(git diff --name-only -- "$f")" ]; then
         echo "husky: $f has unstaged edits; checking but not auto-fixing"
-        poetry -C backend run ruff check "$f" || exit 1
-        poetry -C backend run ruff format --check "$f" || exit 1
+        poetry -C backend run ruff check "$top/$f" || exit 1
+        poetry -C backend run ruff format --check "$top/$f" || exit 1
       else
-        to_fix="$to_fix $f"
+        to_fix="$to_fix $top/$f"
       fi
     done
     if [ -n "$to_fix" ]; then

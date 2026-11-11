@@ -138,7 +138,9 @@ def inference(monkeypatch):
     page_count = {"value": 3}
 
     def load_file(self, file_data):
-        self.pages = [_page_image(number) for number in range(1, page_count["value"] + 1)]
+        self.pages = [
+            _page_image(number) for number in range(1, page_count["value"] + 1)
+        ]
 
     def process_page(self, page_data, page_index):
         page_number = self.pages.index(page_data) + 1
@@ -150,7 +152,9 @@ def inference(monkeypatch):
         return outcome
 
     monkeypatch.setattr(DocumentParser, "load_file", load_file)
-    monkeypatch.setattr(DocumentParser, "correct_orientations", lambda self: None)
+    monkeypatch.setattr(
+        DocumentParser, "correct_orientations", lambda self, pages_to_process=None: None
+    )
     monkeypatch.setattr(DocumentParser, "process_page", process_page)
 
     class Inference:
@@ -239,7 +243,9 @@ class TestPageEvents:
     def test_only_the_targeted_pages_report(self, inference):
         inference.configure(pages=4)
         events: list[tuple[int, str]] = []
-        parser = DocumentParser(on_page_event=lambda number, event: events.append((number, event)))
+        parser = DocumentParser(
+            on_page_event=lambda number, event: events.append((number, event))
+        )
         parser.load_file(b"")
 
         parser.process_sync((2, 4))
@@ -287,7 +293,9 @@ class TestRecordPageEvent:
     def test_failed_records_code_and_raw_message(self, sessions):
         job_id = _seed_running_job(sessions, 1)
         parser = DocumentParser()
-        parser.page_errors[0] = PageError("inference_unavailable", "ConnectionError: refused")
+        parser.page_errors[0] = PageError(
+            "inference_unavailable", "ConnectionError: refused"
+        )
 
         _record_page_event(job_id, parser, 1, "started")
         _record_page_event(job_id, parser, 1, "failed")
@@ -323,17 +331,24 @@ class TestRecordPageEvent:
             list(pool.map(run, range(1, pages + 1)))
 
         assert _job(sessions, job_id).pages_processed == pages
-        assert {page.status for page in _job_pages(sessions, job_id).values()} == {"completed"}
+        assert {page.status for page in _job_pages(sessions, job_id).values()} == {
+            "completed"
+        }
 
     def test_events_after_cancel_leave_pages_canceled(self, sessions):
         job_id = _seed_running_job(sessions, 2)
         parser = DocumentParser()
         _record_page_event(job_id, parser, 1, "started")
         with sessions() as session:
-            session.execute(update(Job).where(Job.id == job_id).values(status="canceled"))
+            session.execute(
+                update(Job).where(Job.id == job_id).values(status="canceled")
+            )
             session.execute(
                 update(JobPage)
-                .where(JobPage.job_id == job_id, JobPage.status.in_(("queued", "processing")))
+                .where(
+                    JobPage.job_id == job_id,
+                    JobPage.status.in_(("queued", "processing")),
+                )
                 .values(status="canceled")
             )
 
@@ -341,13 +356,17 @@ class TestRecordPageEvent:
         _record_page_event(job_id, parser, 2, "started")
         _record_page_event(job_id, parser, 2, "failed")
 
-        assert {page.status for page in _job_pages(sessions, job_id).values()} == {"canceled"}
+        assert {page.status for page in _job_pages(sessions, job_id).values()} == {
+            "canceled"
+        }
         assert _job(sessions, job_id).pages_processed == 0
 
 
 @pytest.mark.usefixtures("storage")
 class TestProcessDocumentTask:
-    def test_progress_is_committed_while_pages_run(self, sessions, inference, monkeypatch):
+    def test_progress_is_committed_while_pages_run(
+        self, sessions, inference, monkeypatch
+    ):
         inference.configure(pages=3)
         job_id = _seed_job(sessions, 3)
         seen: list[tuple[str, int, dict[int, str]]] = []
@@ -451,7 +470,9 @@ class TestProcessDocumentTask:
             stages.append(_job(sessions, job_id).current_stage)
 
         monkeypatch.setattr(ingestion, "_set_stage", record)
-        inference.on_request(lambda page_number: stages.append(_job(sessions, job_id).current_stage))
+        inference.on_request(
+            lambda page_number: stages.append(_job(sessions, job_id).current_stage)
+        )
 
         process_document_task(str(job_id))
 
@@ -476,7 +497,10 @@ class TestProcessDocumentTask:
                 )
                 session.execute(
                     update(JobPage)
-                    .where(JobPage.job_id == job_id, JobPage.status.in_(("queued", "processing")))
+                    .where(
+                        JobPage.job_id == job_id,
+                        JobPage.status.in_(("queued", "processing")),
+                    )
                     .values(status="canceled")
                 )
             canceled.set()
@@ -489,10 +513,14 @@ class TestProcessDocumentTask:
         assert job.status == "canceled"
         assert job.current_stage == "canceled"
         assert job.pages_processed == 0
-        assert {page.status for page in _job_pages(sessions, job_id).values()} == {"canceled"}
+        assert {page.status for page in _job_pages(sessions, job_id).values()} == {
+            "canceled"
+        }
         assert _pages(sessions, job_id) == {}
 
-    def test_failure_outside_pages_ends_in_failed_stage(self, sessions, inference, monkeypatch):
+    def test_failure_outside_pages_ends_in_failed_stage(
+        self, sessions, inference, monkeypatch
+    ):
         inference.configure(pages=1)
         job_id = _seed_job(sessions, 1)
 
