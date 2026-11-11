@@ -266,7 +266,7 @@ class DocumentParser:
 
         self.pages = loader.process_file(file_data)
 
-    def correct_orientations(self) -> None:
+    def correct_orientations(self, pages_to_process: tuple[int] | None = None) -> None:
         """Detect and fix the rotation of every page, in place.
 
         Each page is classified and corrected independently, so a document
@@ -274,11 +274,19 @@ class DocumentParser:
         replaces the page, so OCR, the quality check and the figure crops all
         read the upright image. A page left unchanged is not recorded in
         page_orientations, so it is not warned about and not re-stored.
+
+        pages_to_process, when given, limits detection to the pages in this
+        run  pages outside it are left untouched. None means the whole document.
         """
         self.page_orientations = {}
         for index, page_b64 in enumerate(self.pages):
             if index in self.manual_rotations:
                 # The user set the orientation; auto-detection stays out.
+                continue
+            if pages_to_process is not None and index + 1 not in pages_to_process:
+                # Out of scope for this run: the page's stored upright image (if
+                # any) and its rows persist across partial runs, so detection
+                # would be wasted work.
                 continue
             corrected, angle, confidence = self.orientation_corrector.correct_page(
                 page_b64
@@ -291,8 +299,7 @@ class DocumentParser:
                 )
 
     def apply_manual_rotations(self, rotations: dict[int, int]) -> None:
-        """Rotate pages the user has manually turned, by 0-based page index.
-        """
+        """Rotate pages the user has manually turned, by 0-based page index."""
         reencode = OrientationCorrector._reencode
         for index, degrees in rotations.items():
             if not 0 <= index < len(self.pages):
@@ -301,7 +308,9 @@ class DocumentParser:
             if degrees:
                 img = Image.open(io.BytesIO(base64.b64decode(self.pages[index])))
                 # PIL rotates counter-clockwise, so the override is applied CW.
-                self.pages[index] = reencode(img.rotate(-degrees, expand=True, fillcolor=(255, 255, 255)))
+                self.pages[index] = reencode(
+                    img.rotate(-degrees, expand=True, fillcolor=(255, 255, 255))
+                )
                 logger.info(f"Page {index + 1} manually rotated by {degrees}°")
             self.manual_rotations[index] = degrees
 
@@ -903,7 +912,9 @@ class DocumentParser:
                 if degrees:
                     image_key = f"documents/{document.id}/pages/{page_number}.png"
                     page.page_image_key = image_key
-                    self.page_images[image_key] = base64.b64decode(self.pages[page_index])
+                    self.page_images[image_key] = base64.b64decode(
+                        self.pages[page_index]
+                    )
                     warnings.append(
                         Warning(
                             page_id=page_id,

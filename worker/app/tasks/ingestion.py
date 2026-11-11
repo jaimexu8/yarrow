@@ -83,7 +83,9 @@ def _describe_failed_pages(failed: list[int], total: int) -> str:
     return f"{len(failed)} of {total} page(s) failed: {shown}"
 
 
-def _document_state(page_states: list[tuple[int, str | None]], total_pages: int) -> tuple[str, str | None]:
+def _document_state(
+    page_states: list[tuple[int, str | None]], total_pages: int
+) -> tuple[str, str | None]:
     """The document's status and error summary, derived from its page rows"""
     failed = sorted(number for number, status in page_states if status == "failed")
     any_completed = any(status == "completed" for _, status in page_states)
@@ -112,12 +114,16 @@ def _delete_stored(keys: list[str]) -> None:
             logger.exception(f"Could not delete stored object {key}")
 
 
-def _store_thumbnails(document_id: UUID, parser: DocumentParser, page_numbers: list[int]) -> dict[int, str]:
+def _store_thumbnails(
+    document_id: UUID, parser: DocumentParser, page_numbers: list[int]
+) -> dict[int, str]:
     stored: dict[int, str] = {}
     for number in page_numbers:
         key = thumbnail_key(document_id, number)
         try:
-            get_storage().upload_file(io.BytesIO(build_thumbnail(parser.pages[number - 1])), key)
+            get_storage().upload_file(
+                io.BytesIO(build_thumbnail(parser.pages[number - 1])), key
+            )
         except Exception:
             logger.exception(f"Could not store thumbnail {key}")
             continue
@@ -132,7 +138,9 @@ def _discard_thumbnails(document_id: UUID | None, keys: list[str]) -> None:
         with session_scope() as session:
             kept = set(
                 session.execute(
-                    select(Page.thumbnail_key).where(Page.document_id == document_id, Page.thumbnail_key.in_(keys))
+                    select(Page.thumbnail_key).where(
+                        Page.document_id == document_id, Page.thumbnail_key.in_(keys)
+                    )
                 ).scalars()
             )
     except Exception:
@@ -156,7 +164,11 @@ def _utcnow() -> datetime:
 
 
 def _run_page_numbers(page_count: int, page_to_process: tuple | None) -> list[int]:
-    return [number for number in range(1, page_count + 1) if page_to_process is None or number in page_to_process]
+    return [
+        number
+        for number in range(1, page_count + 1)
+        if page_to_process is None or number in page_to_process
+    ]
 
 
 def _lock_running_job(session: Session, job_id: str) -> Job:
@@ -173,7 +185,9 @@ def _set_stage(job_id: str, stage: JobStage) -> None:
         _lock_running_job(session, job_id).current_stage = stage
 
 
-def _record_page_event(job_id: UUID, parser: DocumentParser, page_number: int, event: PageEvent) -> None:
+def _record_page_event(
+    job_id: UUID, parser: DocumentParser, page_number: int, event: PageEvent
+) -> None:
     now = _utcnow()
     this_page = (JobPage.job_id == job_id, JobPage.page_number == page_number)
     with session_scope() as session:
@@ -240,7 +254,12 @@ def _mark_failed(job_id: str, message: str) -> None:
 
 
 @celery_app.task(bind=True)
-def process_document_task(self, job_id: str, page_to_process: tuple | None = None, merge_consecutive_tables: bool = False):
+def process_document_task(
+    self,
+    job_id: str,
+    page_to_process: tuple | None = None,
+    merge_consecutive_tables: bool = False,
+):
     """
     Processes a document for the given job ID.
 
@@ -291,7 +310,9 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
 
         job_uuid = UUID(job_id)
         parser = DocumentParser(
-            on_page_event=lambda page_number, event: _record_page_event(job_uuid, parser, page_number, event)
+            on_page_event=lambda page_number, event: _record_page_event(
+                job_uuid, parser, page_number, event
+            )
         )
         parser.load_file(file_data)
 
@@ -310,14 +331,16 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
             {
                 page_number - 1: degrees
                 for page_number, degrees in rotation_rows
-                if page_number is not None and degrees is not None and 1 <= page_number <= len(parser.pages)
+                if page_number is not None
+                and degrees is not None
+                and 1 <= page_number <= len(parser.pages)
             }
         )
 
         # Rotate any rotated pages upright before OCR, so the text is readable
         # and every downstream consumer (OCR, quality check, figure crops,
         # viewer) sees the same upright page.
-        parser.correct_orientations()
+        parser.correct_orientations(page_to_process)
 
         run_page_numbers = _run_page_numbers(len(parser.pages), page_to_process)
         thumbnail_keys = _store_thumbnails(document_id, parser, run_page_numbers)
@@ -325,7 +348,12 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
         with session_scope() as session:
             job = _lock_running_job(session, job_id)
             session.execute(delete(JobPage).where(JobPage.job_id == job.id))
-            session.add_all([JobPage(job_id=job.id, page_number=number, status="queued") for number in run_page_numbers])
+            session.add_all(
+                [
+                    JobPage(job_id=job.id, page_number=number, status="queued")
+                    for number in run_page_numbers
+                ]
+            )
             job.total_pages = len(run_page_numbers)
             job.pages_processed = 0
             job.current_stage = "parsing"
@@ -338,7 +366,9 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
         total_pages = len(parser.pages)
         attempted = len(page_to_process) if page_to_process is not None else total_pages
         succeeded = attempted - len(failed_pages)
-        summary = _describe_failed_pages(failed_pages, attempted) if failed_pages else None
+        summary = (
+            _describe_failed_pages(failed_pages, attempted) if failed_pages else None
+        )
 
         # Attempting nothing is a no-op, not a failure
         run_failed = bool(attempted) and not succeeded
@@ -359,19 +389,33 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
                 raise JobCanceledError(job_id)
 
             page_ids = select(Page.id).where(
-                Page.document_id == document_id, (Page.page_number.in_(page_to_process) if page_to_process is not None else True)
+                Page.document_id == document_id,
+                (
+                    Page.page_number.in_(page_to_process)
+                    if page_to_process is not None
+                    else True
+                ),
             )
 
             region_ids = select(Region.id).where(Region.page_id.in_(page_ids))
 
             tables = (
-                session.execute(select(Table).join(RegionTable).where(RegionTable.region_id.in_(region_ids), RegionTable.table_id == Table.id))
+                session.execute(
+                    select(Table)
+                    .join(RegionTable)
+                    .where(
+                        RegionTable.region_id.in_(region_ids),
+                        RegionTable.table_id == Table.id,
+                    )
+                )
                 .scalars()
                 .all()
             )
 
             # Region tables that are themselves on the targeted pages
-            region_table_ids = select(RegionTable.id).where(RegionTable.region_id.in_(region_ids))
+            region_table_ids = select(RegionTable.id).where(
+                RegionTable.region_id.in_(region_ids)
+            )
 
             replaced_image_keys = list(
                 session.execute(
@@ -401,7 +445,9 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
 
             # Delete all objects related to the targeted pages
             statements = [
-                delete(TableCell).where(TableCell.region_table_id.in_(region_table_ids)),
+                delete(TableCell).where(
+                    TableCell.region_table_id.in_(region_table_ids)
+                ),
                 delete(RegionTable).where(RegionTable.region_id.in_(region_ids)),
                 delete(RegionText).where(RegionText.region_id.in_(region_ids)),
                 delete(RegionImage).where(RegionImage.region_id.in_(region_ids)),
@@ -419,7 +465,11 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
             for table in tables:
                 split_at_gaps(session, table)
 
-            all_objects = parser.to_model_objects(document, target_pages=page_to_process, merge_consecutive_tables=merge_consecutive_tables)
+            all_objects = parser.to_model_objects(
+                document,
+                target_pages=page_to_process,
+                merge_consecutive_tables=merge_consecutive_tables,
+            )
 
             # A figure whose crop cannot be stored keeps its region, just not its picture
             failed_image_keys: set[str] = set()
@@ -452,14 +502,22 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
             # page that is no longer rotated keeps no key; the rest are
             # deleted after the commit so they leave no orphan behind.
             kept_page_image_keys = set(parser.page_images) | {
-                obj.page_image_key for obj in all_objects if isinstance(obj, Page) and obj.page_image_key
+                obj.page_image_key
+                for obj in all_objects
+                if isinstance(obj, Page) and obj.page_image_key
             }
             replaced_image_keys = [
-                key for key in replaced_image_keys + replaced_page_image_keys if key not in kept_page_image_keys
+                key
+                for key in replaced_image_keys + replaced_page_image_keys
+                if key not in kept_page_image_keys
             ]
 
             all_objects = [
-                obj for obj in all_objects if not (isinstance(obj, RegionImage) and obj.image_key in failed_image_keys)
+                obj
+                for obj in all_objects
+                if not (
+                    isinstance(obj, RegionImage) and obj.image_key in failed_image_keys
+                )
             ]
 
             session.add_all(all_objects)
@@ -491,47 +549,79 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
                     # Gets the region table in the previous page that has the highest reading order
                     prev_region_table = None
                     if prev_page is not None:
-                        prev_max_reading_order = session.query(func.max(Region.reading_order)).filter(Region.page_id == prev_page.id).scalar()
+                        prev_max_reading_order = (
+                            session.query(func.max(Region.reading_order))
+                            .filter(Region.page_id == prev_page.id)
+                            .scalar()
+                        )
                         if prev_max_reading_order is not None:
                             prev_region_table = (
                                 session.query(RegionTable)
                                 .join(Region)
-                                .filter(Region.page_id == prev_page.id, Region.reading_order == prev_max_reading_order)
+                                .filter(
+                                    Region.page_id == prev_page.id,
+                                    Region.reading_order == prev_max_reading_order,
+                                )
                                 .first()
                             )
 
                     # Gets the region table in the next page that has the lowest reading order
                     next_region_table = None
                     if next_page is not None:
-                        next_min_reading_order = session.query(func.min(Region.reading_order)).filter(Region.page_id == next_page.id).scalar()
+                        next_min_reading_order = (
+                            session.query(func.min(Region.reading_order))
+                            .filter(Region.page_id == next_page.id)
+                            .scalar()
+                        )
                         if next_min_reading_order is not None:
                             next_region_table = (
                                 session.query(RegionTable)
                                 .join(Region)
-                                .filter(Region.page_id == next_page.id, Region.reading_order == next_min_reading_order)
+                                .filter(
+                                    Region.page_id == next_page.id,
+                                    Region.reading_order == next_min_reading_order,
+                                )
                                 .first()
                             )
 
                     current_table = obj.table
 
-                    prev_consecutive = prev_region_table is not None and is_consecutive(session, prev_region_table, obj)
-                    next_consecutive = next_region_table is not None and is_consecutive(session, obj, next_region_table)
+                    prev_consecutive = prev_region_table is not None and is_consecutive(
+                        session, prev_region_table, obj
+                    )
+                    next_consecutive = next_region_table is not None and is_consecutive(
+                        session, obj, next_region_table
+                    )
 
                     if prev_consecutive:
-                        merge_two_tables(session, prev_region_table.table, current_table)
+                        merge_two_tables(
+                            session, prev_region_table.table, current_table
+                        )
                         current_table = prev_region_table.table
 
                     if next_consecutive:
-                        merge_two_tables(session, current_table, next_region_table.table)
+                        merge_two_tables(
+                            session, current_table, next_region_table.table
+                        )
 
-            page_states = session.execute(select(Page.page_number, Page.status).where(Page.document_id == document_id)).all()
+            page_states = session.execute(
+                select(Page.page_number, Page.status).where(
+                    Page.document_id == document_id
+                )
+            ).all()
 
             job = session.get(Job, UUID(job_id))
             if job is None:
                 raise JobDeletedError(job_id)
 
-            run_pages = {obj.page_number: obj for obj in all_objects if isinstance(obj, Page)}
-            job_pages = session.execute(select(JobPage).where(JobPage.job_id == job.id)).scalars().all()
+            run_pages = {
+                obj.page_number: obj for obj in all_objects if isinstance(obj, Page)
+            }
+            job_pages = (
+                session.execute(select(JobPage).where(JobPage.job_id == job.id))
+                .scalars()
+                .all()
+            )
             finished_at = _utcnow()
             for job_page in job_pages:
                 page = run_pages.get(job_page.page_number)
@@ -546,12 +636,16 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
             job.model_name = run_model.name if run_model else None
             job.model_version = run_model.version if run_model else None
             job.pipeline_version = PIPELINE_VERSION
-            job.pages_processed = sum(job_page.status in ("completed", "failed") for job_page in job_pages)
+            job.pages_processed = sum(
+                job_page.status in ("completed", "failed") for job_page in job_pages
+            )
             job.error_message = summary
             job.current_stage = "failed" if run_failed else "finished"
             job.status = "failed" if run_failed else "completed"
 
-            document.status, document.error_message = _document_state(page_states, document.page_count or total_pages)
+            document.status, document.error_message = _document_state(
+                page_states, document.page_count or total_pages
+            )
             if run_model is not None:
                 document.model_name = job.model_name
                 document.model_version = job.model_version
@@ -570,11 +664,15 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
             logger.info(f"Successfully processed job {job_id}: {succeeded} page(s)")
 
     except JobCanceledError:
-        logger.info(f"Job {job_id} was canceled while processing; discarding its results")
+        logger.info(
+            f"Job {job_id} was canceled while processing; discarding its results"
+        )
         _delete_stored(uploaded_image_keys)
         _discard_thumbnails(document_id, list(thumbnail_keys.values()))
     except JobDeletedError:
-        logger.info(f"Job {job_id} was deleted while processing; discarding its results")
+        logger.info(
+            f"Job {job_id} was deleted while processing; discarding its results"
+        )
         _delete_stored(uploaded_image_keys)
         _discard_thumbnails(document_id, list(thumbnail_keys.values()))
     except AllPagesFailedError:
@@ -595,7 +693,9 @@ def process_document_task(self, job_id: str, page_to_process: tuple | None = Non
             _delete_stored(uploaded_image_keys)
             _discard_thumbnails(document_id, list(thumbnail_keys.values()))
         if _job_deleted(job_id):
-            logger.info(f"Job {job_id} was deleted while processing; discarding its results")
+            logger.info(
+                f"Job {job_id} was deleted while processing; discarding its results"
+            )
             return
         if _job_canceled(job_id):
             # An error in a run the user already canceled is not a failure.
