@@ -7,11 +7,18 @@
 # at the vlm-server container instead.
 FROM python:3.11-slim
 
+# Point PaddleX at the WenQuanYi Micro Hei font already installed above, so
+# `visualize` never lazily downloads PingFang from Baidu's CDN -- which once
+# failed CI with a transient "[Errno 101] Network is unreachable".
+# PADDLE_PDX_LOCAL_FONT_FILE_PATH is official API (paddlex/utils/flags.py):
+# when it names an existing file, every Font instance resolves to it and the
+# download path never fires, at build time and at runtime.
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DEFAULT_TIMEOUT=600 \
-    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
+    PADDLE_PDX_LOCAL_FONT_FILE_PATH=/usr/share/fonts/truetype/wqy/wqy-microhei.ttc
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -73,9 +80,9 @@ RUN python -c "from paddlex import create_model; create_model('PP-DocLayoutV2', 
 # on first boot
 RUN python -c "from paddlex import create_pipeline; create_pipeline('PP-StructureV3')"
 
-# The PingFang font used to render `visualize` output is lazily downloaded on
-# first use, not at model creation, so it needs its own warmup.
-RUN python -c "from paddlex.utils.fonts import PINGFANG_FONT; PINGFANG_FONT.path"
+# (The PingFang warmup layer was removed: PADDLE_PDX_LOCAL_FONT_FILE_PATH
+# points at the WQY Micro Hei font installed above, so the lazy font download
+# never fires.)
 
 COPY --from=shared entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY paddlex_wrapper.py /usr/local/bin/paddlex_wrapper.py
