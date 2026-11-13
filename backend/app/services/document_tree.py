@@ -83,30 +83,71 @@ async def load_document_tree(
 
     region_ids: Select = select(Region.id).where(Region.page_id.in_(page_ids))
 
-    table_ids: Select = select(RegionTable.table_id).where(RegionTable.region_id.in_(region_ids))
+    table_ids: Select = select(RegionTable.table_id).where(
+        RegionTable.region_id.in_(region_ids)
+    )
 
     pages_query = select(Page).where(Page.document_id == document_id)
 
     if page is not None:
         pages_query = pages_query.where(Page.page_number == page)
 
-    page_rows = (await db.execute(pages_query.order_by(Page.page_number))).scalars().all()
+    page_rows = (
+        (await db.execute(pages_query.order_by(Page.page_number))).scalars().all()
+    )
 
     region_rows = (
-        (await db.execute(select(Region).where(Region.page_id.in_(page_ids)).order_by(Region.page_id, Region.reading_order, Region.id)))
+        (
+            await db.execute(
+                select(Region)
+                .where(Region.page_id.in_(page_ids))
+                .order_by(Region.page_id, Region.reading_order, Region.id)
+            )
+        )
         .scalars()
         .all()
     )
 
-    text_rows = (await db.execute(select(RegionText).where(RegionText.region_id.in_(region_ids)))).scalars().all()
+    text_rows = (
+        (
+            await db.execute(
+                select(RegionText).where(RegionText.region_id.in_(region_ids))
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-    image_rows = (await db.execute(select(RegionImage).where(RegionImage.region_id.in_(region_ids)))).scalars().all()
+    image_rows = (
+        (
+            await db.execute(
+                select(RegionImage).where(RegionImage.region_id.in_(region_ids))
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    caption_ids = {row.caption_id for row in image_rows if row.caption_id is not None}
+    caption_rows = (
+        (await db.execute(select(RegionText).where(RegionText.id.in_(caption_ids))))
+        .scalars()
+        .all()
+        if caption_ids
+        else []
+    )
 
     warning_rows: list[Warning] = []
     if include_warnings:
-        warning_rows = list((await db.execute(select(Warning).where(Warning.page_id.in_(page_ids)))).scalars().all())
+        warning_rows = list(
+            (await db.execute(select(Warning).where(Warning.page_id.in_(page_ids))))
+            .scalars()
+            .all()
+        )
 
-    table_rows = (await db.execute(select(Table).where(Table.id.in_(table_ids)))).scalars().all()
+    table_rows = (
+        (await db.execute(select(Table).where(Table.id.in_(table_ids)))).scalars().all()
+    )
 
     part_rows = (
         await db.execute(
@@ -124,8 +165,16 @@ async def load_document_tree(
             (
                 await db.execute(
                     select(TableCell)
-                    .where(TableCell.region_table_id.in_(select(RegionTable.id).where(RegionTable.table_id.in_(table_ids))))
-                    .order_by(TableCell.region_table_id, TableCell.row_idx, TableCell.col_idx)
+                    .where(
+                        TableCell.region_table_id.in_(
+                            select(RegionTable.id).where(
+                                RegionTable.table_id.in_(table_ids)
+                            )
+                        )
+                    )
+                    .order_by(
+                        TableCell.region_table_id, TableCell.row_idx, TableCell.col_idx
+                    )
                 )
             )
             .scalars()
@@ -136,16 +185,25 @@ async def load_document_tree(
 
     # Index related records by their parent IDs for efficient tree assembly.
     page_number_by_id = {row.id: row.page_number for row in page_rows}
-    text_by_region: dict[uuid.UUID, RegionText] = {row.region_id: row for row in text_rows}
-    image_by_region: dict[uuid.UUID, RegionImage] = {row.region_id: row for row in image_rows}
+    text_by_region: dict[uuid.UUID, RegionText] = {
+        row.region_id: row for row in text_rows
+    }
+    image_by_region: dict[uuid.UUID, RegionImage] = {
+        row.region_id: row for row in image_rows
+    }
+    caption_by_id: dict[uuid.UUID, RegionText] = {row.id: row for row in caption_rows}
 
     # Group warnings under their corresponding page nodes.
     warnings_by_page: dict[uuid.UUID, list[WarningNode]] = defaultdict(list)
     for warning in warning_rows:
-        warnings_by_page[warning.page_id].append(WarningNode(warning_type=warning.warning_type, message=warning.message))
+        warnings_by_page[warning.page_id].append(
+            WarningNode(warning_type=warning.warning_type, message=warning.message)
+        )
 
     # Prepare an assembly for each table and attach its page-specific parts.
-    assemblies: dict[uuid.UUID, _TableAssembly] = {row.id: _TableAssembly(row) for row in table_rows}
+    assemblies: dict[uuid.UUID, _TableAssembly] = {
+        row.id: _TableAssembly(row) for row in table_rows
+    }
     part_by_id: dict[uuid.UUID, RegionTable] = {}
     part_page_number: dict[uuid.UUID, int] = {}
     part_by_region: dict[uuid.UUID, RegionTable] = {}
@@ -158,7 +216,9 @@ async def load_document_tree(
             assembly.parts.append((region_table, part_page))
 
     # Mark the first part of each table so clients can identify where it begins.
-    first_part_ids: set[uuid.UUID] = {assembly.parts[0][0].id for assembly in assemblies.values() if assembly.parts}
+    first_part_ids: set[uuid.UUID] = {
+        assembly.parts[0][0].id for assembly in assemblies.values() if assembly.parts
+    }
     _attach_cells(assemblies, part_by_id, part_page_number, cell_rows)
 
     # Convert database regions into API nodes and group them by page.
@@ -167,6 +227,16 @@ async def load_document_tree(
         part = part_by_region.get(region.id)
         text = text_by_region.get(region.id)
         image = image_by_region.get(region.id)
+        caption = (
+            caption_by_id.get(image.caption_id)
+            if image is not None and image.caption_id is not None
+            else None
+        )
+
+        # Do not return caption as a separate node since it is already included in the previous figure
+        if text is not None and text.id in caption_by_id:
+            continue
+
         regions_by_page[region.page_id].append(
             RegionNode(
                 id=region.id,
@@ -178,12 +248,14 @@ async def load_document_tree(
                 text=text.text_content if text is not None else None,
                 text_confidence=text.confidence if text is not None else None,
                 is_edited=text is not None and text.original_text is not None,
-                original_text=text.original_text if text is not None and text.original_text is not None else None,
+                original_text=text.original_text
+                if text is not None and text.original_text is not None
+                else None,
                 table_id=part.table_id if part is not None else None,
                 region_table_id=part.id if part is not None else None,
                 is_first_table_part=part is not None and part.id in first_part_ids,
                 image_key=image.image_key if image is not None else None,
-                caption=image.caption if image is not None else None,
+                caption=caption.text_content if caption is not None else None,
             )
         )
 
@@ -204,7 +276,7 @@ async def load_document_tree(
         )
         for row in page_rows
     ]
-    
+
     # Calculate the number of high-confidence pages
     high_confidence_page_count = 0
     for row in page_rows:
@@ -214,7 +286,10 @@ async def load_document_tree(
             high_confidence_page_count += 1
 
     # Build table nodes in document reading order.
-    table_nodes = [_build_table_node(assembly) for assembly in sorted(assemblies.values(), key=_table_sort_key)]
+    table_nodes = [
+        _build_table_node(assembly)
+        for assembly in sorted(assemblies.values(), key=_table_sort_key)
+    ]
 
     # Return the complete document tree together with summary statistics.
     return DocumentTree(
@@ -246,7 +321,11 @@ async def load_tables(
     document_id = access.document.id
     table_ids: Select = select(Table.id).where(Table.document_id == document_id)
 
-    table_rows = (await db.execute(select(Table).where(Table.document_id == document_id))).scalars().all()
+    table_rows = (
+        (await db.execute(select(Table).where(Table.document_id == document_id)))
+        .scalars()
+        .all()
+    )
     part_rows = (
         await db.execute(
             select(RegionTable, Page.page_number)
@@ -257,7 +336,9 @@ async def load_tables(
         )
     ).all()
 
-    assemblies: dict[uuid.UUID, _TableAssembly] = {row.id: _TableAssembly(row) for row in table_rows}
+    assemblies: dict[uuid.UUID, _TableAssembly] = {
+        row.id: _TableAssembly(row) for row in table_rows
+    }
     part_by_id: dict[uuid.UUID, RegionTable] = {}
     part_page_number: dict[uuid.UUID, int] = {}
     for region_table, part_page in part_rows:
@@ -272,8 +353,16 @@ async def load_tables(
             (
                 await db.execute(
                     select(TableCell)
-                    .where(TableCell.region_table_id.in_(select(RegionTable.id).where(RegionTable.table_id.in_(table_ids))))
-                    .order_by(TableCell.region_table_id, TableCell.row_idx, TableCell.col_idx)
+                    .where(
+                        TableCell.region_table_id.in_(
+                            select(RegionTable.id).where(
+                                RegionTable.table_id.in_(table_ids)
+                            )
+                        )
+                    )
+                    .order_by(
+                        TableCell.region_table_id, TableCell.row_idx, TableCell.col_idx
+                    )
                 )
             )
             .scalars()
@@ -302,7 +391,10 @@ async def load_tables(
                 assembly.has_spans = True
 
     # Return table nodes ordered by their first page and reading order.
-    return [_build_table_node(assembly) for assembly in sorted(assemblies.values(), key=_table_sort_key)]
+    return [
+        _build_table_node(assembly)
+        for assembly in sorted(assemblies.values(), key=_table_sort_key)
+    ]
 
 
 def _table_sort_key(assembly: _TableAssembly) -> tuple[int, int]:
@@ -368,10 +460,17 @@ def _build_table_node(assembly: _TableAssembly) -> TableNode:
     ]
 
     # Record which page contributes each row of the assembled table.
-    row_sources = [RowSource(row=row, page_number=part.page_number) for part in part_nodes for row in range(part.row_start, part.row_end + 1)]
+    row_sources = [
+        RowSource(row=row, page_number=part.page_number)
+        for part in part_nodes
+        for row in range(part.row_start, part.row_end + 1)
+    ]
 
     # Derive dimensions from the available parts and cells to handle incomplete metadata.
-    derived_rows = sum((region_table.row_end or 0) - (region_table.row_start or 0) + 1 for region_table, _ in parts)
+    derived_rows = sum(
+        (region_table.row_end or 0) - (region_table.row_start or 0) + 1
+        for region_table, _ in parts
+    )
     derived_cols = max(
         (cell.col + cell.col_span for cell in assembly.cells),
         default=0,
