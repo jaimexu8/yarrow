@@ -24,7 +24,16 @@ class Region(Base):
     )
     page_number = Column(Integer)
     reading_order = Column(Integer)
-    region_type = Column(Enum("header", "paragraph", "figure", "table", name="region_type_enum", create_constraint=False))
+    region_type = Column(
+        Enum(
+            "header",
+            "paragraph",
+            "figure",
+            "table",
+            name="region_type_enum",
+            create_constraint=False,
+        )
+    )
     x0 = Column(Float)
     y0 = Column(Float)
     x1 = Column(Float)
@@ -55,6 +64,12 @@ class RegionImage(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     region_id = Column(UUID(as_uuid=True), ForeignKey("regions.id"), nullable=False)
     image_key = Column(String)
-    caption = Column(String)
+    # The figure_title region text that captions this image, if any
+    caption_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("region_texts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
+    caption = relationship("RegionText", foreign_keys=[caption_id])
     region = relationship("Region")

@@ -57,10 +57,15 @@ def page_error_code(error: BaseException) -> str:
         return "inference_unavailable"
     if isinstance(error, requests.HTTPError):
         status = getattr(error.response, "status_code", None)
-        return "inference_unavailable" if status in UNAVAILABLE_HTTP_STATUSES else "inference_error"
+        return (
+            "inference_unavailable"
+            if status in UNAVAILABLE_HTTP_STATUSES
+            else "inference_error"
+        )
     if isinstance(error, (UnidentifiedImageError, binascii.Error)):
         return "invalid_page_image"
     return "unknown"
+
 
 Box = tuple[float, float, float, float]
 BlockWithTable = tuple[JsonDict, JsonDict | None]
@@ -77,6 +82,7 @@ LAYOUT_SCORE_IOU_THRESHOLD = 0.5
 TABLE_LABELS = {"table"}
 TABLE_TITLE_LABELS = {"table_title", "table_caption"}
 IMAGE_LABELS = {"image", "figure", "chart", "seal"}
+CAPTION_LABELS = {"figure_title"}
 
 REGION_TYPE_MAP = {
     "title": "header",
@@ -195,7 +201,9 @@ class _TableHtmlParser(HTMLParser):
     def _close_cell(self) -> None:
         if self._current_cell_data is None:
             return
-        self._current_cell_data["text"] = " ".join(self._current_cell_data["text"].split())
+        self._current_cell_data["text"] = " ".join(
+            self._current_cell_data["text"].split()
+        )
         self.cells.append(self._current_cell_data)
         self._current_cell_data = None
         self._depth = 0
@@ -244,7 +252,11 @@ class DocumentParser:
     def load_file(self, file_data: bytes) -> None:
         file_extension = self.detect_extension(file_data)
 
-        loader = self.FILE_EXTENSION_TO_LOADER.get(file_extension) if file_extension is not None else None
+        loader = (
+            self.FILE_EXTENSION_TO_LOADER.get(file_extension)
+            if file_extension is not None
+            else None
+        )
         if loader is None:
             raise ValueError(f"No loader found for file extension: {file_extension}")
 
@@ -261,11 +273,15 @@ class DocumentParser:
         """
         self.page_orientations = {}
         for index, page_b64 in enumerate(self.pages):
-            corrected, angle, confidence = self.orientation_corrector.correct_page(page_b64)
+            corrected, angle, confidence = self.orientation_corrector.correct_page(
+                page_b64
+            )
             if angle != 0.0:
                 self.pages[index] = corrected
                 self.page_orientations[index] = angle
-                logger.info(f"Page {index + 1} auto-rotated by {angle:.1f}° (confidence {confidence:.2f})")
+                logger.info(
+                    f"Page {index + 1} auto-rotated by {angle:.1f}° (confidence {confidence:.2f})"
+                )
 
     def process_page(self, page_data: str, page_index: int) -> JsonDict:
         headers = {"Content-Type": "application/json"}
@@ -282,8 +298,10 @@ class DocumentParser:
         response.raise_for_status()
         body = response.json()
         self.page_models[page_index] = ModelInfo(
-            response.headers.get("X-Yarrow-Model-Name") or settings.INFERENCE_MODEL_NAME,
-            response.headers.get("X-Yarrow-Model-Version") or settings.INFERENCE_MODEL_VERSION,
+            response.headers.get("X-Yarrow-Model-Name")
+            or settings.INFERENCE_MODEL_NAME,
+            response.headers.get("X-Yarrow-Model-Version")
+            or settings.INFERENCE_MODEL_VERSION,
         )
         return body
 
@@ -304,7 +322,9 @@ class DocumentParser:
         except Exception as error:
             error_message = f"{type(error).__name__}: {error}"
             logger.error(f"Page {page_number} processing failed: ({error_message})")
-            self.page_errors[page_index] = PageError(page_error_code(error), error_message)
+            self.page_errors[page_index] = PageError(
+                page_error_code(error), error_message
+            )
             self._emit_page_event(page_number, "failed")
             return {}
 
@@ -314,11 +334,15 @@ class DocumentParser:
     async def process_async(self, page_to_process: tuple | None = None) -> None:
         self.page_errors = {}
         self.page_models = {}
-        
+
         # Creates processing tasks for each page that needs to be processed
-        tasks = [asyncio.to_thread(self._process_page_isolated, index, page) for index, page in enumerate(self.pages) if page_to_process is None or index + 1 in page_to_process]
+        tasks = [
+            asyncio.to_thread(self._process_page_isolated, index, page)
+            for index, page in enumerate(self.pages)
+            if page_to_process is None or index + 1 in page_to_process
+        ]
         results = list(await asyncio.gather(*tasks))
-        
+
         if page_to_process is None:
             # Assumed that all pages are being processed
             self.parsed_result = results
@@ -326,7 +350,7 @@ class DocumentParser:
             if len(self.parsed_result) != len(self.pages):
                 # Initialize the parsed_result list with empty dictionaries for all pages
                 self.parsed_result = [{} for _ in range(len(self.pages))]
-            
+
             # Selectively updating the parsed results for the specified pages
             for i, result in zip(page_to_process, results):
                 self.parsed_result[i - 1] = result
@@ -342,14 +366,19 @@ class DocumentParser:
                 pruned_results.append({})
                 continue
             pruned_results.append(
-                response.get("result", {}).get("layoutParsingResults", {})[0].get("prunedResult")
+                response.get("result", {})
+                .get("layoutParsingResults", {})[0]
+                .get("prunedResult")
             )
         return pruned_results
 
     def get_markdown(self) -> list[str]:
         markdown: list[str] = []
         for response in self.parsed_result:
-            markdown.extend((item.get("markdown") or {}).get("text", "") for item in self._result_items(response))
+            markdown.extend(
+                (item.get("markdown") or {}).get("text", "")
+                for item in self._result_items(response)
+            )
         return markdown
 
     def _consecutive_parts(self, part_prev, part_curr):
@@ -360,7 +389,8 @@ class DocumentParser:
         """
         return (
             part_curr["page_index"] == part_prev["page_index"] + 1
-            and part_prev["region_reading_order"] == part_prev["page_total_reading_order"] - 1
+            and part_prev["region_reading_order"]
+            == part_prev["page_total_reading_order"] - 1
             and part_curr["region_reading_order"] == 0
             and part_curr["col_count"] > 0
             and part_curr["col_count"] == part_prev["col_count"]
@@ -370,7 +400,11 @@ class DocumentParser:
         groups: list[list[JsonDict]] = []
 
         for part in region_table_data:
-            if merge_consecutive_tables and groups and self._consecutive_parts(groups[-1][-1], part):
+            if (
+                merge_consecutive_tables
+                and groups
+                and self._consecutive_parts(groups[-1][-1], part)
+            ):
                 groups[-1].append(part)
             else:
                 groups.append([part])
@@ -428,11 +462,11 @@ class DocumentParser:
         region_tables: list[RegionTable] = []
         table_cells: list[TableCell] = []
         title = None
-        
+
         for part in group:
             if part["title"]:
                 title = part["title"]
-        
+
         table = Table(
             id=uuid.uuid4(),
             document_id=document.id,
@@ -467,8 +501,12 @@ class DocumentParser:
             table_ocr = part.get("table_ocr") or {}
             ocr_words = [
                 (float(score), box)
-                for score, box in zip(table_ocr.get("rec_scores") or [], table_ocr.get("rec_boxes") or [])
-                if score is not None and isinstance(box, (list, tuple)) and len(box) == 4
+                for score, box in zip(
+                    table_ocr.get("rec_scores") or [], table_ocr.get("rec_boxes") or []
+                )
+                if score is not None
+                and isinstance(box, (list, tuple))
+                and len(box) == 4
             ]
 
             # Constructs the table cells of the corresponding region table
@@ -484,7 +522,8 @@ class DocumentParser:
                     [
                         score
                         for score, box in ocr_words
-                        if bbox[0] <= (box[0] + box[2]) / 2 <= bbox[2] and bbox[1] <= (box[1] + box[3]) / 2 <= bbox[3]
+                        if bbox[0] <= (box[0] + box[2]) / 2 <= bbox[2]
+                        and bbox[1] <= (box[1] + box[3]) / 2 <= bbox[3]
                     ]
                     if cells_have_boxes and bbox
                     else []
@@ -503,7 +542,9 @@ class DocumentParser:
                     x1=bbox[2] if bbox else 0,
                     y1=bbox[3] if bbox else 0,
                     is_header=cell["is_header"],
-                    confidence=sum(cell_scores) / len(cell_scores) if cell_scores else None,
+                    confidence=sum(cell_scores) / len(cell_scores)
+                    if cell_scores
+                    else None,
                 )
                 table_cells.append(table_cell)
 
@@ -523,12 +564,16 @@ class DocumentParser:
         return [
             (
                 block,
-                next(table_results, None) if block.get("block_label") in TABLE_LABELS else None,
+                next(table_results, None)
+                if block.get("block_label") in TABLE_LABELS
+                else None,
             )
             for block in blocks
         ]
 
-    def _get_bbox_score(self, layout_det_res: JsonDict, label: str | None, bbox: list[float] | None) -> float | None:
+    def _get_bbox_score(
+        self, layout_det_res: JsonDict, label: str | None, bbox: list[float] | None
+    ) -> float | None:
         if not bbox:
             return None
 
@@ -538,7 +583,12 @@ class DocumentParser:
         for box_det_res in layout_det_res.get("boxes") or []:
             coordinate_det = box_det_res.get("coordinate")
             label_det, score_det = box_det_res.get("label"), box_det_res.get("score")
-            if not coordinate_det or len(coordinate_det) != 4 or label is None or score_det is None:
+            if (
+                not coordinate_det
+                or len(coordinate_det) != 4
+                or label is None
+                or score_det is None
+            ):
                 continue
 
             box = (
@@ -574,7 +624,9 @@ class DocumentParser:
         pair_by_block = {id(pair[0]): pair for pair in pairs}
         return [pair_by_block[id(block)] for block in ordered_blocks]
 
-    def _crop_figure(self, page_image: Image.Image, page_data: JsonDict, bbox: Box) -> bytes | None:
+    def _crop_figure(
+        self, page_image: Image.Image, page_data: JsonDict, bbox: Box
+    ) -> bytes | None:
         """The bbox's area of the page image as PNG bytes, or None if it is empty.
 
         The bbox is in the coordinates of the page the OCR reported, which is
@@ -603,23 +655,35 @@ class DocumentParser:
         # Decoded on the first figure, as most pages have none
         page_image: Image.Image | None = None
 
-        region_data_to_table_results: list[tuple[JsonDict, JsonDict | None]] = self._pair_tables(page_data)
+        region_data_to_table_results: list[tuple[JsonDict, JsonDict | None]] = (
+            self._pair_tables(page_data)
+        )
         region_data_to_table_results = self._sort_region_data(
             region_data_to_table_results, page_data.get("width")
         )
 
-        for reading_order, (region_data, table_result) in enumerate(region_data_to_table_results):
+        for reading_order, (region_data, table_result) in enumerate(
+            region_data_to_table_results
+        ):
             label: str | None = region_data.get("block_label")
             content: str | None = region_data.get("block_content")
             bbox: list[float] | None = region_data.get("block_bbox")
 
-            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4 or any(component is None for component in bbox):
+            if (
+                not isinstance(bbox, (list, tuple))
+                or len(bbox) != 4
+                or any(component is None for component in bbox)
+            ):
                 bbox = None
             else:
                 bbox = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
 
             # Map raw labels to RegionType enum
-            mapped_type = REGION_TYPE_MAP.get(str(label).lower(), "paragraph") if label else "paragraph"
+            mapped_type = (
+                REGION_TYPE_MAP.get(str(label).lower(), "paragraph")
+                if label
+                else "paragraph"
+            )
 
             region = Region(
                 id=uuid.uuid4(),
@@ -631,7 +695,9 @@ class DocumentParser:
                 y0=bbox[1] if bbox else 0,
                 x1=bbox[2] if bbox else 0,
                 y1=bbox[3] if bbox else 0,
-                confidence=self._get_bbox_score(page_data.get("layout_det_res", {}), label, bbox),
+                confidence=self._get_bbox_score(
+                    page_data.get("layout_det_res", {}), label, bbox
+                ),
             )
             regions.append(region)
 
@@ -656,7 +722,8 @@ class DocumentParser:
                         "page_index": page_index,
                         "page_id": page_id,
                         "region_reading_order": reading_order,
-                        "page_total_reading_order": len(region_data_to_table_results) - 1,
+                        "page_total_reading_order": len(region_data_to_table_results)
+                        - 1,
                         "region": region,
                         "bbox": bbox,
                         "cells": parser.cells,
@@ -664,22 +731,31 @@ class DocumentParser:
                         # The OCR's reading of the table's text, to score each cell by
                         "table_ocr": (table_result or {}).get("table_ocr_pred") or {},
                         "row_count": max(
-                            (cell["row_idx"] + cell["row_span"] for cell in parser.cells),
+                            (
+                                cell["row_idx"] + cell["row_span"]
+                                for cell in parser.cells
+                            ),
                             default=0,
                         ),
                         "col_count": max(
-                            (cell["col_idx"] + cell["col_span"] for cell in parser.cells),
+                            (
+                                cell["col_idx"] + cell["col_span"]
+                                for cell in parser.cells
+                            ),
                             default=0,
                         ),
                         "content": content,
                         "title": previous_title,
                     }
                 )
+                regions[-1].region_type = "table"
 
             elif label in IMAGE_LABELS and bbox:
                 try:
                     if page_image is None:
-                        page_image = Image.open(io.BytesIO(base64.b64decode(self.pages[page_index])))
+                        page_image = Image.open(
+                            io.BytesIO(base64.b64decode(self.pages[page_index]))
+                        )
                         page_image.load()
                     crop = self._crop_figure(page_image, page_data, bbox)
                 except Exception:
@@ -691,23 +767,43 @@ class DocumentParser:
                 if crop is not None:
                     image_key = f"documents/{document_id}/figures/{region.id}.png"
                     self.figure_images[image_key] = crop
-                    regions.append(RegionImage(id=uuid.uuid4(), region_id=region.id, image_key=image_key))
+                    regions[-1].region_type = "figure"
+                    regions.append(
+                        RegionImage(
+                            id=uuid.uuid4(), region_id=region.id, image_key=image_key
+                        )
+                    )
 
             elif label not in IMAGE_LABELS and content:
+                regions[-1].region_type = "paragraph"
                 regions.append(
                     RegionText(
                         id=uuid.uuid4(),
                         region_id=region.id,
                         text_content=content,
-                        confidence=self._get_bbox_score(page_data.get("layout_det_res", {}), label, bbox),
+                        confidence=self._get_bbox_score(
+                            page_data.get("layout_det_res", {}), label, bbox
+                        ),
                     )
                 )
+
+                if (
+                    label in CAPTION_LABELS
+                    and len(regions) >= 3
+                    and isinstance(regions[-3], RegionImage)
+                ):
+                    regions[-3].caption = regions[-1]
 
             previous_title = content if label in TABLE_TITLE_LABELS else None
 
         return regions, region_tables_data
 
-    def to_model_objects(self, document: Document, target_pages: tuple | None = None, merge_consecutive_tables: bool = False) -> list[Base]:
+    def to_model_objects(
+        self,
+        document: Document,
+        target_pages: tuple | None = None,
+        merge_consecutive_tables: bool = False,
+    ) -> list[Base]:
         """
         Converts the parsed result into model objects.
 
@@ -779,9 +875,7 @@ class DocumentParser:
             try:
                 page_bytes = base64.b64decode(self.pages[page_index])
                 warnings.extend(
-                    Warning(
-                        page_id=page_id, warning_type="quality", message=message
-                    )
+                    Warning(page_id=page_id, warning_type="quality", message=message)
                     for message in self.quality_checker.check_quality(
                         page_bytes, page_data
                     )
@@ -794,7 +888,9 @@ class DocumentParser:
                 continue
 
             # Construct regions for each page
-            page_regions, region_tables_data_per_page = self._construct_regions(page_index, page_id, page_data, document.id)
+            page_regions, region_tables_data_per_page = self._construct_regions(
+                page_index, page_id, page_data, document.id
+            )
 
             regions.extend(page_regions)
             region_table_data.extend(region_tables_data_per_page)
@@ -804,7 +900,9 @@ class DocumentParser:
 
         # Construct tables and their respective objects
         for group in groups:
-            tables_per_group, region_tables_per_group, table_cells_per_group = self._build_table(document, group)
+            tables_per_group, region_tables_per_group, table_cells_per_group = (
+                self._build_table(document, group)
+            )
             tables.extend(tables_per_group)
             regions.extend(region_tables_per_group)
             regions.extend(table_cells_per_group)
