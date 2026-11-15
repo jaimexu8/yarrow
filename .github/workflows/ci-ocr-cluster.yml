@@ -37,9 +37,9 @@ on:
 #          (`save-always` on actions/cache is deprecated and does not work).
 
 env:
-  # Both stacks' gateway services interpolate GATEWAY_API_KEY with a :?
-  # default guard, so compose refuses to start the edge unauthenticated.
   GATEWAY_API_KEY: ci-ocr-test-key
+  MODEL_NAME: PP-StructureV3+PaddleOCR-VL
+  MODEL_VERSION: 3.2.0+vl-0.9b
 
 jobs:
   ocr-cluster-x86:
