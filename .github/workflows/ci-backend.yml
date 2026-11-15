@@ -65,7 +65,6 @@ jobs:
           VALKEY_HOST: localhost
           VALKEY_PORT: ${{ job.services.valkey.ports[6379] }}
         run: |
-          # Two workers for now
           cd backend
           pytest -n 4
 
