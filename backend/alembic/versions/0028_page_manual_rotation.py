@@ -1,7 +1,7 @@
 """pages.manual_rotation_deg, the user's rotation override for a page
 
-Revision ID: 0027
-Revises: 0022
+Revision ID: 0028
+Revises: 0027
 Create Date: 2026-11-10
 
 - manual_rotation_deg: the absolute rotation (0, 90, 180 or 270, clockwise
@@ -16,14 +16,16 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0027"
-down_revision = "0022"
+revision = "0028"
+down_revision = "0027"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("pages", sa.Column("manual_rotation_deg", sa.Integer(), nullable=True))
+    op.add_column(
+        "pages", sa.Column("manual_rotation_deg", sa.Integer(), nullable=True)
+    )
 
 
 def downgrade() -> None:
