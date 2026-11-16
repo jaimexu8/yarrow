@@ -19,22 +19,13 @@ on:
 # The sglang/vllm vlm-server is excluded.
 #
 # x86:     ubuntu runner. The x86 paddlex image ships a libcuda stub, so it
-#          runs CPU-only. The build takes ~20 min and happens on every run
+#          runs CPU-only. The build happens on every run
 #          (the x86 job is deliberately uncached; stacking both stacks'
 #          caches risks GitHub's 10 GB per-repo cache budget).
 # aarch64: ubuntu-24.04-arm runner. The dgx stack builds PaddlePaddle from
-#          source for sm_121 (~4 h on 4 vCPUs). Instead of persisting whole
-#          BuildKit layer caches (15-20 GB, over GitHub's 10 GB cache budget)
-#          the workflow caches only the compiled wheel (~4 GB) under
-#          ~/.cache/paddle-wheel/dgx, keyed exactly on the Dockerfile: the
-#          4-hour compile happens only when paddlex.Dockerfile changes, and
-#          every other run just pip-installs the wheel
-#          (PADDLE_WHEEL_FROM=paddle-wheel-prebuilt + the wheels build
-#          context in ocr_cluster/dgx/paddlex.Dockerfile skips the compile
-#          stage entirely). The cache is restored with actions/cache/restore
-#          and saved with actions/cache/save immediately after the compile,
-#          so a later failure or timeout never throws the wheel away
-#          (`save-always` on actions/cache is deprecated and does not work).
+#          source for sm_121. The workflow caches only the compiled
+#          wheel under ~/.cache/paddle-wheel/dgx, keyed on the
+#          compile stage of paddlex.Dockerfile plus its patches
 
 env:
   GATEWAY_API_KEY: ci-ocr-test-key
@@ -156,7 +147,7 @@ jobs:
             echo "compiled wheel found in cache:"
             ls -lh "$WHEEL_DIR"
           else
-            echo "no cached wheel; compiling Paddle from source (about 4 hours)"
+            echo "no cached wheel; compiling Paddle from source"
             # PADDLE_BUILD_INPUTS is the same digest the cache key is built from,
             # so the wheel is stamped with the key that produced it.
             docker buildx build \
@@ -182,7 +173,7 @@ jobs:
             echo "wheel extracted:"; ls -lh "$WHEEL_DIR"; du -sh "$WHEEL_DIR"
           fi
       # Save immediately after the compile so later failures/timeouts can't
-      # lose the 4-hour result. Skipped on an exact cache hit.
+      # lose the result. Skipped on an exact cache hit.
       - name: Save compiled wheel cache
         if: steps.wheel-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

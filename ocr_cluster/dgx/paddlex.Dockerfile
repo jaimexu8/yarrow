@@ -9,12 +9,11 @@
 #     pass.
 #   - paddle-wheel-prebuilt: install a wheel copied in via the "wheels" build
 #     context. CI takes this path (see ci-ocr-cluster.yml): the wheel is
-#     compiled once and cached between runs, so the 4-hour compile only
-#     happens when this Dockerfile changes. BuildKit evaluates only the
-#     stages in the dependency graph of the requested target, so pointing the
-#     runtime stage at paddle-wheel-prebuilt skips the compile entirely --
-#     even though paddle-compile is defined above it and would fail without
-#     the wheels context if it were evaluated.
+#     compiled once and cached between runs. BuildKit
+#     evaluates only the stages in the dependency graph of the requested
+#     target, so pointing the runtime stage at paddle-wheel-prebuilt skips
+#     the compile entirely, even though paddle-compile is defined above it
+#     and would fail without the wheels context if it were evaluated.
 ARG PADDLE_WHEEL_FROM=paddle-compile
 FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04@sha256:a40069bdefcb252e760d5d061ee31a8b4b041343848ab2b9b910bc0a0c026e78 AS paddle-compile
 
@@ -75,12 +74,21 @@ RUN git clone --branch "${PADDLE_GIT_REF}" --depth 1 \
         sleep 60; \
     done; [ -n "$ok" ] \
     && git -C /opt/paddle/third_party/gloo fetch --tags \
-    && python -m pip install -r /opt/paddle/python/requirements.txt \
-    && mkdir /opt/paddle/build \
+    && python -m pip install -r /opt/paddle/python/requirements.txt
+
+# Paddle v3.4.0 turns flash-attention on by itself when the CUDA arch is 80 or
+# newer and offers no option to turn it off. Neither PP-StructureV3
+# nor PaddleOCR-VL runs a fused-attention kernel.
+
+COPY patches/no-flash-attn.patch /opt/patches/no-flash-attn.patch
+RUN git -C /opt/paddle apply -p1 /opt/patches/no-flash-attn.patch
+
+RUN mkdir /opt/paddle/build \
     && cd /opt/paddle/build \
     && cmake .. -GNinja \
         -DCMAKE_BUILD_TYPE=Release \
         -DWITH_GPU=ON \
+        -DWITHOUT_FLASHATTN=ON \
         -DWITH_TESTING=OFF \
         -DCUDA_ARCH_NAME=Manual \
         -DCUDA_ARCH_BIN="12.1" \
