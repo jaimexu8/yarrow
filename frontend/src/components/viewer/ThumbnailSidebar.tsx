@@ -58,14 +58,25 @@ function PageThumbnail({
   const [button, setButton] = useState<HTMLButtonElement | null>(null);
   const near = useNearViewport(button, root);
   const [url, setUrl] = useState(() =>
-    cachedPageThumbnail(documentId, pageNumber)
+    cachedPageThumbnail(documentId, pageNumber, retryToken)
   );
   const [failedToken, setFailedToken] = useState<string | null>(null);
+
+  // When a page is re-OCRed (a saved rotation, a reprocess), its thumbnail is
+  // re-stored at the same key and the version (the tree's generated_at) bumps.
+  // Reset the url during render when the token changes (adjusting state when a
+  // prop changes) so the effect below refetches the fresh one. The initializer
+  // above already sets the initial value, so only subsequent changes matter.
+  const [prevToken, setPrevToken] = useState(retryToken);
+  if (prevToken !== retryToken) {
+    setPrevToken(retryToken);
+    setUrl(cachedPageThumbnail(documentId, pageNumber, retryToken));
+  }
 
   useEffect(() => {
     if (!near || !fetchable || url || failedToken === retryToken) return;
     let current = true;
-    loadPageThumbnail(documentId, pageNumber).then(
+    loadPageThumbnail(documentId, pageNumber, retryToken).then(
       (loaded) => {
         if (current) setUrl(loaded);
       },

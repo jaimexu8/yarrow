@@ -92,6 +92,24 @@ export async function reprocessDocument(id: string): Promise<DocumentSummary> {
   return res.data;
 }
 
+/**
+ * Re-OCR one page at the user's chosen rotation (degrees CW from the original
+ * page). `degrees` of `null` clears the override so auto-detection decides
+ * again. Queues a single-page job and returns the (queued) document, so the
+ * caller can poll it like a reprocess.
+ */
+export async function rotateDocumentPage(
+  id: string,
+  pageNumber: number,
+  degrees: number | null
+): Promise<DocumentSummary> {
+  const res = await api.post<DocumentSummary>(
+    `/api/v1/documents/${id}/pages/${pageNumber}/rotate`,
+    { degrees }
+  );
+  return res.data;
+}
+
 export async function getDocument(id: string): Promise<DocumentDetail> {
   const res = await api.get<DocumentDetail>(`/api/v1/documents/${id}`);
   return res.data;

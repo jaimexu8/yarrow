@@ -9,7 +9,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { DocumentSummary } from '@/lib/documents';
+import { rotateDocumentPage, type DocumentSummary } from '@/lib/documents';
+import { toApiError } from '@/lib/errors';
 import { mergePageStates, type PageState } from '@/lib/pageStatus';
 import type { DocumentProgress } from '@/lib/progress';
 import type { DocumentTree } from '@/lib/viewer';
@@ -91,6 +92,16 @@ type ViewerState = {
   // can be read, without touching the stored image or re-running OCR.
   pageRotations: Record<number, number>;
   rotatePage: (page: number) => void;
+
+  // Persist a page's rotation: re-run OCR on the page at (its current
+  // server-side orientation plus the on-screen rotation), replace the stored
+  // results, and clear the on-screen rotation. Returns the server error
+  // message, or null on success.
+  savePageRotation: (page: number) => Promise<string | null>;
+
+  // Clear a page's manual rotation: re-run OCR with auto-detection deciding
+  // the orientation again. Returns the server error message, or null.
+  resetPageRotation: (page: number) => Promise<string | null>;
 
   // Track which region is currently active (hovered or clicked)
   activeRegionId: string | null;
@@ -198,13 +209,6 @@ export function ViewerProvider({
     });
   }, []);
 
-  const rotatePage = useCallback((page: number) => {
-    setPageRotations((current) => ({
-      ...current,
-      [page]: ((current[page] ?? 0) + 90) % 360,
-    }));
-  }, []);
-
   // Corrections save through the API and then land here, so find-in-document
   // and the rendered text reflect them without waiting for a full reload.
   // The prop wins again whenever the page passes a new tree in (reset
@@ -215,6 +219,61 @@ export function ViewerProvider({
     setLastLoadedTree(tree);
     setTreeWithCorrections(tree);
   }
+
+  const rotatePage = useCallback((page: number) => {
+    setPageRotations((current) => ({
+      ...current,
+      [page]: ((current[page] ?? 0) + 90) % 360,
+    }));
+  }, []);
+
+  // The absolute rotation to save for a page: its stored orientation (the
+  // manual override, else the auto-correction angle from its warning, else
+  // upright) plus the on-screen rotation the reader applied.
+  const savePageRotation = useCallback(
+    async (page: number): Promise<string | null> => {
+      const onScreen = pageRotations[page] ?? 0;
+      if (onScreen === 0) return null;
+      const node = treeWithCorrections?.pages.find(
+        (candidate) => candidate.page_number === page
+      );
+      const auto = node?.warnings
+        .map((warning) =>
+          warning.message?.match(/auto-rotated by (-?\d+(?:\.\d+)?)°/)
+        )
+        .find((match) => match !== undefined);
+      const base =
+        node?.manual_rotation_deg ??
+        (auto ? ((Number(auto[1]) % 360) + 360) % 360 : 0);
+      const absolute = (((base + onScreen) % 360) + 360) % 360;
+      try {
+        await rotateDocumentPage(document.id, page, absolute);
+        setPageRotations((current) => {
+          const next = { ...current };
+          delete next[page];
+          return next;
+        });
+        refresh();
+        return null;
+      } catch (err) {
+        return toApiError(err).message;
+      }
+    },
+    [pageRotations, treeWithCorrections, document.id, refresh]
+  );
+
+  const resetPageRotation = useCallback(
+    async (page: number): Promise<string | null> => {
+      try {
+        await rotateDocumentPage(document.id, page, null);
+        refresh();
+        return null;
+      } catch (err) {
+        return toApiError(err).message;
+      }
+    },
+    [document.id, refresh]
+  );
 
   const applyRegionCorrection = useCallback(
     (regionId: string, text: string) => {
@@ -354,6 +413,8 @@ export function ViewerProvider({
       toggleOriginalPage,
       pageRotations,
       rotatePage,
+      savePageRotation,
+      resetPageRotation,
       applyRegionCorrection,
       undoRegionCorrection,
       refresh,
@@ -386,6 +447,8 @@ export function ViewerProvider({
       toggleOriginalPage,
       pageRotations,
       rotatePage,
+      savePageRotation,
+      resetPageRotation,
       applyRegionCorrection,
       undoRegionCorrection,
     ]

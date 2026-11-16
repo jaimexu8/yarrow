@@ -21,6 +21,9 @@ class Page(Base):
     error_message = Column(String)
     error_code = Column(String(32))
     page_image_key = Column(String) # Storage key of the upright page image
+    # The user's manual rotation override (degrees, 0/90/180/270), or None
+    # when auto-detection decides the page's orientation.
+    manual_rotation_deg = Column(Integer, nullable=True)
     thumbnail_key = Column(String)
     model_name = Column(String(128))
     model_version = Column(String(64))
