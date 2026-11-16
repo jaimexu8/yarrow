@@ -1,9 +1,11 @@
 """US-7 (upload), US-8 (bulk), US-37 (reject unsupported types) and the
 ownership rules behind the document endpoints."""
 
+import io
 import uuid
 
-from yarrow_db.models import Job
+from pypdf import PdfWriter
+from yarrow_db.models import Document, Job
 
 from tests.conftest import FIXTURES_DIR
 
@@ -26,6 +28,15 @@ def _pdf():
         "files",
         ("sample.pdf", (FIXTURES_DIR / "sample.pdf").read_bytes(), "application/pdf"),
     )
+
+
+def _protected_pdf():
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.encrypt("secret")
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return ("files", ("protected.pdf", buffer.getvalue(), "application/pdf"))
 
 
 class TestList:
@@ -55,6 +66,74 @@ class TestList:
 
 
 class TestUpload:
+    async def test_password_protected_pdf_requires_password(
+        self, client, auth_headers, fake_storage, fake_queue
+    ):
+        response = await client.post(
+            UPLOAD,
+            headers=auth_headers,
+            files=[_protected_pdf()],
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"][0]["reason"] == (
+            "Password required for protected.pdf"
+        )
+        assert not fake_storage.objects
+        assert not fake_queue
+
+    async def test_password_protected_pdf_rejects_incorrect_password(
+        self, client, auth_headers, fake_storage, fake_queue
+    ):
+        response = await client.post(
+            UPLOAD,
+            headers=auth_headers,
+            files=[_protected_pdf()],
+            data={"password": "wrong"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"][0]["reason"] == (
+            "Password incorrect for protected.pdf"
+        )
+        assert not fake_storage.objects
+        assert not fake_queue
+
+    async def test_password_protected_pdf_saves_password_and_is_queued(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        response = await client.post(
+            UPLOAD,
+            headers=auth_headers,
+            files=[_protected_pdf()],
+            data={"password": "secret"},
+        )
+
+        assert response.status_code == 200, response.text
+        assert "secret" not in response.text
+        document_id = uuid.UUID(response.json()["accepted"][0]["document_id"])
+        document = await db_session.get(Document, document_id)
+        assert document.pdf_password == "secret"
+        assert len(fake_storage.objects) == 1
+        assert len(fake_queue) == 1
+        detail = await client.get(f"{DOCUMENTS}{document_id}", headers=auth_headers)
+        assert detail.status_code == 200
+        assert "secret" not in detail.text
+
+    async def test_mixed_upload_reports_protected_pdf_rejection(
+        self, client, auth_headers, fake_storage, fake_queue
+    ):
+        response = await client.post(
+            UPLOAD, headers=auth_headers, files=[_pdf(), _protected_pdf()]
+        )
+
+        assert response.status_code == 200, response.text
+        assert len(response.json()["accepted"]) == 1
+        assert response.json()["rejected"][0]["reason"] == (
+            "Password required for protected.pdf"
+        )
+        assert len(fake_storage.objects) == len(fake_queue) == 1
+
     async def test_valid_pdf_is_accepted_and_queued(
         self, client, auth_headers, fake_storage, fake_queue
     ):

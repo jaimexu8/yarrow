@@ -7,7 +7,7 @@ from app.pipeline.file_loaders.file_loader import FileLoader
 
 
 class GIFLoader(FileLoader):
-    def process_file(self, file_data: bytes) -> list[str]:
+    def process_file(self, file_data: bytes, **kwargs) -> list[str]:
         output: list[str] = []
 
         gif = Image.open(io.BytesIO(file_data))

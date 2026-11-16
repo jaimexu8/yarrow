@@ -52,6 +52,7 @@ class UploadFinalize(BaseModel):
     # has an identical document. Without it such a finalize is refused with
     # 409 UPLOAD_DUPLICATE and the session stays open for a second finalize.
     allow_duplicate: bool = False
+    password: str | None = None
 
     @field_validator("sha256")
     @classmethod
