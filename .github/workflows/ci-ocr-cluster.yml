@@ -108,16 +108,30 @@ jobs:
       - name: Set up Buildx
         id: buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      # Exact key only: the wheel is built against a specific PADDLE_GIT_REF, so
-      # a stale wheel from an older Dockerfile would silently mismatch the
-      # packages that expect it. changed Dockerfile -> full recompile.
+      # The wheel cache is keyed only on the Paddle compile stage.
+      # The slice below is the compile stage from its FROM line up to the
+      # wheel-prebuilt FROM; it is hashed to a digest.
+      # ocr_cluster/dgx/patches/** is hashed alongside it so a build
+      # patch is part of the key too.
+      - name: Digest the Paddle compile stage
+        id: paddle-inputs
+        run: |
+          set -euo pipefail
+          f=ocr_cluster/dgx/paddlex.Dockerfile
+          slice="$(awk '/^FROM .* AS paddle-compile$/{f=1} /^FROM .* AS paddle-wheel-prebuilt$/{f=0} f{print}' "$f")"
+          if ! grep -q 'WITH_GPU=ON' <<<"$slice" || ! grep -q 'PADDLE_GIT_REF' <<<"$slice"; then
+            echo "ERROR: compile-stage slice is empty or its stage markers changed; refusing to key the wheel cache on it." >&2
+            exit 1
+          fi
+          printf 'digest=%s\n' "$(printf '%s\n' "$slice" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "compile-stage digest: $(grep '^digest=' "$GITHUB_OUTPUT" | cut -d= -f2)"
       # Restore only; the matching save step runs right after the compile.
       - name: Restore compiled wheel cache
         id: wheel-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/paddle-wheel/dgx
-          key: ocr-paddle-wheel-dgx-v1-${{ hashFiles('ocr_cluster/dgx/paddlex.Dockerfile') }}
+          key: ocr-paddle-wheel-dgx-v2-${{ steps.paddle-inputs.outputs.digest }}-${{ hashFiles('ocr_cluster/dgx/patches/**') }}
       # The 4-core Paddle compile exceeds the runner's 16 GB RAM at times; a
       # killed build loses all progress, so buy memory headroom with swap.
       - name: Add swap for the Paddle compile
@@ -143,11 +157,14 @@ jobs:
             ls -lh "$WHEEL_DIR"
           else
             echo "no cached wheel; compiling Paddle from source (about 4 hours)"
+            # PADDLE_BUILD_INPUTS is the same digest the cache key is built from,
+            # so the wheel is stamped with the key that produced it.
             docker buildx build \
               --builder "${{ steps.buildx.outputs.name }}" \
               --load \
               --target paddle-compile \
               -t ocrt-paddle-compile:dgx \
+              --build-arg "PADDLE_BUILD_INPUTS=${{ steps.paddle-inputs.outputs.digest }}" \
               -f ocr_cluster/dgx/paddlex.Dockerfile \
               ocr_cluster/dgx
             cid="$(docker create ocrt-paddle-compile:dgx)"
@@ -155,6 +172,13 @@ jobs:
             docker cp "$cid:/opt/wheels/." "$WHEEL_DIR/"
             docker rm -f "$cid"
             docker rmi ocrt-paddle-compile:dgx
+            # The wheel must carry the digest this build was keyed on. If the
+            # stage-slice hash ever stops covering an input, this mismatch fails
+            # the job now instead of serving a stale wheel later.
+            echo "verifying wheel build-input digest matches the cache key"
+            printf '%s\n' "${{ steps.paddle-inputs.outputs.digest }}" > "$WHEEL_DIR/.expected-inputs.sha256"
+            cmp -s "$WHEEL_DIR/build-inputs.sha256" "$WHEEL_DIR/.expected-inputs.sha256" \
+              || { echo "ERROR: wheel build-input digest does not match the cache key; the slice hash is missing an input." >&2; exit 1; }
             echo "wheel extracted:"; ls -lh "$WHEEL_DIR"; du -sh "$WHEEL_DIR"
           fi
       # Save immediately after the compile so later failures/timeouts can't

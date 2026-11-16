@@ -16,7 +16,7 @@
 #     even though paddle-compile is defined above it and would fail without
 #     the wheels context if it were evaluated.
 ARG PADDLE_WHEEL_FROM=paddle-compile
-FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS paddle-compile
+FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04@sha256:a40069bdefcb252e760d5d061ee31a8b4b041343848ab2b9b910bc0a0c026e78 AS paddle-compile
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -98,7 +98,13 @@ RUN git clone --branch "${PADDLE_GIT_REF}" --depth 1 \
     && python -m pip install /opt/wheels/*.whl \
     && rm -rf /opt/paddle
 
-FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04 AS paddle-wheel-prebuilt
+# Record the build-input digest the CI computed for its wheel cache key, so the
+# save step can compare it against the cached wheel and fail loudly if the key
+# hash ever misses an input. Local builds pass nothing and this stays "local".
+ARG PADDLE_BUILD_INPUTS=local
+RUN printf '%s\n' "${PADDLE_BUILD_INPUTS}" > /opt/wheels/build-inputs.sha256
+
+FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04@sha256:a40069bdefcb252e760d5d061ee31a8b4b041343848ab2b9b910bc0a0c026e78 AS paddle-wheel-prebuilt
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
