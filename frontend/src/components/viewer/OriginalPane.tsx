@@ -5,9 +5,15 @@ import { useEffect, useState } from 'react';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Spinner } from '@/components/ui/Spinner';
 import { toApiError } from '@/lib/errors';
-import { getOriginalFile } from '@/lib/viewer';
+import {
+  getOriginalFile,
+  isPdfPasswordError,
+  setDocumentPassword,
+} from '@/lib/viewer';
 import { PageErrorBanner } from './PageErrorBanner';
 import { PageHeader } from './PageHeader';
 import {
@@ -78,6 +84,10 @@ export function OriginalPane({
   const [original, setOriginal] = useState<Original | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -105,6 +115,10 @@ export function OriginalPane({
         if (opened.kind === 'pdf') setPageCount(opened.pdf.numPages);
       } catch (err) {
         if (!current) return;
+        if (isPdfPasswordError(err)) {
+          setNeedsPassword(true);
+          return;
+        }
         setError(
           isAxiosError(err)
             ? toApiError(err).message
@@ -120,6 +134,35 @@ export function OriginalPane({
     };
   }, [document.id, document.file_type, setPageCount, attempt]);
 
+  async function submitPassword() {
+    setChecking(true);
+    setPasswordError(null);
+
+    try {
+      await setDocumentPassword(document.id, password);
+    } catch (err) {
+      setPasswordError(
+        isAxiosError(err) && err.response?.status === 400
+          ? 'Incorrect password. Try again.'
+          : toApiError(err).message
+      );
+
+      setChecking(false);
+      return;
+    }
+
+    setChecking(false);
+    setPassword('');
+    setNeedsPassword(false);
+    setAttempt((count) => count + 1);
+  }
+
+  function cancelPassword() {
+    setPassword('');
+    setPasswordError(null);
+    setNeedsPassword(false);
+    setError('This document is password protected.');
+  }
   // Opened from a ?page= link
   useEffect(() => {
     if (!original || initialPage <= 1) {
@@ -136,6 +179,51 @@ export function OriginalPane({
       className="h-full overflow-y-auto bg-slate-100 px-4 py-6 sm:px-6"
     >
       <h2 className="sr-only">Original document</h2>
+      <Modal
+        open={needsPassword}
+        onClose={cancelPassword}
+        title="PDF password"
+        dismissible={!checking}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitPassword();
+          }}
+          className="space-y-4"
+        >
+          <p>
+            The password for this document is unsaved or incorrect. Please enter
+            the password for{' '}
+            <strong className="break-all">{document.filename}</strong>.
+          </p>
+          <PasswordInput
+            id="viewer-pdf-password"
+            label="Password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            error={passwordError ?? undefined}
+            disabled={checking}
+            required
+            data-autofocus
+            autoComplete="off"
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-auto"
+              disabled={checking}
+              onClick={cancelPassword}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" className="w-auto" loading={checking}>
+              Unlock
+            </Button>
+          </div>
+        </form>
+      </Modal>
       {error ? (
         <div className="mx-auto max-w-md space-y-3 pt-10 text-center">
           <Alert tone="error">{error}</Alert>

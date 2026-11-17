@@ -43,6 +43,7 @@ export type ModelUsage = {
 
 export type DocumentSummary = {
   id: string;
+  owner_id?: string | null;
   filename: string;
   file_size_bytes: number;
   file_type: string;

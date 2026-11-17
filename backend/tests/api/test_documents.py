@@ -65,6 +65,49 @@ class TestList:
         assert library == []
 
 
+class TestDocumentPassword:
+    async def test_content_asks_for_password_then_opens_after_it_is_stored(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        # Upload a password-protected PDF with the correct password
+        response = await client.post(
+            UPLOAD,
+            headers=auth_headers,
+            files=[_protected_pdf()],
+            data={"password": "secret"},
+        )
+
+        # Retrieve the corresponding document object
+        document_id = uuid.UUID(response.json()["accepted"][0]["document_id"])
+        document = await db_session.get(Document, document_id)
+        document.pdf_password = None
+        await db_session.flush()
+
+        content = f"{DOCUMENTS}{document.id}/content"
+        password = f"{DOCUMENTS}{document.id}/password"
+
+        # Attempt to access the content without providing a password
+        missing = await client.get(content, headers=auth_headers)
+        assert missing.status_code == 400
+        assert missing.json()["detail"] == "Password is required"
+
+        # Attempt to provide an incorrect password
+        wrong = await client.post(
+            password, headers=auth_headers, json={"password": "no"}
+        )
+        assert wrong.status_code == 400
+        assert wrong.json()["detail"] == "Incorrect PDF password"
+        assert document.pdf_password is None
+
+        # Provide the correct password and access the content
+        right = await client.post(
+            password, headers=auth_headers, json={"password": "secret"}
+        )
+        assert right.status_code == 200
+        assert document.pdf_password == "secret"
+        assert (await client.get(content, headers=auth_headers)).status_code == 200
+
+
 class TestUpload:
     async def test_password_protected_pdf_requires_password(
         self, client, auth_headers, fake_storage, fake_queue

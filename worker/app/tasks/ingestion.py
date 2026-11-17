@@ -304,7 +304,7 @@ def process_document_task(
             # Read out as plain values while the instances are still attached.
             document_id = job.document.id
             storage_key = job.document.storage_key
-            pdf_password = job.document.pdf_password
+            pdf_password = job.password
 
         file_data = get_storage().download_bytes(storage_key)
         logger.info(f"Downloaded {len(file_data)} bytes from {storage_key}")

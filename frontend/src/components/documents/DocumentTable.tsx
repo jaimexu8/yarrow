@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { isAxiosError } from 'axios';
 import {
   useEffect,
   useId,
@@ -17,6 +18,7 @@ import {
   FolderInput,
   FolderOpen,
   FolderPlus,
+  KeyRound,
   Pencil,
   RotateCw,
   Search,
@@ -33,8 +35,10 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
+import { useAuth } from '@/context/AuthContext';
 import {
   bulkDelete,
   bulkReprocess,
@@ -58,6 +62,7 @@ import { cn } from '@/lib/cn';
 import { formatBytes } from '@/lib/storage';
 import { toApiError } from '@/lib/errors';
 import { useDocuments } from '@/lib/useDocuments';
+import { setDocumentPassword } from '@/lib/viewer';
 import {
   addDocumentTag,
   documentHasTag,
@@ -668,6 +673,10 @@ function DocumentTableRow({
   const [addingTag, setAddingTag] = useState(false);
   const [tagError, setTagError] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
+  const [settingPassword, setSettingPassword] = useState(false);
+  const { user } = useAuth();
+  const canSetPassword =
+    !!user && doc.owner_id === user.id && doc.file_type === 'application/pdf';
   const nameLink = useRef<HTMLAnchorElement>(null);
   const { cancel, canceling, cancelError } = useCancelProcessing(
     doc,
@@ -721,6 +730,16 @@ function DocumentTableRow({
       keepFocus: true,
       onSelect: () => setMoving(true),
     },
+    ...(canSetPassword
+      ? [
+          {
+            label: 'Set password',
+            icon: KeyRound,
+            keepFocus: true,
+            onSelect: () => setSettingPassword(true),
+          },
+        ]
+      : []),
     // resumes unfinished work, or processes a finished document again
     ...(reprocess.available && !reprocess.reprocessing
       ? [
@@ -898,6 +917,12 @@ function DocumentTableRow({
               onChanged(moved);
             }}
             onClose={() => setMoving(false)}
+          />
+        )}
+        {settingPassword && (
+          <SetPasswordDialog
+            doc={doc}
+            onClose={() => setSettingPassword(false)}
           />
         )}
       </td>
@@ -1540,6 +1565,78 @@ function DeleteFolderDialog({
           {error}
         </Alert>
       )}
+    </Modal>
+  );
+}
+
+function SetPasswordDialog({
+  doc,
+  onClose,
+}: {
+  doc: DocumentSummary;
+  onClose: () => void;
+}) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handlePasswordSave() {
+    setBusy(true);
+    setError(null);
+
+    try {
+      await setDocumentPassword(doc.id, password, false);
+      onClose();
+    } catch (err) {
+      setError(
+        isAxiosError(err) && err.response?.status === 400
+          ? 'Incorrect password. Try again.'
+          : toApiError(err).message
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!busy}
+      title={`Set password for ${doc.filename}`}
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handlePasswordSave();
+        }}
+        className="space-y-4"
+      >
+        <PasswordInput
+          id={`set-password-${doc.id}`}
+          label="PDF password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          error={error ?? undefined}
+          disabled={busy}
+          required
+          data-autofocus
+          autoComplete="off"
+        />
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-auto"
+            disabled={busy}
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" className="w-auto" loading={busy}>
+            Save
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }

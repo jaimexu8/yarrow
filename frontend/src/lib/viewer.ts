@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios';
 import api from './api';
 import type { DocumentSummary } from './documents';
 
@@ -137,6 +138,37 @@ export async function getDocumentTree(id: string): Promise<DocumentTree> {
 }
 
 export type OriginalFile = { data: ArrayBuffer; contentType: string };
+
+/**
+ * True when the content endpoint refused a protected PDF because it has no
+ * stored password or the stored one is wrong.
+ */
+export function isPdfPasswordError(error: unknown): boolean {
+  if (!isAxiosError(error) || error.response?.status !== 400) return false;
+  const data: unknown = error.response.data;
+  let detail: unknown;
+  try {
+    const body =
+      data instanceof ArrayBuffer
+        ? JSON.parse(new TextDecoder().decode(data))
+        : data;
+    detail = (body as { detail?: unknown } | null)?.detail;
+  } catch {
+    return false;
+  }
+  return (
+    detail === 'Password is required' || detail === 'Incorrect PDF password'
+  );
+}
+
+/** Verifies the password against the file and stores it on the document. */
+export async function setDocumentPassword(
+  id: string,
+  password: string,
+  validate: boolean = true
+): Promise<void> {
+  await api.post(`/api/v1/documents/${id}/password`, { password, validate });
+}
 
 /**
  * The originally uploaded file. Fetched through the API client rather than

@@ -72,6 +72,7 @@ from app.schemas import (
     JobOut,
     ModelUsage,
     PageOut,
+    SetDocumentPasswordRequest,
     UploadAccepted,
     UploadRejected,
     UploadResponse,
@@ -520,7 +521,7 @@ async def upload_documents(
             file_size_bytes=size,
             file_type=CONTENT_TYPE_BY_EXTENSION[extension],
             storage_key=key,
-            pdf_password=pdf_password,
+            pdf_password=None,
             status="queued",
             client_upload_id=upload_id,
             batch_id=batch.id if batch else None,
@@ -529,6 +530,7 @@ async def upload_documents(
         job = Job(
             id=uuid4(),
             document_id=document_id,
+            password=pdf_password,
             status="queued",
             current_stage="queued",
             pages_processed=0,
@@ -1261,6 +1263,52 @@ def _decrypted_pdf(file_data, password):
             raise ValueError("Incorrect PDF password")
 
         return doc.tobytes(encryption=fitz.PDF_ENCRYPT_NONE)
+
+
+def _pdf_password_correct(file_data, password):
+    with fitz.open(stream=file_data, filetype="pdf") as doc:
+        return not doc.needs_pass or bool(doc.authenticate(password))
+
+
+@router.post("/{document_id}/password")
+async def set_document_password(
+    body: SetDocumentPasswordRequest,
+    access: DocumentAccess = Depends(require_owner_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Store the password of a protected PDF once it is verified against the file."""
+    document = access.document
+
+    if body.validate:
+        try:
+            handle = await run_in_threadpool(
+                get_storage().download_file, document.storage_key
+            )
+        except ObjectNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="The original file is no longer in storage",
+            ) from None
+
+        file_data = await run_in_threadpool(_load_pdf, handle)
+        try:
+            valid = await run_in_threadpool(
+                _pdf_password_correct, file_data, body.password
+            )
+        except (RuntimeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Unable to process PDF",
+            ) from None
+        if not valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Incorrect PDF password",
+            )
+
+    document.pdf_password = body.password
+    await db.commit()
+    return {"ok": True}
 
 
 @router.get("/{document_id}/content")
