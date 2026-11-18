@@ -16,8 +16,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hybrid_gateway")
 
 STRUCTURE_GATEWAY_URL = os.environ.get(
-    "STRUCTURE_GATEWAY_URL", "http://paddlex-pipeline:8080/layout-parsing"
+    "STRUCTURE_GATEWAY_URL", "http://ort-structure:8080/layout-parsing"
 )
+# The structure service (ort-structure) requires Bearer auth on /layout-parsing
+# and rejects every request that does not carry it. The gateway sends the same
+# key the ort-structure container validates against. When it is unset the
+# header is omitted and the service answers 401: it never runs auth-off, so an
+# unset key is a visible failure rather than a silent open endpoint.
+STRUCTURE_API_KEY = os.environ.get("STRUCTURE_API_KEY", "").strip()
 VL_GATEWAY_URL = os.environ.get(
     "VL_GATEWAY_URL", "http://paddleocr-vl-api:8080/layout-parsing"
 )
@@ -253,8 +259,12 @@ def layout_parsing(req: LayoutParsingRequest):
         "useDocOrientationClassify": False,
         "useDocUnwarping": False,
     }
+    structure_headers = {}
+    if STRUCTURE_API_KEY:
+        structure_headers["Authorization"] = f"Bearer {STRUCTURE_API_KEY}"
     resp = requests.post(
-        STRUCTURE_GATEWAY_URL, json=structure_payload, timeout=REQUEST_TIMEOUT
+        STRUCTURE_GATEWAY_URL, json=structure_payload, headers=structure_headers,
+        timeout=REQUEST_TIMEOUT
     )
     resp.raise_for_status()
     body = resp.json()

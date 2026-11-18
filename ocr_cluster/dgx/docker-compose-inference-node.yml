@@ -12,26 +12,36 @@ x-pipeline-image: &pipeline-image
       - shared=../shared
 
 services:
-  paddlex-pipeline:
-    <<: *pipeline-image
+  # Paddle-free PP-StructureV3 structure service. It
+  # is the structure backend on this node: the gateway posts every page to it
+  # See shared/ort-structure/README.md.
+  ort-structure:
+    build:
+      context: ../shared/ort-structure
+      dockerfile: Dockerfile
+    image: yarrow-ort-structure:latest
     environment:
-      DEVICE: gpu
+      STRUCTURE_API_KEY: "${STRUCTURE_API_KEY:?set STRUCTURE_API_KEY in .env}"
+      CUDA_DEVICE_ID: "0"
+      MODEL_DIR: /opt/ort/models
+      ORT_MEM_CAP: "0"
+    mem_limit: 6g
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      # /ready returns 503 until the five models load; 600 s start_period covers
+      # the load on a contended GPU.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready')"]
+      start_period: 600s
       interval: 15s
-      timeout: 5s
-      retries: 40
-      start_period: 300s
+      timeout: 10s
+      retries: 60
     deploy:
       replicas: 1
-      # replicas: 3
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    mem_limit: 6g
     restart: unless-stopped
 
   vlm-server:
@@ -89,12 +99,18 @@ services:
       context: ../shared
       dockerfile: hybrid-gateway.Dockerfile
     environment:
-      STRUCTURE_GATEWAY_URL: http://paddlex-pipeline:8080/layout-parsing
+      STRUCTURE_GATEWAY_URL: "${STRUCTURE_GATEWAY_URL:-http://ort-structure:8080/layout-parsing}"
+      STRUCTURE_API_KEY: "${STRUCTURE_API_KEY:?set STRUCTURE_API_KEY in .env}"
       VL_GATEWAY_URL: http://paddleocr-vl-api:8080/layout-parsing
       MODEL_NAME: "${MODEL_NAME:?set MODEL_NAME in .env}"
       MODEL_VERSION: "${MODEL_VERSION:?set MODEL_VERSION in .env}"
     depends_on:
-      - paddleocr-vl-api
+      # ort-structure is the structure backend; wait for its five models to
+      # load before the gateway starts serving.
+      ort-structure:
+        condition: service_healthy
+      paddleocr-vl-api:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
       interval: 15s

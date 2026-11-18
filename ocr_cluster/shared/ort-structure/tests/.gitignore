@@ -1,0 +1,10 @@
+# Local migration tests -- do NOT commit.
+#
+# These test the ORT structure cutover on real data. They require pinned
+# ONNX models and a 73-page golden bundle, which live OUTSIDE the repo at
+# ../ort-eval.
+gate_common.py
+test_smoke.py
+test_golden.py
+test_worker_contract.py
+cpu/

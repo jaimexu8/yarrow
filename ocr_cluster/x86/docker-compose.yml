@@ -2,16 +2,23 @@
 # and docker-compose-lb.yml merged into one file):
 #
 #   gateway (nginx edge, API-key auth, publishes 8080)
-#     -> hybrid-gateway (fuses PP-StructureV3 layout + PaddleOCR-VL recognition)
-#       -> paddlex-pipeline (PP-StructureV3 on the host GPU)
+#     -> hybrid-gateway (fuses structure layout + PaddleOCR-VL recognition)
+#       -> ort-structure (PP-StructureV3 geometry on the host GPU, no Paddle;
+#          the structure backend)
 #       -> paddleocr-vl-api (PaddleOCR-VL layout on the host GPU, VLM via vlm-server)
 #         -> vlm-server (PaddlePaddle/PaddleOCR-VL on the host GPU)
 #
-# All three inference services share the single host GPU (16 GB on my system): SGLang holds
-# ~6.6 GB at mem-fraction-static=0.4 (1.9 GB weights + ~4.8 GB KV cache),
-# the Paddle layout models (PP-OCRv5
-# mobile det/rec + PP-DocLayoutV2) hold ~2.5 GB combined, leaving the rest
-# for KV cache and activations.
+# The structure backend is chosen by STRUCTURE_GATEWAY_URL (which hybrid-gateway
+# posts page images to). It defaults to ort-structure. There is no second layout
+# stack in this file: the pre-cutover paddlex-pipeline service was removed at
+# merge (roll back by reverting the commit, which restores it).
+#
+# The inference services share the single host GPU (16 GB on my system): SGLang
+# holds ~6.6 GB at mem-fraction-static=0.4 (1.9 GB weights + ~4.8 GB KV cache),
+# the Paddle layout models (PP-OCRv5 mobile det/rec + PP-DocLayoutV2) in
+# paddleocr-vl-api hold ~2.5 GB, and ort-structure's five ONNX models hold
+# ~3.7 GB. Together that is ~12.8 GB; ORT_MEM_CAP exists to trim ORT's share on
+# a memory-tight host.
 name: yarrow
 
 # x-pipeline-image: shared build definition for the two services that run the
@@ -42,8 +49,6 @@ services:
       - --context-length=8192
       - --max-running-requests=16
       - --mem-fraction-static=0.4
-      # OCR crops are unique per request, so prefix caching only wastes
-      # memory
       - --disable-radix-cache
     volumes:
       - vlm-hf-cache:/root/.cache/huggingface
@@ -63,14 +68,23 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
-  paddlex-pipeline:
-    <<: *pipeline-image
-    image: yarrow-paddlex-pipeline:latest
+
+  ort-structure:
+    build:
+      context: ../shared/ort-structure
+      dockerfile: Dockerfile
+    image: yarrow-ort-structure:latest
     environment:
-      DEVICE: gpu
+      STRUCTURE_API_KEY: "${STRUCTURE_API_KEY:?set STRUCTURE_API_KEY in .env}"
+      CUDA_DEVICE_ID: "0"
+      MODEL_DIR: /opt/ort/models
+      # Per-model GPU memory cap, off by default
+      ORT_MEM_CAP: "0"
     mem_limit: 6g
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      # /ready returns 503 until the structure models are loaded, 200 when they
+      # are. 600 s start_period covers the five-model load on a contended GPU.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready')"]
       start_period: 600s
       interval: 15s
       timeout: 10s
@@ -117,12 +131,13 @@ services:
       context: ../shared
       dockerfile: hybrid-gateway.Dockerfile
     environment:
-      STRUCTURE_GATEWAY_URL: http://paddlex-pipeline:8080/layout-parsing
+      STRUCTURE_GATEWAY_URL: "${STRUCTURE_GATEWAY_URL:-http://ort-structure:8080/layout-parsing}"
+      STRUCTURE_API_KEY: "${STRUCTURE_API_KEY:?set STRUCTURE_API_KEY in .env}"
       VL_GATEWAY_URL: http://paddleocr-vl-api:8080/layout-parsing
       MODEL_NAME: "${MODEL_NAME:?set MODEL_NAME in .env}"
       MODEL_VERSION: "${MODEL_VERSION:?set MODEL_VERSION in .env}"
     depends_on:
-      paddlex-pipeline:
+      ort-structure:
         condition: service_healthy
       paddleocr-vl-api:
         condition: service_healthy
