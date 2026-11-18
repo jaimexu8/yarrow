@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 JsonDict = dict[str, Any]
@@ -38,6 +39,7 @@ def order_blocks(blocks: list[JsonDict], page_width: float | None) -> list[JsonD
     if (
         not isinstance(page_width, (int, float))
         or isinstance(page_width, bool)
+        or not math.isfinite(page_width)
         or page_width <= 0
     ):
         return _legacy_order(blocks)
