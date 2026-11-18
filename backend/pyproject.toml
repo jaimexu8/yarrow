@@ -41,6 +41,7 @@ ruff = "*"
 mypy = "*"
 respx = "*"
 requests = "^2.34.2"
+hypothesis = "*"
 
 [tool.ruff]
 line-length = 88

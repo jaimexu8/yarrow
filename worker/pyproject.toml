@@ -50,6 +50,7 @@ yarrow-storage = {path = "../packages/yarrow-storage", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
+hypothesis = "*"
 
 [tool.pytest.ini_options]
 # Tests import the service as `app.*` and the fakes as `tests.conftest`, both
