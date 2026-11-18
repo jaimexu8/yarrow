@@ -290,17 +290,15 @@ def test_all_full_width_returns_legacy(n):
     assert order_blocks(blocks, page_width) == _legacy_order(blocks)
 
 
-# --- NaN page width ---------------------------------------------------------
-# The module's guard is `page_width <= 0`, which is False for NaN. So a NaN
-# page width is NOT treated as degenerate: when the blocks carry a full model
-# order it proceeds to a geometry (y-then-model-order) sort rather than the
-# legacy order. The permutation and determinism invariants still hold.
+# --- non-finite page width --------------------------------------------------
 
 
 @given(blocks=block_list_strategy())
 @PROFILE
-def test_nan_page_width_is_still_a_permutation_and_deterministic(blocks):
-    first = contents(order_blocks(blocks, math.nan))
-    second = contents(order_blocks(list(blocks), math.nan))
-    assert first == second
-    assert sorted(first) == sorted(contents(blocks))
+def test_non_finite_page_width_returns_legacy(blocks):
+    # NaN, inf and -inf all fall back to the legacy order (the guard rejects
+    # non-finite widths), and the output is still a permutation of the input.
+    for page_width in (math.nan, math.inf, -math.inf):
+        result = order_blocks(blocks, page_width)
+        assert result == _legacy_order(blocks)
+        assert sorted(contents(result)) == sorted(contents(blocks))
