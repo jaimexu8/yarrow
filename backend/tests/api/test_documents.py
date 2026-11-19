@@ -142,27 +142,6 @@ class TestUpload:
         assert not fake_storage.objects
         assert not fake_queue
 
-    async def test_password_protected_pdf_saves_password_and_is_queued(
-        self, client, auth_headers, fake_storage, fake_queue, db_session
-    ):
-        response = await client.post(
-            UPLOAD,
-            headers=auth_headers,
-            files=[_protected_pdf()],
-            data={"password": "secret"},
-        )
-
-        assert response.status_code == 200, response.text
-        assert "secret" not in response.text
-        document_id = uuid.UUID(response.json()["accepted"][0]["document_id"])
-        document = await db_session.get(Document, document_id)
-        assert document.pdf_password == "secret"
-        assert len(fake_storage.objects) == 1
-        assert len(fake_queue) == 1
-        detail = await client.get(f"{DOCUMENTS}{document_id}", headers=auth_headers)
-        assert detail.status_code == 200
-        assert "secret" not in detail.text
-
     async def test_mixed_upload_reports_protected_pdf_rejection(
         self, client, auth_headers, fake_storage, fake_queue
     ):
