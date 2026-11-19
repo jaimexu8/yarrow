@@ -3197,4 +3197,4 @@ url = "../packages/yarrow-storage"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "5a398ef94fb999746bd00e706572e091bc2a8b3397abc78df51fff7b4138fda5"
+content-hash = "c8c22de5b9a4b8ccb4198deaf22f881fb02d113ccd3e57976dc32c71f96115ab"
