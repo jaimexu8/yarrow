@@ -62,6 +62,7 @@ const MESSAGE_PREFIXES: [string, WarningKind][] = [
   ['Image is blurry', 'blur'],
   ['Image is skewed', 'skew'],
   ['Page was auto-rotated', 'rotated'],
+  ['Page was manually rotated', 'rotated'],
   ['Image is truncated', 'truncation'],
   ['Image is too dark', 'dark'],
   ['Image is too bright', 'bright'],

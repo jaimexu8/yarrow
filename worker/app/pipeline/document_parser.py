@@ -235,6 +235,10 @@ class DocumentParser:
         # Content rotation (degrees) applied to correct each page, keyed by
         # 0-based page index. Only present for pages that were actually rotated.
         self.page_orientations: dict[int, float] = {}
+        # User-chosen rotation override (degrees CW from the original page)
+        # keyed by 0-based page index. Set by apply_manual_rotations; a page
+        # with an override is rotated by it and skipped by auto-detection.
+        self.manual_rotations: dict[int, int] = {}
 
         self.quality_checker = QualityChecker()
         self.orientation_corrector = OrientationCorrector()
@@ -262,7 +266,7 @@ class DocumentParser:
 
         self.pages = loader.process_file(file_data, password=password)
 
-    def correct_orientations(self) -> None:
+    def correct_orientations(self, pages_to_process: tuple[int] | None = None) -> None:
         """Detect and fix the rotation of every page, in place.
 
         Each page is classified and corrected independently, so a document
@@ -270,9 +274,20 @@ class DocumentParser:
         replaces the page, so OCR, the quality check and the figure crops all
         read the upright image. A page left unchanged is not recorded in
         page_orientations, so it is not warned about and not re-stored.
+
+        pages_to_process, when given, limits detection to the pages in this
+        run  pages outside it are left untouched. None means the whole document.
         """
         self.page_orientations = {}
         for index, page_b64 in enumerate(self.pages):
+            if index in self.manual_rotations:
+                # The user set the orientation; auto-detection stays out.
+                continue
+            if pages_to_process is not None and index + 1 not in pages_to_process:
+                # Out of scope for this run: the page's stored upright image (if
+                # any) and its rows persist across partial runs, so detection
+                # would be wasted work.
+                continue
             corrected, angle, confidence = self.orientation_corrector.correct_page(
                 page_b64
             )
@@ -282,6 +297,22 @@ class DocumentParser:
                 logger.info(
                     f"Page {index + 1} auto-rotated by {angle:.1f}° (confidence {confidence:.2f})"
                 )
+
+    def apply_manual_rotations(self, rotations: dict[int, int]) -> None:
+        """Rotate pages the user has manually turned, by 0-based page index."""
+        reencode = OrientationCorrector._reencode
+        for index, degrees in rotations.items():
+            if not 0 <= index < len(self.pages):
+                continue
+            degrees = degrees % 360
+            if degrees:
+                img = Image.open(io.BytesIO(base64.b64decode(self.pages[index])))
+                # PIL rotates counter-clockwise, so the override is applied CW.
+                self.pages[index] = reencode(
+                    img.rotate(-degrees, expand=True, fillcolor=(255, 255, 255))
+                )
+                logger.info(f"Page {index + 1} manually rotated by {degrees}°")
+            self.manual_rotations[index] = degrees
 
     def process_page(self, page_data: str, page_index: int) -> JsonDict:
         headers = {"Content-Type": "application/json"}
@@ -855,8 +886,9 @@ class DocumentParser:
                 model_version=model.version if model else None,
             )
 
-            # A page that was rotated is stored with its corrected image so the
-            # viewer shows the upright page the OCR ran on, and is warned about.
+            # A page that was rotated (automatically or manually) is stored
+            # with its corrected image so the viewer shows the page the OCR
+            # ran on, and is warned about.
             if page_index in self.page_orientations:
                 image_key = f"documents/{document.id}/pages/{page_number}.png"
                 page.page_image_key = image_key
@@ -868,6 +900,28 @@ class DocumentParser:
                         message=f"Page was auto-rotated by {self.page_orientations[page_index]:.0f}°",
                     )
                 )
+            elif page_index in self.manual_rotations:
+                # A manually rotated page keeps the user's override so the
+                # next run (a whole-document reprocess) rotates it the same
+                # way, and stores its rotated image for the viewer. A 0
+                # override is "original orientation": the raster is unchanged,
+                # so there is no image to re-store or warning to add, but the
+                # override is kept so auto-detection stays off.
+                degrees = self.manual_rotations[page_index]
+                page.manual_rotation_deg = degrees
+                if degrees:
+                    image_key = f"documents/{document.id}/pages/{page_number}.png"
+                    page.page_image_key = image_key
+                    self.page_images[image_key] = base64.b64decode(
+                        self.pages[page_index]
+                    )
+                    warnings.append(
+                        Warning(
+                            page_id=page_id,
+                            warning_type="quality",
+                            message=f"Page was manually rotated by {degrees}°",
+                        )
+                    )
 
             pages.append(page)
 

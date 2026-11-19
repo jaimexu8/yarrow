@@ -89,7 +89,9 @@ def pages(monkeypatch, storage):
     hooks: list = []
 
     def load_file(self, file_data):
-        self.pages = [_page_image(number) for number in range(1, page_count["value"] + 1)]
+        self.pages = [
+            _page_image(number) for number in range(1, page_count["value"] + 1)
+        ]
 
     def process_page(self, page_data, page_index):
         storage.uploaded_before_ocr.update(storage.objects)
@@ -99,7 +101,9 @@ def pages(monkeypatch, storage):
         return OK_RESPONSE
 
     monkeypatch.setattr(DocumentParser, "load_file", load_file)
-    monkeypatch.setattr(DocumentParser, "correct_orientations", lambda self: None)
+    monkeypatch.setattr(
+        DocumentParser, "correct_orientations", lambda self, pages_to_process=None: None
+    )
     monkeypatch.setattr(DocumentParser, "process_page", process_page)
 
     class Pages:
@@ -148,13 +152,21 @@ def _key(document_id: UUID, page_number: int) -> str:
 
 class TestBuildThumbnail:
     def test_is_160_px_wide_webp_keeping_aspect_ratio(self):
-        thumbnail = Image.open(io.BytesIO(build_thumbnail(_encode(Image.new("RGB", (1700, 2200), "white")))))
+        thumbnail = Image.open(
+            io.BytesIO(
+                build_thumbnail(_encode(Image.new("RGB", (1700, 2200), "white")))
+            )
+        )
 
         assert thumbnail.format == "WEBP"
         assert thumbnail.size == (160, 207)
 
     def test_landscape_page_keeps_its_ratio(self):
-        thumbnail = Image.open(io.BytesIO(build_thumbnail(_encode(Image.new("RGB", (2000, 1000), "white")))))
+        thumbnail = Image.open(
+            io.BytesIO(
+                build_thumbnail(_encode(Image.new("RGB", (2000, 1000), "white")))
+            )
+        )
 
         assert thumbnail.size == (160, 80)
 
@@ -172,7 +184,9 @@ class TestBuildThumbnail:
     def test_follows_the_worker_settings(self, monkeypatch):
         monkeypatch.setattr(settings, "THUMBNAIL_WIDTH_PX", 80)
 
-        thumbnail = Image.open(io.BytesIO(build_thumbnail(_encode(Image.new("RGB", (800, 1000), "white")))))
+        thumbnail = Image.open(
+            io.BytesIO(build_thumbnail(_encode(Image.new("RGB", (800, 1000), "white"))))
+        )
 
         assert thumbnail.size == (80, 100)
 
@@ -189,7 +203,9 @@ class TestThumbnailGeneration:
             number: _key(document_id, number) for number in (1, 2, 3)
         }
         assert all(page.has_thumbnail for page in stored.values())
-        assert {_key(document_id, number) for number in (1, 2, 3)} <= storage.uploaded_before_ocr
+        assert {
+            _key(document_id, number) for number in (1, 2, 3)
+        } <= storage.uploaded_before_ocr
         thumbnail = Image.open(io.BytesIO(storage.objects[_key(document_id, 1)]))
         assert thumbnail.format == "WEBP"
         assert thumbnail.size == (160, 200)
@@ -207,11 +223,16 @@ class TestThumbnailGeneration:
         stored = _pages(sessions, document_id)
         assert job.status == "completed"
         assert document.status == "completed"
-        assert {number: page.status for number, page in stored.items()} == {1: "completed", 2: "completed"}
+        assert {number: page.status for number, page in stored.items()} == {
+            1: "completed",
+            2: "completed",
+        }
         assert stored[1].thumbnail_key == _key(document_id, 1)
         assert stored[2].thumbnail_key is None
 
-    def test_unreadable_page_image_does_not_fail_the_job(self, sessions, storage, pages, monkeypatch):
+    def test_unreadable_page_image_does_not_fail_the_job(
+        self, sessions, storage, pages, monkeypatch
+    ):
         pages.configure(1)
         document_id, job_id = _seed_job(sessions, 1)
 
@@ -232,7 +253,12 @@ class TestThumbnailGeneration:
         process_document_task(str(job_id))
         storage.objects = {key: b"old" for key in storage.objects}
         with sessions() as session:
-            rerun = Job(id=uuid4(), document_id=document_id, status="queued", current_stage="queued")
+            rerun = Job(
+                id=uuid4(),
+                document_id=document_id,
+                status="queued",
+                current_stage="queued",
+            )
             session.add(rerun)
 
         process_document_task(str(rerun.id), page_to_process=(2,))
@@ -240,7 +266,9 @@ class TestThumbnailGeneration:
         assert storage.objects[_key(document_id, 1)] == b"old"
         assert storage.objects[_key(document_id, 3)] == b"old"
         assert storage.objects[_key(document_id, 2)] != b"old"
-        assert all(page.thumbnail_key for page in _pages(sessions, document_id).values())
+        assert all(
+            page.thumbnail_key for page in _pages(sessions, document_id).values()
+        )
 
     def test_canceled_first_run_leaves_no_thumbnails(self, sessions, storage, pages):
         pages.configure(1)
@@ -248,7 +276,9 @@ class TestThumbnailGeneration:
 
         def cancel(page_number):
             with sessions() as session:
-                session.execute(update(Job).where(Job.id == job_id).values(status="canceled"))
+                session.execute(
+                    update(Job).where(Job.id == job_id).values(status="canceled")
+                )
 
         pages.on_request(cancel)
 
@@ -256,17 +286,26 @@ class TestThumbnailGeneration:
 
         assert _key(document_id, 1) not in storage.objects
 
-    def test_canceled_reprocess_keeps_the_thumbnails_pages_point_at(self, sessions, storage, pages):
+    def test_canceled_reprocess_keeps_the_thumbnails_pages_point_at(
+        self, sessions, storage, pages
+    ):
         pages.configure(1)
         document_id, job_id = _seed_job(sessions, 1)
         process_document_task(str(job_id))
         with sessions() as session:
-            rerun = Job(id=uuid4(), document_id=document_id, status="queued", current_stage="queued")
+            rerun = Job(
+                id=uuid4(),
+                document_id=document_id,
+                status="queued",
+                current_stage="queued",
+            )
             session.add(rerun)
 
         def cancel(page_number):
             with sessions() as session:
-                session.execute(update(Job).where(Job.id == rerun.id).values(status="canceled"))
+                session.execute(
+                    update(Job).where(Job.id == rerun.id).values(status="canceled")
+                )
 
         pages.on_request(cancel)
 
@@ -274,7 +313,9 @@ class TestThumbnailGeneration:
 
         assert _key(document_id, 1) in storage.objects
 
-    def test_storage_failure_on_the_file_is_unaffected(self, sessions, storage, pages, monkeypatch):
+    def test_storage_failure_on_the_file_is_unaffected(
+        self, sessions, storage, pages, monkeypatch
+    ):
         pages.configure(1)
         _, job_id = _seed_job(sessions, 1)
 
