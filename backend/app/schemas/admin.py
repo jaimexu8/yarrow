@@ -3,6 +3,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from yarrow_db.models import JobErrorStage
 
 from app.schemas.common import StrictModel
 from app.services.failure_messages import (
@@ -64,6 +65,8 @@ class AdminJob(BaseModel):
     pages_processed: int | None = None
     total_pages: int | None = None
     error_message: str | None = None
+    error_stage: JobErrorStage | None = None
+    error_detail: str | None = None
     created_at: datetime | None = None
     is_stuck: bool = False
     can_cancel: bool = False

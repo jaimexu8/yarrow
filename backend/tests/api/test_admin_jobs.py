@@ -2,7 +2,7 @@
 
 import uuid
 
-from yarrow_db.models import Job, User
+from yarrow_db.models import Job, JobPage, User
 
 from app.services.failure_messages import (
     DOCUMENT_FAILED_MESSAGE,
@@ -135,6 +135,7 @@ class TestAdminJobs:
         job = await db_session.get(Job, uuid.UUID(item["job_id"]))
         job.status = "failed"
         job.error_message = QUEUE_FAILED_MESSAGE
+        job.error_stage = "downloading"
         await db_session.flush()
 
         row = next(
@@ -144,6 +145,8 @@ class TestAdminJobs:
         )
         assert row["status"] == "failed"
         assert row["error_message"] == QUEUE_FAILED_MESSAGE
+        assert row["error_stage"] == "downloading"
+        assert row["error_detail"] is None
 
     async def test_internal_failure_is_replaced(
         self,
@@ -166,3 +169,52 @@ class TestAdminJobs:
             if job["id"] == item["job_id"]
         )
         assert row["error_message"] == DOCUMENT_FAILED_MESSAGE
+        assert row["error_detail"] == "KeyError: 'missing'"
+
+    async def test_failed_job_exposes_raw_page_detail(
+        self,
+        client,
+        auth_headers,
+        fake_storage,
+        fake_queue,
+        db_session,
+    ):
+        await _promote(client, auth_headers, db_session)
+        item = await _upload(client, auth_headers)
+        job = await db_session.get(Job, uuid.UUID(item["job_id"]))
+        job.status = "failed"
+        # A message written for users is not itself the operator detail.
+        job.error_message = "1 of 2 page(s) failed: 1, 2"
+        job.error_stage = "finalizing"
+        db_session.add_all(
+            [
+                JobPage(
+                    job_id=job.id,
+                    page_number=1,
+                    status="failed",
+                    error_code="inference_error",
+                    error_message="RuntimeError: CUDA out of memory on gpu-3",
+                ),
+                JobPage(
+                    job_id=job.id,
+                    page_number=2,
+                    status="failed",
+                    error_code="inference_error",
+                    error_message="OSError: cannot open s3://private/key",
+                ),
+            ]
+        )
+        await db_session.flush()
+
+        row = next(
+            job
+            for job in (await client.get(JOBS, headers=auth_headers)).json()
+            if job["id"] == item["job_id"]
+        )
+        assert row["error_stage"] == "finalizing"
+        # The user-facing message is unchanged; the raw page text is operator-only.
+        assert row["error_message"] == "1 of 2 page(s) failed: 1, 2"
+        assert row["error_detail"] == (
+            "RuntimeError: CUDA out of memory on gpu-3\n"
+            "OSError: cannot open s3://private/key"
+        )

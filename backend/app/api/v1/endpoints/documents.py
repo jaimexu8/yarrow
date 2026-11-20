@@ -578,6 +578,7 @@ async def upload_documents(
             logger.exception(f"Queueing job {item.job_id} failed")
             job.status = "failed"
             job.error_message = QUEUE_FAILED_MESSAGE
+            job.error_stage = "downloading"
             document = documents_by_job[item.job_id]
             document.status = "failed"
             document.error_message = QUEUE_FAILED_MESSAGE

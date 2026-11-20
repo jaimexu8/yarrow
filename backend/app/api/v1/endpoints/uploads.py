@@ -684,6 +684,7 @@ async def finalize_upload(
         logger.exception(f"Queueing job {job.id} failed")
         job.status = "failed"
         job.error_message = QUEUE_FAILED_MESSAGE
+        job.error_stage = "downloading"
         document.status = "failed"
         document.error_message = QUEUE_FAILED_MESSAGE
         accepted.status = "failed"
