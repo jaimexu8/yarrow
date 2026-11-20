@@ -1,0 +1,36 @@
+# Turn Paddle's flash-attention third-party build off.
+#
+# Paddle v3.4.0 enables flash-attention from CMake whenever the target CUDA
+# arch is 80 or newer, and gives the caller no way to say no: WITH_FLASHATTN is
+# a variable this file sets, not an option.
+
+# Applied with `git apply -p1` after the clone; the Dockerfile then passes
+# -DWITHOUT_FLASHATTN=ON. Both inclusion sites below check the flag, so
+# external/flashattn is never added to third_party_deps and the
+# -DPADDLE_WITH_FLASHATTN define is never set. WITHOUT_FLASHATTN is left
+# undeclared on purpose: an undeclared CMake variable is false, so a build that
+# does not pass the flag keeps upstream behavior.
+
+diff --git a/cmake/third_party.cmake b/cmake/third_party.cmake
+index 5663a4d..09b2bc4 100755
+--- a/cmake/third_party.cmake
++++ b/cmake/third_party.cmake
+@@ -593,7 +593,7 @@ if(WITH_NVSHMEM)
+   list(APPEND third_party_deps extern_nvshmem)
+ endif()
+
+-if(WITH_ROCM)
++if(WITH_ROCM AND NOT WITHOUT_FLASHATTN)
+   include(external/flashattn)
+   list(APPEND third_party_deps extern_flashattn)
+   set(WITH_FLASHATTN ON)
+@@ -601,7 +601,8 @@ endif()
+
+ if(WITH_GPU
+    AND NOT WIN32
+-   AND NOT APPLE)
++   AND NOT APPLE
++   AND NOT WITHOUT_FLASHATTN)
+   if(${CMAKE_CUDA_COMPILER_VERSION} GREATER_EQUAL 12.3
+      AND ${CMAKE_CUDA_COMPILER_VERSION} LESS_EQUAL 13.0)
+     foreach(arch ${NVCC_ARCH_BIN})

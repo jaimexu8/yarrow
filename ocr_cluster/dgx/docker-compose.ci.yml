@@ -1,0 +1,44 @@
+# CI overrides for the dgx (aarch64) stack: bring the four non-VLM services up
+# on the GPU-less ubuntu-24.04-arm runner (see ci-ocr-cluster.yml).
+#
+# Same theme as ocr_cluster/x86/docker-compose.ci.yml (read its header for the
+# vlm-server exclusion rationale and compose-version note), with one addition:
+# the dgx compose declares no healthcheck for paddleocr-vl-api, so the
+# override adds one -- otherwise `docker compose up --wait` considers that
+# service healthy the moment it runs, and hybrid-gateway would forward to a
+# service that is not actually serving yet.
+services:
+  paddlex-pipeline:
+    image: yarrow-ocr-test-paddlex:ci
+    pull_policy: never
+    environment:
+      DEVICE: cpu
+    deploy: !override {}
+
+  paddleocr-vl-api:
+    image: yarrow-ocr-test-paddlex:ci
+    pull_policy: never
+    environment:
+      DEVICE: cpu
+    deploy: !override {}
+    depends_on: !override {}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 600s
+
+  hybrid-gateway:
+    image: yarrow-ocr-test-hybrid-gateway:ci
+    pull_policy: never
+    depends_on: !override
+      paddlex-pipeline:
+        condition: service_healthy
+      paddleocr-vl-api:
+        condition: service_healthy
+
+  gateway:
+    depends_on: !override
+      hybrid-gateway:
+        condition: service_healthy

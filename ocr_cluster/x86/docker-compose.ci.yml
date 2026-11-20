@@ -1,0 +1,43 @@
+# CI overrides for the x86 stack: bring the four non-VLM services up on a
+# GPU-less GitHub runner (see ci-ocr-cluster.yml).
+#
+# Override-file deltas only (compose merges the rest from docker-compose.yml):
+#   - images pinned to the tags ci-ocr-cluster.yml builds, so `compose up`
+#     never rebuilds or pulls them;
+#   - DEVICE=cpu for the paddlex services;
+#   - GPU reservations stripped with !override (override files can still
+#     merge GPU reservations on top, they cannot remove them);
+#   - vlm-server excluded by REMOVING the paddleocr-vl-api ->
+#     vlm-server depends_on edge. The paddlex GenAI client is lazy (it dials
+#     the VLM only at inference time), so the four non-VLM services stay
+#     healthy with the VLM server absent. vlm-server needs a real GPU and a
+#     multi-GB model pull, so it is validated on a GPU host separately.
+#
+# Local verification of these overrides:
+#
+#   docker compose -p ocr-ci-x86 \
+#     -f ocr_cluster/x86/docker-compose.yml \
+#     -f ocr_cluster/x86/docker-compose.ci.yml \
+#     config
+#
+# warns that the !override tags require compose v2.24+ if the host compose is
+# too old; the runners ship v2.39.
+services:
+  paddlex-pipeline:
+    image: yarrow-ocr-test-paddlex:ci
+    pull_policy: never
+    environment:
+      DEVICE: cpu
+    deploy: !override {}
+
+  paddleocr-vl-api:
+    image: yarrow-ocr-test-paddlex:ci
+    pull_policy: never
+    environment:
+      DEVICE: cpu
+    deploy: !override {}
+    depends_on: !override {}
+
+  hybrid-gateway:
+    image: yarrow-ocr-test-hybrid-gateway:ci
+    pull_policy: never
