@@ -40,6 +40,8 @@ function summary(status: string): DocumentSummary {
   return {
     id: 'doc-1',
     status,
+    error_message: null,
+    error_stage: null,
     page_count: 4,
     reprocess: null,
   } as unknown as DocumentSummary;

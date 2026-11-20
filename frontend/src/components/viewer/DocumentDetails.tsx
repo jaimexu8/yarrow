@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, Cpu, Gauge } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { getDocument, parseApiDate, type ModelUsage } from '@/lib/documents';
+import { errorStageLabel } from '@/lib/progress';
 import { formatBytes } from '@/lib/storage';
 import { isLowConfidence } from '@/lib/viewer';
 import { useViewer } from './ViewerContext';
@@ -85,6 +86,8 @@ export function DocumentDetails() {
     tree.stats;
   const allConfident = confident >= pages;
   const share = Math.round((confident / pages) * 100);
+  const failureStage =
+    document.status === 'failed' ? errorStageLabel(document.error_stage) : null;
   const lowRegions = tree.pages.reduce(
     (total, page) => total + page.regions.filter(isLowConfidence).length,
     0
@@ -127,6 +130,18 @@ export function DocumentDetails() {
           className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-lg"
         >
           <h2 className="font-semibold text-slate-900">Document details</h2>
+
+          {document.status === 'failed' && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800">
+              <p className="font-medium">Processing failed</p>
+              {document.error_message && (
+                <p className="mt-1 [overflow-wrap:anywhere]">
+                  {failureStage && `Failed while ${failureStage}: `}
+                  {document.error_message}
+                </p>
+              )}
+            </div>
+          )}
 
           <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-slate-600">
             <dt>Pages</dt>

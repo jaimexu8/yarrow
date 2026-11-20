@@ -31,6 +31,7 @@ function viewerProps(fields: Partial<DocumentSummary>) {
     page_count: 2,
     status: 'completed',
     error_message: null,
+    error_stage: null,
     created_at: '2026-11-01T09:00:00',
     folder_id: null,
     ...fields,
@@ -142,5 +143,43 @@ describe('ModelInfo', () => {
     renderModelInfo({});
 
     expect(screen.getByText('Model: Unknown')).toBeDefined();
+  });
+});
+
+describe('DocumentDetails failure block', () => {
+  it('shows the stage phrase and reason for a failed document', () => {
+    renderDetails({
+      status: 'failed',
+      error_stage: 'parsing',
+      error_message: '2 of 2 page(s) failed: 1, 2',
+    });
+
+    expect(
+      screen.getByText(
+        /Failed while reading pages: 2 of 2 page\(s\) failed: 1, 2/
+      )
+    ).toBeDefined();
+  });
+
+  it('shows just the reason when the stage is unknown', () => {
+    renderDetails({
+      status: 'failed',
+      error_stage: 'something_new',
+      error_message: 'Could not process the file',
+    });
+
+    expect(screen.getByText('Could not process the file')).toBeDefined();
+    expect(screen.queryByText(/Failed while/)).toBeNull();
+  });
+
+  it('shows no failure block for a completed document', () => {
+    renderDetails({
+      status: 'completed',
+      error_stage: 'parsing',
+      error_message: '2 of 2 page(s) failed: 1, 2',
+    });
+
+    expect(screen.queryByText('Processing failed')).toBeNull();
+    expect(screen.queryByText(/Failed while/)).toBeNull();
   });
 });

@@ -14,6 +14,7 @@ import {
 } from '@/lib/documents';
 import { cn } from '@/lib/cn';
 import { toApiError } from '@/lib/errors';
+import { errorStageLabel } from '@/lib/progress';
 
 /** Mirrors the server's rules, so most mistakes are caught before sending. */
 export function checkName(name: string): string | null {
@@ -189,6 +190,7 @@ export function FailureNote({
 }) {
   if (!doc.error_message) return null;
   const failed = doc.status === 'failed';
+  const stage = failed ? errorStageLabel(doc.error_stage) : null;
   return (
     <p
       className={cn(
@@ -196,6 +198,7 @@ export function FailureNote({
         failed ? 'text-red-700' : 'text-amber-800'
       )}
     >
+      {stage && `Failed while ${stage}: `}
       {!failed && 'Some pages could not be read: '}
       {doc.error_message}
       {children}

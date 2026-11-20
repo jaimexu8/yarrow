@@ -25,6 +25,7 @@ function documentWith(status: DocumentSummary['status']): DocumentSummary {
     page_count: 1,
     status,
     error_message: null,
+    error_stage: null,
     created_at: null,
     folder_id: null,
   };

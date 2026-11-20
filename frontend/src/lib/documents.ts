@@ -50,6 +50,7 @@ export type DocumentSummary = {
   page_count: number | null;
   status: DocumentStatus | null;
   error_message: string | null;
+  error_stage: string | null;
   created_at: string | null;
   deleted_at?: string | null;
   folder_id: string | null;
