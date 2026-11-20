@@ -30,6 +30,10 @@ build/
 .DS_Store
 Thumbs.db
 
+# Celery
+celerybeat-schedule
+celerybeat-schedule.*
+
 # Local uploads/storage
 /storage/
 /data/

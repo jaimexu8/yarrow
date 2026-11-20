@@ -182,8 +182,45 @@ services:
       context: .
       dockerfile: worker/Dockerfile
     container_name: yarrow_worker
-    # Lets the worker reach the host-local OCR stack (ocr_cluster/x86,
-    # published on host port 8080) via INFERENCE_SERVICE_URL.
+    # Handles the default queue (ingest/finalize/sweeper) and runs the beat
+    # schedule. Beat must be single-replica, so this service stays at one
+    # replica. It never talks to the OCR gateway.
+    volumes:
+      - ./worker:/app/worker
+      - ./packages:/app/packages
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-yarrow}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yarrow_password}
+      - POSTGRES_DB=${POSTGRES_DB:-yarrow}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - VALKEY_HOST=valkey
+      - VALKEY_PORT=6379
+      - CELERY_BROKER_URL=redis://valkey:6379/1
+      - CELERY_RESULT_BACKEND=redis://valkey:6379/2
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-rustfsadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-rustfsadmin}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-yarrow-documents}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+    command: celery -A app.celery_app worker -Q default --concurrency=2 --loglevel=info -B
+    restart: unless-stopped
+
+  worker-ocr:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: yarrow_worker_ocr
+    # Dedicated OCR queue worker: the only service that talks to the
+    # inference gateway, so it alone carries the inference env and the
+    # host-gateway extra_hosts entry for the host-local OCR stack
+    # (ocr_cluster/x86, published on host port 8080).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -205,6 +242,7 @@ services:
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-yarrow-documents}
       - INFERENCE_SERVICE_URL=${INFERENCE_SERVICE_URL}
       - INFERENCE_API_KEY=${INFERENCE_API_KEY:-}
+      - INFERENCE_TIMEOUT_SECONDS=540
     depends_on:
       postgres:
         condition: service_healthy
@@ -212,7 +250,7 @@ services:
         condition: service_healthy
       rustfs:
         condition: service_healthy
-    command: celery -A app.celery_app worker --loglevel=info
+    command: celery -A app.celery_app worker -Q ocr --concurrency=${OCR_CONCURRENCY:-3} --loglevel=info
     restart: unless-stopped
 
   frontend:
