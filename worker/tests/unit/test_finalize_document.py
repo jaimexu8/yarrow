@@ -84,9 +84,7 @@ def _seed_terminal_job(sessions, job, page_count, all_completed=True):
 
 
 class TestFinalize:
-    def test_all_completed_finishes_job(
-        self, sessions, storage, seed
-    ):
+    def test_all_completed_finishes_job(self, sessions, storage, seed):
         document, job = seed(page_count=3, status="processing")
         _seed_document_with_pages(sessions, document, 3)
         _seed_terminal_job(sessions, job, 3, all_completed=True)
@@ -98,15 +96,14 @@ class TestFinalize:
             assert job.status == "completed"
             assert job.current_stage == "finished"
             assert job.error_message is None
+            assert job.error_stage is None
             assert job.pages_processed == 3
             assert session.get(Job, job.id).document.status == "completed"
         # Rasters deleted; pages/* never touched.
         for n in (1, 2, 3):
             assert f"documents/{document.id}/rasters/{n}.png" not in storage.store
 
-    def test_all_failed_marks_job_failed(
-        self, sessions, storage, seed
-    ):
+    def test_all_failed_marks_job_failed(self, sessions, storage, seed):
         document, job = seed(page_count=2, status="processing")
         _seed_document_with_pages(sessions, document, 2, status="failed")
         _seed_terminal_job(sessions, job, 2, all_completed=False)
@@ -118,11 +115,29 @@ class TestFinalize:
             assert job.status == "failed"
             assert job.current_stage == "failed"
             assert "2 of 2" in job.error_message
+            assert job.error_stage == "parsing"
             assert job.document.status == "failed"
 
-    def test_partial_failure_completes_with_summary(
+    def test_all_failed_with_queue_timeout_stages_queue_timeout(
         self, sessions, storage, seed
     ):
+        document, job = seed(page_count=2, status="processing")
+        _seed_document_with_pages(sessions, document, 2, status="failed")
+        _seed_terminal_job(sessions, job, 2, all_completed=False)
+        with sessions() as session:
+            session.query(JobPage).filter(
+                JobPage.job_id == job.id, JobPage.page_number == 1
+            ).update({"error_code": "queue_timeout"})
+
+        finalize_document(str(job.id))
+
+        with sessions() as session:
+            job = session.get(Job, job.id)
+            assert job.status == "failed"
+            assert "2 of 2" in job.error_message
+            assert job.error_stage == "queue_timeout"
+
+    def test_partial_failure_completes_with_summary(self, sessions, storage, seed):
         document, job = seed(page_count=3, status="processing")
         _seed_document_with_pages(sessions, document, 3)
         _seed_terminal_job(sessions, job, 3, all_completed=True)
@@ -140,6 +155,7 @@ class TestFinalize:
             job = session.get(Job, job.id)
             assert job.status == "completed"
             assert "1 of 3" in job.error_message
+            assert job.error_stage is None
 
     def test_not_all_terminal_is_a_noop(self, sessions, storage, seed):
         document, job = seed(page_count=3, status="processing")
@@ -173,9 +189,7 @@ class TestFinalize:
             assert job.current_stage == "finished"
             assert job.document.processed_at == first_processed_at
 
-    def test_stitches_3_page_spanning_table(
-        self, sessions, storage, seed
-    ):
+    def test_stitches_3_page_spanning_table(self, sessions, storage, seed):
         document, job = seed(page_count=3, status="processing")
         _seed_document_with_pages(sessions, document, 3)
         _seed_terminal_job(sessions, job, 3, all_completed=True)
@@ -203,9 +217,11 @@ class TestFinalize:
             tables = session.query(Table).filter(Table.document_id == document.id).all()
             assert len(tables) == 1
             assert tables[0].is_stitched is True
-            parts = session.query(RegionTable).filter(
-                RegionTable.table_id == tables[0].id
-            ).all()
+            parts = (
+                session.query(RegionTable)
+                .filter(RegionTable.table_id == tables[0].id)
+                .all()
+            )
             assert len(parts) == 3
 
     def test_no_stitch_when_flag_false(self, sessions, storage, seed):
@@ -230,9 +246,7 @@ class TestFinalize:
             assert len(tables) == 3
             assert all(t.is_stitched is False for t in tables)
 
-    def test_split_at_gaps_repairs_missing_middle_page(
-        self, sessions, storage, seed
-    ):
+    def test_split_at_gaps_repairs_missing_middle_page(self, sessions, storage, seed):
         document, job = seed(page_count=3, status="processing")
         _seed_document_with_pages(sessions, document, 3)
         _seed_terminal_job(sessions, job, 3, all_completed=True)

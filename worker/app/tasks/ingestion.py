@@ -230,7 +230,7 @@ def _record_page_event(
             )
 
 
-def _mark_failed(job_id: str, message: str) -> None:
+def _mark_failed(job_id: str, message: str, error_stage: str = "downloading") -> None:
     with session_scope() as session:
         job = session.get(Job, UUID(job_id))
         if job is None:
@@ -249,6 +249,7 @@ def _mark_failed(job_id: str, message: str) -> None:
             return
         job.status = "failed"
         job.current_stage = "failed"
+        job.error_stage = error_stage
         job.error_message = message
         job.document.status = "failed"
         job.document.error_message = message
@@ -344,8 +345,12 @@ def _delete_page_children(
     if not page_ids:
         return
     region_ids = select(Region.id).where(Region.page_id.in_(page_ids))
-    region_table_ids = select(RegionTable.id).where(RegionTable.region_id.in_(region_ids))
-    session.execute(delete(TableCell).where(TableCell.region_table_id.in_(region_table_ids)))
+    region_table_ids = select(RegionTable.id).where(
+        RegionTable.region_id.in_(region_ids)
+    )
+    session.execute(
+        delete(TableCell).where(TableCell.region_table_id.in_(region_table_ids))
+    )
     session.execute(delete(RegionTable).where(RegionTable.region_id.in_(region_ids)))
     session.execute(delete(RegionText).where(RegionText.region_id.in_(region_ids)))
     session.execute(delete(RegionImage).where(RegionImage.region_id.in_(region_ids)))
@@ -432,7 +437,7 @@ def _enqueue_finalize(job_id: str) -> None:
 
 def _retry_backoff(retries: int) -> int:
     """Backoff starting at 5 s, capped at 60 s, with jitter."""
-    base = min(60.0, 5.0 * (2 ** retries))
+    base = min(60.0, 5.0 * (2**retries))
     return int(base * (0.5 + random.random()))
 
 
@@ -816,9 +821,7 @@ def _commit_success(
         page = (
             session.execute(
                 select(Page)
-                .where(
-                    Page.document_id == document_id, Page.page_number == page_no
-                )
+                .where(Page.document_id == document_id, Page.page_number == page_no)
                 .with_for_update()
             )
             .scalars()
@@ -871,7 +874,9 @@ def _commit_success(
                 session.add(obj)
 
 
-def _upload_page_images(document_id: UUID, page_no: int, parser: DocumentParser) -> None:
+def _upload_page_images(
+    document_id: UUID, page_no: int, parser: DocumentParser
+) -> None:
     for key, image in parser.figure_images.items():
         try:
             get_storage().upload_file(io.BytesIO(image), key)
@@ -900,9 +905,7 @@ def _fail_page(job_id: str, page_no: int, error_code: str, error_message: str) -
         page = (
             session.execute(
                 select(Page)
-                .where(
-                    Page.document_id == document.id, Page.page_number == page_no
-                )
+                .where(Page.document_id == document.id, Page.page_number == page_no)
                 .with_for_update()
             )
             .scalars()
@@ -982,14 +985,9 @@ def finalize_document(job_id: str):
             _stitch_document_tables(session, document.id)
 
         # Derive the document's status from all of its page rows.
-        page_states = (
-            session.execute(
-                select(Page.page_number, Page.status).where(
-                    Page.document_id == document.id
-                )
-            )
-            .all()
-        )
+        page_states = session.execute(
+            select(Page.page_number, Page.status).where(Page.document_id == document.id)
+        ).all()
         run_completed = sum(1 for jp in job_pages if jp.status == "completed")
         run_failed = bool(job_pages) and not run_completed
 
@@ -1019,17 +1017,28 @@ def finalize_document(job_id: str):
         # decides the job's status, not whether the summary is recorded. The
         # pages are sorted so the summary is deterministic and matches the
         # document's summary.
-        failed_run_pages = sorted(jp.page_number for jp in job_pages if jp.status == "failed")
+        failed_run_pages = sorted(
+            jp.page_number for jp in job_pages if jp.status == "failed"
+        )
         summary = (
             _describe_failed_pages(failed_run_pages, len(job_pages))
             if failed_run_pages
             else None
         )
+        failed_codes = [jp.error_code for jp in job_pages if jp.status == "failed"]
+        error_stage = None
+        if run_failed:
+            error_stage = (
+                "queue_timeout"
+                if any(code == "queue_timeout" for code in failed_codes)
+                else "parsing"
+            )
 
         job.model_name = run_model.name if run_model else None
         job.model_version = run_model.version if run_model else None
         job.pipeline_version = PIPELINE_VERSION
         job.error_message = summary
+        job.error_stage = error_stage
         job.current_stage = "failed" if run_failed else "finished"
         job.status = "failed" if run_failed else "completed"
         job.pages_processed = terminal
@@ -1130,7 +1139,9 @@ def _stitch_document_tables(session: Session, document_id: UUID) -> None:
 def _edge_region_table(session: Session, page, end: bool):
     """The region table at the page's reading-order edge (max if end, min if
     not)."""
-    order_col = func.max(Region.reading_order) if end else func.min(Region.reading_order)
+    order_col = (
+        func.max(Region.reading_order) if end else func.min(Region.reading_order)
+    )
     order = session.execute(select(order_col).where(Region.page_id == page.id)).scalar()
     if order is None:
         return None
@@ -1180,9 +1191,7 @@ def _sweep_one(session: Session, job: Job, now: datetime) -> None:
     pages and be stale enough to re-enqueue its processing pages.
     """
     job_pages = (
-        session.execute(select(JobPage).where(JobPage.job_id == job.id))
-        .scalars()
-        .all()
+        session.execute(select(JobPage).where(JobPage.job_id == job.id)).scalars().all()
     )
     terminal = sum(1 for jp in job_pages if jp.status in ("completed", "failed"))
     acted = False
@@ -1240,9 +1249,7 @@ def _sweep_one(session: Session, job: Job, now: datetime) -> None:
         _mark_swept(str(job.id))
 
 
-def _expire_queued_page(
-    session: Session, job: Job, jp: JobPage, now: datetime
-) -> bool:
+def _expire_queued_page(session: Session, job: Job, jp: JobPage, now: datetime) -> bool:
     """Fail a timed-out queued page, guarding against a concurrent delivery.
 
     A parse_page _commit_success can complete the page between this sweep's
@@ -1290,9 +1297,7 @@ def _expire_queued_page(
     return True
 
 
-def _page_row(
-    session: Session, job: Job, page_number: int, for_update: bool = False
-):
+def _page_row(session: Session, job: Job, page_number: int, for_update: bool = False):
     stmt = select(Page).where(
         Page.document_id == job.document_id, Page.page_number == page_number
     )

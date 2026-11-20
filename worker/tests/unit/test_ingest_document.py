@@ -10,7 +10,9 @@ from app.tasks.ingestion import ingest_document
 
 
 class TestIngest:
-    def test_happy_path_seeds_and_enqueues(self, sessions, storage, gateway, enqueue, seed):
+    def test_happy_path_seeds_and_enqueues(
+        self, sessions, storage, gateway, enqueue, seed
+    ):
         document, job = seed(page_count=3)
         gateway.configure(pages=3)
         storage.store[document.storage_key] = b"file"
@@ -45,7 +47,9 @@ class TestIngest:
             if name == "app.tasks.ingestion.parse_page"
         ] == [("app.tasks.ingestion.parse_page", "ocr")] * 3
 
-    def test_partial_reprocess_scopes_pages(self, sessions, storage, gateway, enqueue, seed):
+    def test_partial_reprocess_scopes_pages(
+        self, sessions, storage, gateway, enqueue, seed
+    ):
         document, job = seed(page_count=3)
         gateway.configure(pages=3)
         storage.store[document.storage_key] = b"file"
@@ -99,6 +103,7 @@ class TestIngest:
             job = session.get(Job, job.id)
             assert job.status == "failed"
             assert job.current_stage == "failed"
+            assert job.error_stage == "downloading"
             assert "No loader" in job.error_message
             assert (
                 session.query(Page).filter(Page.document_id == document.id).count() == 0
@@ -115,6 +120,7 @@ class TestIngest:
         with sessions() as session:
             job = session.get(Job, job.id)
             assert job.status == "failed"
+            assert job.error_stage == "downloading"
             assert "not found in storage" in job.error_message
 
     def test_rotated_page_gets_page_image_key(self, sessions, storage, gateway, seed):
@@ -140,7 +146,9 @@ class TestIngest:
         assert f"documents/{document.id}/pages/1.png" in storage.store
         assert f"documents/{document.id}/rasters/1.png" in storage.store
 
-    def test_auto_rotated_page_gets_a_rotation_warning(self, sessions, storage, gateway, seed):
+    def test_auto_rotated_page_gets_a_rotation_warning(
+        self, sessions, storage, gateway, seed
+    ):
         """Ingest records the auto-rotation warning."""
         document, job = seed(page_count=2)
         gateway.configure(pages=2, rotations={1: 90.0})
@@ -152,7 +160,8 @@ class TestIngest:
             warnings = (
                 session.query(Warning)
                 .filter(
-                    Warning.page_id == (
+                    Warning.page_id
+                    == (
                         session.query(Page)
                         .filter(Page.document_id == document.id, Page.page_number == 1)
                         .one()
