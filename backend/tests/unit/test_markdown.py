@@ -35,9 +35,6 @@ class TestHeadings:
         assert render_markdown(document) == ""
 
 
-
-
-
 class TestFigures:
     def test_figure_without_bytes_renders_a_placeholder_not_an_image(self):
         """RegionImage rows are never written, so an image link would always break."""
@@ -49,6 +46,24 @@ class TestFigures:
     def test_caption_is_included(self):
         document = tree([page(1, region("figure", caption="Revenue by quarter"))])
         assert "Revenue by quarter" in render_markdown(document)
+
+    def test_caption_is_written_below_the_image(self):
+        figure = region("figure", caption="Revenue by quarter").model_copy(
+            update={"image_key": "images/figure-1.png"}
+        )
+        rendered = render_markdown(tree([page(1, figure)]))
+        assert (
+            "![Revenue by quarter](images/figure-1.png)\n\n_Revenue by quarter_"
+            in rendered
+        )
+
+    def test_image_without_a_caption_has_no_caption_line(self):
+        figure = region("figure").model_copy(
+            update={"image_key": "images/figure-1.png"}
+        )
+        assert render_markdown(tree([page(1, figure)])).strip() == (
+            "<!-- page 1 -->\n\n![figure](images/figure-1.png)"
+        )
 
 
 class TestTables:

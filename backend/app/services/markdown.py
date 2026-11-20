@@ -24,8 +24,12 @@ _WHITESPACE_RUN = re.compile(r"[ \t]+")
 @dataclass(frozen=True)
 class RenderOptions:
     include_artifacts: bool = True  # Headers, footers and page numbers. False for exports, True for the viewer.
-    page_separators: bool = True  # Emit a rule and an anchor comment between pages, for scroll syncing.
-    table_page_comment: bool = True  # Record which page each row range came from, above a stitched table.
+    page_separators: bool = (
+        True  # Emit a rule and an anchor comment between pages, for scroll syncing.
+    )
+    table_page_comment: bool = (
+        True  # Record which page each row range came from, above a stitched table.
+    )
 
 
 def render_markdown(tree: DocumentTree, options: RenderOptions | None = None) -> str:
@@ -70,7 +74,12 @@ class _Renderer:
         # but under a page filter the first part may not be in this payload, so
         # the earliest part that *is* present wins and the output says it is a
         # continuation.
-        present: set[str] = {str(region.region_table_id) for page in tree.pages for region in page.regions if region.region_table_id is not None}
+        present: set[str] = {
+            str(region.region_table_id)
+            for page in tree.pages
+            for region in page.regions
+            if region.region_table_id is not None
+        }
         self.emit_at: dict[str, str] = {}  # region_table_id -> table_id
         self.continued: set[str] = set()  # table_ids emitted from a later part
         for table in tree.tables:
@@ -143,7 +152,9 @@ class _Renderer:
     def _markdown_figure(self, region: RegionNode) -> str:
         label = (region.region_type or "figure").replace("_", " ")
         if region.image_key:
-            return f"![{region.caption or label}]({region.image_key})"
+            caption = _clean(region.caption)
+            image = f"![{caption or label}]({region.image_key})"
+            return f"{image}\n\n_{caption}_" if caption else image
         caption = f" — {region.caption}" if region.caption else ""
         return f"> _{label.capitalize()} on page {region.page_number}{caption}_"
 
@@ -225,7 +236,9 @@ class _Renderer:
 def _clean(text: str | None) -> str:
     if not text:
         return ""
-    return _WHITESPACE_RUN.sub(" ", text.replace("\r\n", "\n").replace("\r", "\n")).strip()
+    return _WHITESPACE_RUN.sub(
+        " ", text.replace("\r\n", "\n").replace("\r", "\n")
+    ).strip()
 
 
 def _normalize_lists(text: str) -> str:
@@ -271,7 +284,10 @@ def _build_grid(cells: list[TableCellNode]) -> list[list[str]]:
 
 
 def _describe_row_pages(table: TableNode) -> str:
-    spans = [f"rows {part.row_start}-{part.row_end} from page {part.page_number}" for part in table.parts]
+    spans = [
+        f"rows {part.row_start}-{part.row_end} from page {part.page_number}"
+        for part in table.parts
+    ]
     return "; ".join(spans)
 
 
@@ -280,9 +296,17 @@ def _plain_table(table: TableNode) -> str:
     if not grid:
         return ""
     cleaned = [[cell.replace("\n", " ").strip() for cell in row] for row in grid]
-    widths = [min(max((len(row[col]) for row in cleaned), default=0), 40) for col in range(len(cleaned[0]))]
+    widths = [
+        min(max((len(row[col]) for row in cleaned), default=0), 40)
+        for col in range(len(cleaned[0]))
+    ]
     lines = []
     for row in cleaned:
-        cells = [(f"{value[:widths[col] - 1]}…" if len(value) > widths[col] else value).ljust(widths[col]) for col, value in enumerate(row)]
+        cells = [
+            (
+                f"{value[: widths[col] - 1]}…" if len(value) > widths[col] else value
+            ).ljust(widths[col])
+            for col, value in enumerate(row)
+        ]
         lines.append("  ".join(cells).rstrip())
     return "\n".join(lines)

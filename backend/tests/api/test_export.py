@@ -1,9 +1,12 @@
 """GET /documents/{id}/export and /markdown: downloading the extracted content (US-16)."""
 
+import io
 import json
 import uuid
+import zipfile
 
 import pytest
+from sqlalchemy import select
 from yarrow_db.models import (
     Document,
     Page,
@@ -13,6 +16,7 @@ from yarrow_db.models import (
     Table,
     TableCell,
 )
+from yarrow_db.models.region import RegionImage
 
 from tests.conftest import FIXTURES_DIR
 
@@ -393,3 +397,161 @@ class TestExport:
         disposition = response.headers["content-disposition"]
         assert 'filename="Ber-k-report.md"' in disposition
         assert "filename*=UTF-8''Ber%C3%ADk%20report.md" in disposition
+
+
+async def _add_figure(
+    db_session, document_id, page_number: int, image_key: str
+) -> None:
+    page = (
+        await db_session.execute(
+            select(Page).where(
+                Page.document_id == document_id, Page.page_number == page_number
+            )
+        )
+    ).scalar_one()
+    figure = Region(
+        id=uuid.uuid4(),
+        page_id=page.id,
+        page_number=page_number,
+        reading_order=5,
+        region_type="figure",
+    )
+    db_session.add_all([figure, RegionImage(region_id=figure.id, image_key=image_key)])
+    await db_session.flush()
+
+
+async def _export(client, headers, document_id, **params):
+    return await client.get(
+        f"{DOCUMENTS}{document_id}/export", headers=headers, params=params
+    )
+
+
+@pytest.mark.usefixtures("fake_queue")
+class TestExportImages:
+    async def test_markdown_with_figures_is_a_zip(
+        self, client, auth_headers, db_session, fake_storage
+    ):
+        # Constructs document with a figure
+        document_id = await _upload(client, auth_headers)
+        await _complete(db_session, document_id)
+        key = f"documents/{document_id}/figures/a.png"
+        fake_storage.objects[key] = b"png-bytes"
+        await _add_figure(db_session, document_id, 1, key)
+
+        # Export as markdown
+        response = await _export(client, auth_headers, document_id, format="markdown")
+
+        # Check if the response status and headers are correct
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == "application/zip"
+        assert 'filename="sample.zip"' in response.headers["content-disposition"]
+
+        # Check if the zip file contain the markdown and the image
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            assert sorted(archive.namelist()) == ["images/figure-1.png", "sample.md"]
+            assert archive.read("images/figure-1.png") == b"png-bytes"
+            markdown = archive.read("sample.md").decode()
+
+        # Check if the markdown references the image correctly
+        assert "(images/figure-1.png)" in markdown
+        assert key not in markdown
+
+    async def test_json_references_point_into_the_zip(
+        self, client, auth_headers, db_session, fake_storage
+    ):
+        # Constructs document with a figure
+        document_id = await _upload(client, auth_headers)
+        await _complete(db_session, document_id)
+        key = f"documents/{document_id}/figures/a.png"
+        fake_storage.objects[key] = b"png-bytes"
+        await _add_figure(db_session, document_id, 1, key)
+
+        # Export as JSON
+        response = await _export(client, auth_headers, document_id, format="json")
+
+        # Check if the JSON references the image correctly
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            tree = json.loads(archive.read("sample.json"))
+
+        image_keys = [
+            region["image_key"]
+            for page in tree["pages"]
+            for region in page["regions"]
+            if region["image_key"]
+        ]
+        assert image_keys == ["images/figure-1.png"]
+
+    async def test_page_filter_only_includes_that_pages_images(
+        self, client, auth_headers, db_session, fake_storage
+    ):
+        # Constructs document with multiple figures on different pages
+        document_id = await _upload(client, auth_headers)
+        await _complete(db_session, document_id)
+        for number in (1, 2):
+            key = f"documents/{document_id}/figures/{number}.png"
+            fake_storage.objects[key] = f"page-{number}".encode()
+            await _add_figure(db_session, document_id, number, key)
+
+        # Export only page 2 as markdown
+        response = await _export(
+            client, auth_headers, document_id, format="markdown", page=2
+        )
+
+        # Check if the zip file contains only the image for page 2 and the markdown
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            assert sorted(archive.namelist()) == ["images/figure-1.png", "sample.md"]
+            assert archive.read("images/figure-1.png") == b"page-2"
+
+    async def test_missing_image_falls_back_to_a_single_file(
+        self, client, auth_headers, db_session, fake_storage
+    ):
+        # Constructs document with a missing image
+        document_id = await _upload(client, auth_headers)
+        await _complete(db_session, document_id)
+        await _add_figure(db_session, document_id, 1, "documents/x/gone.png")
+
+        # Export as markdown
+        response = await _export(client, auth_headers, document_id, format="markdown")
+
+        # Check if the response falls back to a single file without the missing image
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == "text/markdown; charset=utf-8"
+        assert "gone.png" not in response.text
+        assert "Figure on page 1" in response.text
+
+    async def test_text_export_stays_a_single_file(
+        self, client, auth_headers, db_session, fake_storage
+    ):
+        # Constructs document with a figure
+        document_id = await _upload(client, auth_headers)
+        await _complete(db_session, document_id)
+        key = f"documents/{document_id}/figures/a.png"
+        fake_storage.objects[key] = b"png-bytes"
+        await _add_figure(db_session, document_id, 1, key)
+
+        # Export as text
+        response = await _export(client, auth_headers, document_id, format="text")
+
+        # Check if the response is a single text file
+        assert response.headers["content-type"] == "text/plain; charset=utf-8"
+
+    async def test_unicode_zip_filename_keeps_its_characters(
+        self, client, auth_headers, db_session, fake_storage
+    ):
+        # Constructs document with a unicode filename
+        owner_id = await _owner_id(client, auth_headers)
+        document_id = await _direct_document(
+            db_session, owner_id, "Berík report.pdf", "completed"
+        )
+        await _complete(db_session, document_id)
+        key = f"documents/{document_id}/figures/a.png"
+        fake_storage.objects[key] = b"png-bytes"
+        await _add_figure(db_session, document_id, 1, key)
+
+        # Export as markdown
+        response = await _export(client, auth_headers, document_id, format="markdown")
+
+        # Check if the content-disposition header preserves the unicode filename
+        disposition = response.headers["content-disposition"]
+        assert 'filename="Ber-k-report.zip"' in disposition
+        assert "filename*=UTF-8''Ber%C3%ADk%20report.zip" in disposition

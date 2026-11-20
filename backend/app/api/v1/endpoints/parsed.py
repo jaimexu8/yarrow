@@ -1,10 +1,14 @@
+import io
 import json
 import logging
+import zipfile
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from yarrow_storage import ObjectNotFoundError, get_storage
 
 from app.core.database import get_db
 from app.deps import DocumentAccess, require_completed, require_read_access
@@ -26,6 +30,10 @@ class ExportFormat(str, Enum):
     CSV = "csv"
 
 
+# Text and CSV never reference figure images, so they stay a single file.
+IMAGE_FORMATS = {ExportFormat.JSON, ExportFormat.MARKDOWN}
+
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -35,7 +43,10 @@ async def get_parsed_document(
     page: int | None = Query(
         default=None,
         ge=1,
-        description=("Restrict to one 1-based page. Tables are still returned whole, " "including parts on other pages."),
+        description=(
+            "Restrict to one 1-based page. Tables are still returned whole, "
+            "including parts on other pages."
+        ),
     ),
     include_cells: bool = Query(default=True),
     include_warnings: bool = Query(default=True),
@@ -80,9 +91,19 @@ async def get_document_markdown(
     tree = await load_document_tree(db, access, page=page, include_warnings=False)
     text = render_markdown(
         tree,
-        RenderOptions(include_artifacts=include_artifacts, page_separators=page is None),
+        RenderOptions(
+            include_artifacts=include_artifacts, page_separators=page is None
+        ),
     )
     return PlainTextResponse(text, media_type="text/markdown; charset=utf-8")
+
+
+def _create_zip(files: dict[str, bytes]) -> bytes:
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for filename, data in files.items():
+            zip_file.writestr(filename, data)
+    return zip_buffer.getvalue()
 
 
 @router.get("/{document_id}/export")
@@ -102,11 +123,28 @@ async def export_document(
     """Download the extracted content as JSON, Markdown, plain text, or CSV"""
     require_completed(access)
 
-    tree = await load_document_tree(db, access, page=page, include_warnings=export_format is ExportFormat.JSON)
+    tree = await load_document_tree(
+        db, access, page=page, include_warnings=export_format is ExportFormat.JSON
+    )
+
+    # Collect images and modifies the image keys in the tree to point to the archive paths
+    images: dict[str, bytes] = (
+        await _collect_images(tree) if export_format in IMAGE_FORMATS else {}
+    )
+
     fallback = f"document-{access.document.id}"
     extension, media_type, body = _serialize(tree, export_format, include_artifacts)
     filename = f"{safe_stem(access.document.filename, fallback)}.{extension}"
     unicode_filename = f"{display_stem(access.document.filename, fallback)}.{extension}"
+
+    if images:
+        files = {filename: body.encode("utf-8"), **images}
+        filename = f"{safe_stem(access.document.filename, fallback)}.zip"
+        unicode_filename = f"{display_stem(access.document.filename, fallback)}.zip"
+        body, media_type = (
+            await run_in_threadpool(_create_zip, files),
+            "application/zip",
+        )
 
     return Response(
         content=body,
@@ -121,7 +159,33 @@ async def export_document(
     )
 
 
-def _serialize(tree: DocumentTree, export_format: ExportFormat, include_artifacts: bool) -> tuple[str, str, str]:
+async def _collect_images(tree: DocumentTree) -> dict[str, bytes]:
+    """Fetch the tree's figure images and point their regions at the archive paths."""
+    regions = [
+        region for page in tree.pages for region in page.regions if region.image_key
+    ]
+    paths: dict[str, str | None] = {}
+    files: dict[str, bytes] = {}
+    for region in regions:
+        key = region.image_key
+        if key not in paths:
+            try:
+                data = await run_in_threadpool(get_storage().download_bytes, key)
+            except ObjectNotFoundError:
+                logger.warning(
+                    f"Figure image {key} is missing from storage; left out of the export"
+                )
+                paths[key] = None
+            else:
+                paths[key] = f"images/figure-{len(files) + 1}.{key.rsplit('.', 1)[-1]}"
+                files[paths[key]] = data
+        region.image_key = paths[key]
+    return files
+
+
+def _serialize(
+    tree: DocumentTree, export_format: ExportFormat, include_artifacts: bool
+) -> tuple[str, str, str]:
     """Return (extension, media type, body) for one export format."""
     options = RenderOptions(include_artifacts=include_artifacts)
     if export_format is ExportFormat.JSON:
