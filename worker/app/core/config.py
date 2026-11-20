@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     INFERENCE_MODEL_NAME: str = "unknown"
     INFERENCE_MODEL_VERSION: str = "unknown"
 
+    PAGE_QUEUE_TIMEOUT_SECONDS: int = 1800
+    PAGE_STALE_SECONDS: int = 1800
+    MAX_PAGE_DELIVERIES: int = 6
+    PAGE_COUNTERS_REDIS_URL: str = "redis://valkey:6379/3"
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )

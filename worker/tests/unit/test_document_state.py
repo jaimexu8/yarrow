@@ -1,15 +1,10 @@
-"""Document-level status and error summary test"""
+"""Document-level status and error summary test
 
-from typing import ClassVar
+_documents_state is a pure helper; the pipeline-specific reprocess accounting
+moved to the new tasks (test_ingest_document).
+"""
 
-import pytest
-
-from app.tasks import ingestion
-from app.tasks.ingestion import (
-    AllPagesFailedError,
-    _document_state,
-    process_document_task,
-)
+from app.tasks.ingestion import _document_state
 
 
 class TestDocumentState:
@@ -44,79 +39,3 @@ class TestDocumentState:
     def test_failed_page_numbers_are_ordered(self):
         rows = [(3, "failed"), (1, "failed"), (2, "completed")]
         assert _document_state(rows, 3)[1] == "2 of 3 page(s) failed: 1, 3"
-
-
-class TestPartialReprocessAccounting:
-    def test_job_status_and_progress_describe_only_the_run(
-        self, session, storage, parser, job
-    ):
-        """Reprocessing page 2 alone and failing is a failed job."""
-        parser.configure(page_count=3, failed=(2,))
-
-        with pytest.raises(AllPagesFailedError):
-            process_document_task(str(job.id), page_to_process=(2,))
-
-        assert job.status == "failed"
-        assert job.error_message == "1 of 1 page(s) failed: 2"
-        assert job.total_pages == 1
-        assert job.pages_processed == 1
-
-        # The other two pages were never touched and still hold content.
-        assert job.document.status == "completed"
-        assert job.document.error_message == "1 of 3 page(s) failed: 2"
-
-    def test_reprocessing_no_pages_is_a_no_op(self, session, storage, parser, job):
-        """A single-page document has no failed pages, so the retry list is empty.
-
-        Attempting nothing must not be reported as a run in which everything
-        failed.
-        """
-        parser.configure(page_count=1, failed=())
-
-        process_document_task(str(job.id), page_to_process=())
-
-        assert job.status == "completed"
-        assert job.error_message is None
-        assert job.total_pages == 0
-        assert job.pages_processed == 0
-
-    def test_partial_run_scopes_orientation_detection(
-        self, session, storage, parser, job, monkeypatch
-    ):
-        """The task hands the run's pages to correct_orientations."""
-        # The task builds its own parser inside process_document_task, so the
-        # fixture's parser object never sees the call. Record the scope on the
-        # instance the task actually constructs instead.
-        parser.configure(page_count=3, failed=())
-
-        class RecordingParser(type(parser)):
-            scopes: ClassVar[list] = []
-
-            def correct_orientations(self, pages_to_process=None):
-                RecordingParser.scopes.append(pages_to_process)
-                return super().correct_orientations(pages_to_process)
-
-        monkeypatch.setattr(ingestion, "DocumentParser", RecordingParser)
-
-        process_document_task(str(job.id), page_to_process=(2,))
-
-        assert RecordingParser.scopes == [(2,)]
-
-    def test_full_run_detects_every_page(
-        self, session, storage, parser, job, monkeypatch
-    ):
-        """A full run passes no scope, so the parser covers the whole document."""
-        parser.configure(page_count=3, failed=())
-
-        class RecordingParser(type(parser)):
-            scopes: ClassVar[list] = []
-
-            def correct_orientations(self, pages_to_process=None):
-                RecordingParser.scopes.append(pages_to_process)
-                return super().correct_orientations(pages_to_process)
-
-        monkeypatch.setattr(ingestion, "DocumentParser", RecordingParser)
-
-        process_document_task(str(job.id))
-
-        assert RecordingParser.scopes == [None]

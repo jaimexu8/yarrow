@@ -17,12 +17,30 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    task_time_limit=3600,
-    task_soft_time_limit=3300,
+    # Page parses land on a dedicated queue; everything else uses the default.
+    task_default_queue="default",
+    task_routes={
+        "app.tasks.ingestion.parse_page": {"queue": "ocr"},
+    },
+    # One task per worker at a time, so an idle worker never hoards queued pages.
+    worker_prefetch_multiplier=1,
+    beat_schedule={
+        "sweep-stuck-jobs": {
+            "task": "app.tasks.ingestion.sweep_stuck_jobs",
+            "schedule": 120,
+        },
+    },
     # redis ignores send_task priority unless these are set. 0 is highest.
+    # visibility_timeout re-hides a message if its worker dies with the task
+    # still unacked, instead of dropping it. Note the asymmetry: the 30-min
+    # QUEUE timeout only covers jobs still queued. A page already processing
+    # when its worker dies is not covered by it; recovery there is the sweeper's
+    # stale rule (PAGE_STALE_SECONDS), so such a page may wait up to
+    # visibility_timeout before being redelivered. This is intentional.
     broker_transport_options={
         "priority_steps": list(range(10)),
         "sep": ":",
         "queue_order_strategy": "priority",
+        "visibility_timeout": 3600,
     },
 )
