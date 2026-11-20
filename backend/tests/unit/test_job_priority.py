@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.queue import (
-    PROCESS_DOCUMENT_TASK,
+    INGEST_DOCUMENT_TASK,
     enqueue_document_processing,
     get_celery,
     job_priority,
@@ -55,8 +55,9 @@ def test_enqueue_passes_priority_to_send_task(monkeypatch):
 
     enqueue_document_processing(job_id, pages=[1, 2], priority=3)
 
-    assert sent["name"] == PROCESS_DOCUMENT_TASK
-    assert sent["kwargs"] == {"job_id": str(job_id), "page_to_process": [1, 2]}
+    assert sent["name"] == INGEST_DOCUMENT_TASK
+    assert sent["queue"] == "default"
+    assert sent["kwargs"] == {"job_id": str(job_id), "pages": [1, 2]}
     assert sent["priority"] == 3
 
 

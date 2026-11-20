@@ -85,6 +85,19 @@ class AdminJobCancelRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class OcrMetrics(BaseModel):
+    """Operator metrics for the OCR pipeline, for GET /admin/ocr/metrics."""
+
+    queue_depth: int
+    pages_queued: int
+    pages_processing: int
+    oldest_queued_seconds: float | None
+    # A windowed COUNT, not a normalized rate: the number of pages that failed
+    # with error_code inference_unavailable or queue_timeout during the trailing
+    # 5 minutes.
+    rejected_last_5m: int
+
+
 class AdminJobActionResult(BaseModel):
     job_id: UUID
     document_id: UUID

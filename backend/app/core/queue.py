@@ -13,7 +13,7 @@ from celery import Celery
 
 from .config import settings
 
-PROCESS_DOCUMENT_TASK = "app.tasks.ingestion.process_document_task"
+INGEST_DOCUMENT_TASK = "app.tasks.ingestion.ingest_document"
 
 # redis list names use this separator (celery:0, celery:3, ...).
 _REDIS_PRIORITY_OPTIONS = {
@@ -65,11 +65,15 @@ def enqueue_document_processing(
     """
     kwargs: dict = {"job_id": str(job_id)}
     if pages is not None:
-        kwargs["page_to_process"] = list(pages)
+        kwargs["pages"] = list(pages)
     send_kwargs: dict = {"kwargs": kwargs}
     if priority is not None:
         send_kwargs["priority"] = priority
-    result = get_celery().send_task(PROCESS_DOCUMENT_TASK, **send_kwargs)
+    # Send to the default queue explicitly. Without it, the task lands on
+    # "celery" (the broker's default queue name), which no worker consumes.
+    result = get_celery().send_task(
+        INGEST_DOCUMENT_TASK, queue="default", **send_kwargs
+    )
     return result.id
 
 

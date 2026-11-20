@@ -2,6 +2,7 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
+import redis
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import and_, func, select
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
 from yarrow_db.models import Document, Job, ServiceNode, User
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.queue import enqueue_document_processing, revoke_document_processing
 from app.core.security import get_current_active_admin
@@ -23,10 +25,12 @@ from app.schemas.admin import (
     AdminStats,
     JobStatusCounts,
     NodeStatusReport,
+    OcrMetrics,
 )
 from app.services.account import delete_account
 from app.services.job_progress import cancel_open_job_pages
 from app.services.node_health import check_nodes
+from app.services.ocr_metrics import _queue_depth, collect_ocr_metrics
 from app.services.reprocess import (
     ACTIVE_JOB_STATES,
     LATEST_JOB_FIRST,
@@ -482,3 +486,24 @@ async def forget_node(
         )
     await db.delete(node)
     await db.commit()
+
+
+@router.get("/ocr/metrics", response_model=OcrMetrics)
+async def get_ocr_metrics(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_active_admin),
+):
+    depth = await run_in_threadpool(_ocr_queue_depth)
+    return await collect_ocr_metrics(db, depth)
+
+
+def _ocr_queue_depth() -> int:
+    """Pages waiting on the ocr queue, 0 when the broker is unreachable."""
+    client = redis.from_url(settings.CELERY_BROKER_URL, socket_timeout=2)
+    try:
+        return _queue_depth(client)
+    except Exception:
+        logger.warning("OCR metrics: broker unreachable", exc_info=True)
+        return 0
+    finally:
+        client.close()
