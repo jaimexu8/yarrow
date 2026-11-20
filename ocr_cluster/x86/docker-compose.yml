@@ -50,6 +50,7 @@ services:
       - --max-running-requests=16
       - --mem-fraction-static=0.4
       - --disable-radix-cache
+      - --enable-metrics
     volumes:
       - vlm-hf-cache:/root/.cache/huggingface
     shm_size: "2gb"
