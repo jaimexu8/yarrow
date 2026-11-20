@@ -235,6 +235,7 @@ type Options = {
    * and its session is kept, so asking again finalizes the same chunks.
    */
   allowDuplicate?: boolean;
+  password?: string;
 };
 
 /**
@@ -453,6 +454,7 @@ export async function uploadResumable(
         // document joins the run on screen instead (US-31).
         ...(options.batchId && { batch_id: options.batchId }),
         ...(options.allowDuplicate && { allow_duplicate: true }),
+        ...(options.password !== undefined && { password: options.password }),
       }
     );
     forgetSession(file);
@@ -480,6 +482,13 @@ export async function uploadResumable(
     }
     const code = status(err);
     const message = toApiError(err).message;
+    if (
+      code === 400 &&
+      (message === `Password required for ${file.name}` ||
+        message === `Password incorrect for ${file.name}`)
+    ) {
+      return { kind: 'rejected', reason: message };
+    }
     if (code === 410 || code === 404) {
       // Expired or aborted elsewhere: Retry starts a fresh upload.
       forgetSession(file);

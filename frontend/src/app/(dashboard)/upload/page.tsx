@@ -13,6 +13,8 @@ import { DocumentList } from '@/components/documents/DocumentList';
 import { StorageQuotaBanner } from '@/components/storage/StorageQuotaBanner';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { announceBatchActivity, sealBatch } from '@/lib/batchNotifications';
 import { cn } from '@/lib/cn';
 import {
@@ -146,6 +148,15 @@ export default function UploadPage() {
   );
   const [items, setItems] = useState<Item[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [passwordPrompt, setPasswordPrompt] = useState<{
+    filename: string;
+    error?: string;
+    checking: boolean;
+  } | null>(null);
+  const [password, setPassword] = useState('');
+  const passwordResolver = useRef<((value: string | null) => void) | null>(
+    null
+  );
   const [dragging, setDragging] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   // The run whose progress is shown, remembered for the tab so coming back
@@ -196,6 +207,23 @@ export default function UploadPage() {
     );
   }
 
+  function requestPassword(filename: string, error?: string) {
+    setPassword('');
+    setPasswordPrompt({ filename, error, checking: false });
+    return new Promise<string | null>((resolve) => {
+      passwordResolver.current = resolve;
+    });
+  }
+
+  function answerPassword(value: string | null) {
+    const resolve = passwordResolver.current;
+    passwordResolver.current = null;
+    if (value === null) setPasswordPrompt(null);
+    else
+      setPasswordPrompt((current) => current && { ...current, checking: true });
+    resolve?.(value);
+  }
+
   /**
    * Upload the given files. ``newRun`` starts a fresh batch (the Upload
    * button); a Retry of one file rejoins the run that file was sent in, even
@@ -240,32 +268,84 @@ export default function UploadPage() {
     // arrive are announced when they finish; resuming the file later joins
     // it to the run, which unseals the batch until that loop seals it again.
     try {
-      for (const key of keys) {
+      for (const [index, key] of keys.entries()) {
         const item = items.find((candidate) => candidate.key === key);
         if (!item) continue;
         const runId = newRun ? freshRun : (item.batchId ?? batchId ?? freshRun);
         const askForCopy = allowDuplicate || item.allowDuplicate === true;
         update(key, { status: 'uploading', progress: 0, batchId: runId });
         const onProgress = (progress: number) => update(key, { progress });
-        let outcome;
-        if (isResumable(item.file)) {
-          const controller = new AbortController();
-          controllers.current.set(key, controller);
-          outcome = await uploadResumable(item.file, {
-            batchId: runId,
-            onProgress,
-            signal: controller.signal,
-            allowDuplicate: askForCopy,
-          });
-          controllers.current.delete(key);
-        } else {
-          outcome = await uploadDocument(
-            item.file,
-            item.uploadId,
-            onProgress,
-            runId,
-            askForCopy
+        const send = async (pdfPassword?: string) => {
+          if (isResumable(item.file)) {
+            const controller = new AbortController();
+            controllers.current.set(key, controller);
+            const outcome = await uploadResumable(item.file, {
+              batchId: runId,
+              onProgress,
+              signal: controller.signal,
+              allowDuplicate: askForCopy,
+              password: pdfPassword,
+            });
+            controllers.current.delete(key);
+            return outcome;
+          } else {
+            return uploadDocument(
+              item.file,
+              item.uploadId,
+              onProgress,
+              runId,
+              askForCopy,
+              pdfPassword
+            );
+          }
+        };
+        let outcome = await send();
+        let prompting = false;
+        while (true) {
+          const reason = outcome.kind === 'rejected' ? outcome.reason : '';
+          const required = 'Password required for ';
+          const incorrect = 'Password incorrect for ';
+          const prefix = reason.startsWith(required)
+            ? required
+            : reason.startsWith(incorrect)
+              ? incorrect
+              : null;
+          if (!prefix && !(prompting && outcome.kind === 'failed')) break;
+          const filename = prefix
+            ? reason.slice(prefix.length)
+            : item.file.name;
+          if (prefix && filename !== item.file.name) break;
+          prompting = true;
+          const answer = await requestPassword(
+            filename,
+            prefix === incorrect
+              ? 'Incorrect password. Try again.'
+              : outcome.kind === 'failed'
+                ? outcome.message
+                : undefined
           );
+          if (answer === null) {
+            setItems((current) =>
+              current.map((entry) =>
+                keys.slice(index).includes(entry.key)
+                  ? { ...entry, status: 'ready', progress: 0 }
+                  : entry
+              )
+            );
+            break;
+          }
+          outcome = await send(answer);
+        }
+        if (prompting) {
+          setPasswordPrompt(null);
+          setPassword('');
+          if (
+            outcome.kind === 'rejected' &&
+            (outcome.reason.startsWith('Password required for ') ||
+              outcome.reason.startsWith('Password incorrect for '))
+          )
+            break;
+          if (outcome.kind === 'failed') break;
         }
         if (outcome.kind === 'paused') {
           update(key, { status: 'paused' });
@@ -385,6 +465,54 @@ export default function UploadPage() {
 
   return (
     <div className="space-y-8">
+      <Modal
+        open={passwordPrompt !== null}
+        onClose={() => answerPassword(null)}
+        title="PDF password"
+        dismissible={!passwordPrompt?.checking}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            answerPassword(password);
+          }}
+          className="space-y-4"
+        >
+          <p>
+            Enter the password for{' '}
+            <strong className="break-all">{passwordPrompt?.filename}</strong>.
+          </p>
+          <PasswordInput
+            id="pdf-password"
+            label="Password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            error={passwordPrompt?.error}
+            disabled={passwordPrompt?.checking}
+            required
+            data-autofocus
+            autoComplete="off"
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-auto"
+              disabled={passwordPrompt?.checking}
+              onClick={() => answerPassword(null)}
+            >
+              Cancel upload
+            </Button>
+            <Button
+              type="submit"
+              className="w-auto"
+              loading={passwordPrompt?.checking}
+            >
+              Continue
+            </Button>
+          </div>
+        </form>
+      </Modal>
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Upload documents

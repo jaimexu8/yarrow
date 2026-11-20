@@ -26,6 +26,7 @@ python-multipart = "*"
 # trusting the filename or the browser's Content-Type. Same library the worker
 # uses, so both agree on what is accepted.
 filetype = "*"
+pymupdf = "*"
 pypdf = "*"
 pdfplumber = "*"
 celery = {extras = ["redis"], version = "*"}

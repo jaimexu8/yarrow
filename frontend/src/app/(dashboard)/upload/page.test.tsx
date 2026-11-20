@@ -24,7 +24,12 @@ import UploadPage from './page';
 
 const api = vi.hoisted(() => ({
   batchIds: [] as string[],
-  calls: [] as { name: string; batchId?: string; allowDuplicate?: true }[],
+  calls: [] as {
+    name: string;
+    batchId?: string;
+    allowDuplicate?: true;
+    password?: string;
+  }[],
   // Each upload waits for the test to settle it with an outcome.
   pending: [] as ((outcome: UploadOutcome) => void)[],
 }));
@@ -37,13 +42,15 @@ vi.mock('@/lib/documents', async (importOriginal) => ({
     _uploadId: string,
     _onProgress: (n: number) => void,
     batchId?: string,
-    allowDuplicate?: boolean
+    allowDuplicate?: boolean,
+    password?: string
   ) => {
     api.calls.push({
       name: file.name,
       batchId,
       // Only recorded when set, so the batch tests' expectations stay short.
       ...(allowDuplicate ? { allowDuplicate: true as const } : {}),
+      ...(password !== undefined ? { password } : {}),
     });
     return new Promise<UploadOutcome>((resolve) => api.pending.push(resolve));
   },
@@ -146,6 +153,12 @@ async function settleNext(outcome: UploadOutcome) {
 }
 
 beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
   api.batchIds = ['batch-1', 'batch-2'];
   api.calls = [];
   api.pending = [];
@@ -161,6 +174,98 @@ afterEach(() => {
 });
 
 describe('Upload page batches', () => {
+  it('keeps prompting until each protected file has the correct password', async () => {
+    render(<UploadPage />);
+
+    // Upload two pdf files
+    choose(pdf('one.pdf'), pdf('two.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 2 files' }));
+
+    // The first pdf upload should require password
+    await settleNext({
+      kind: 'rejected',
+      reason: 'Password required for one.pdf',
+    });
+    expect(
+      await screen.findByText('one.pdf', { selector: 'strong' })
+    ).toBeTruthy();
+
+    // Send an incorrect password for one.pdf
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'wrong' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    // Expect the pdf upload to reject incorrect password
+    await settleNext({
+      kind: 'rejected',
+      reason: 'Password incorrect for one.pdf',
+    });
+    expect(
+      await screen.findByText('Incorrect password. Try again.')
+    ).toBeTruthy();
+
+    // Expect the api calls to include the rejected and retried attempts for one.pdf
+    expect(api.calls.map((call) => call.name)).toEqual(['one.pdf', 'one.pdf']);
+
+    // Send the correct password for one.pdf
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'first' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    // Expect the pdf upload to be accepted with the correct password for one.pdf
+    await settleNext(accepted);
+
+    // Expect the next pdf upload to require a password for two.pdf
+    await settleNext({
+      kind: 'rejected',
+      reason: 'Password required for two.pdf',
+    });
+    expect(
+      await screen.findByText('two.pdf', { selector: 'strong' })
+    ).toBeTruthy();
+
+    // Send the correct password for two.pdf
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'second' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    // Expect the pdf upload to be accepted with the correct password for two.pdf
+    await settleNext(accepted);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // Expect the api calls to include all attempts with their respective passwords
+    expect(api.calls.map(({ name, password }) => ({ name, password }))).toEqual(
+      [
+        { name: 'one.pdf', password: undefined },
+        { name: 'one.pdf', password: 'wrong' },
+        { name: 'one.pdf', password: 'first' },
+        { name: 'two.pdf', password: undefined },
+        { name: 'two.pdf', password: 'second' },
+      ]
+    );
+  });
+
+  it('cancels the remaining upload run when the password dialog is canceled', async () => {
+    render(<UploadPage />);
+    choose(pdf('one.pdf'), pdf('two.pdf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 2 files' }));
+    await settleNext({
+      kind: 'rejected',
+      reason: 'Password required for one.pdf',
+    });
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Cancel upload' })
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Upload 2 files' })
+      ).toBeTruthy()
+    );
+    expect(api.calls).toHaveLength(1);
+  });
   it('tells the panel the run is still uploading', async () => {
     render(<UploadPage />);
     choose(pdf('a.pdf'), pdf('b.pdf'));

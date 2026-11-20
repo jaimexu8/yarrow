@@ -15,6 +15,7 @@ import {
 } from '@/lib/documents';
 import { addDocumentTag, removeDocumentTag } from '@/lib/tags';
 import { createFolder, listFolders } from '@/lib/folders';
+import { setDocumentPassword } from '@/lib/viewer';
 import { DocumentLibrary } from './DocumentTable';
 
 const state = vi.hoisted(() => ({
@@ -50,6 +51,14 @@ vi.mock('@/lib/tags', async (importOriginal) => {
     removeDocumentTag: vi.fn(),
   };
 });
+
+vi.mock('@/context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'me' } }),
+}));
+
+vi.mock('@/lib/viewer', () => ({
+  setDocumentPassword: vi.fn(),
+}));
 
 vi.mock('@/lib/folders', () => ({
   listFolders: vi.fn(async () => []),
@@ -413,4 +422,65 @@ test('move to folder sends the selected folder id', async () => {
   await waitFor(() =>
     expect(moveDocumentToFolder).toHaveBeenCalledWith('a', 'f1')
   );
+});
+
+function openMenu(filename: string) {
+  fireEvent.click(
+    screen.getByRole('button', { name: `More actions for ${filename}` })
+  );
+}
+
+test('Set password is offered only to the owner of a PDF', () => {
+  state.documents = [
+    { ...makeDoc('a', 'mine.pdf', 'completed'), owner_id: 'me' },
+    { ...makeDoc('b', 'shared.pdf', 'completed'), owner_id: 'someone-else' },
+    {
+      ...makeDoc('c', 'photo.png', 'completed'),
+      owner_id: 'me',
+      file_type: 'image/png',
+    },
+  ];
+  render(<DocumentLibrary />);
+
+  openMenu('mine.pdf');
+  expect(screen.queryByRole('menuitem', { name: 'Set password' })).toBeTruthy();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  cleanup();
+
+  render(<DocumentLibrary />);
+  openMenu('shared.pdf');
+  expect(screen.queryByRole('menuitem', { name: 'Set password' })).toBeNull();
+  cleanup();
+
+  render(<DocumentLibrary />);
+  openMenu('photo.png');
+  expect(screen.queryByRole('menuitem', { name: 'Set password' })).toBeNull();
+});
+
+test('Set password keeps the dialog open when the password is wrong', async () => {
+  state.documents = [
+    { ...makeDoc('a', 'mine.pdf', 'completed'), owner_id: 'me' },
+  ];
+  vi.mocked(setDocumentPassword).mockRejectedValueOnce(
+    Object.assign(new Error('bad'), {
+      isAxiosError: true,
+      response: { status: 400, data: { detail: 'Incorrect PDF password' } },
+    })
+  );
+  render(<DocumentLibrary />);
+  openMenu('mine.pdf');
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Set password' }));
+
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.change(within(dialog).getByLabelText('PDF password'), {
+    target: { value: 'nope' },
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+  await waitFor(() =>
+    expect(setDocumentPassword).toHaveBeenCalledWith('a', 'nope', false)
+  );
+  expect(
+    await within(dialog).findByText('Incorrect password. Try again.')
+  ).toBeTruthy();
 });

@@ -304,6 +304,8 @@ def process_document_task(
             # Read out as plain values while the instances are still attached.
             document_id = job.document.id
             storage_key = job.document.storage_key
+            # Reprocess jobs carry no password of their own.
+            pdf_password = job.password or job.document.pdf_password
 
         file_data = get_storage().download_bytes(storage_key)
         logger.info(f"Downloaded {len(file_data)} bytes from {storage_key}")
@@ -314,7 +316,10 @@ def process_document_task(
                 job_uuid, parser, page_number, event
             )
         )
-        parser.load_file(file_data)
+        if pdf_password is None:
+            parser.load_file(file_data)
+        else:
+            parser.load_file(file_data, password=pdf_password)
 
         _set_stage(job_id, "preparing")
 

@@ -80,6 +80,7 @@ class DocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    owner_id: UUID | None = None
     filename: str
     file_size_bytes: int
     file_type: str
@@ -126,6 +127,11 @@ class DocumentRename(BaseModel):
         ):
             raise ValueError("Name cannot contain slashes or control characters")
         return value
+
+
+class SetDocumentPasswordRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=1024)
+    validate: bool = True
 
 
 class DocumentDetail(DocumentOut):

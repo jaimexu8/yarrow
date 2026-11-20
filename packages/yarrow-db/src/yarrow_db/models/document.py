@@ -17,6 +17,7 @@ class Document(Base):
     file_size_bytes = Column(BigInteger, nullable=False)
     file_type = Column(String, nullable=False)
     storage_key = Column(String, nullable=False)
+    pdf_password = Column(String, nullable=True)
     page_count = Column(Integer)
     status = Column(
         String, default="queued"

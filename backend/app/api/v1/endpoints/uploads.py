@@ -18,6 +18,7 @@ from io import BytesIO
 from uuid import UUID, uuid4
 
 import filetype
+import fitz
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
@@ -540,6 +541,7 @@ async def finalize_upload(
         raise _error(status.HTTP_503_SERVICE_UNAVAILABLE, STORAGE_MESSAGE)
 
     document_id = uuid4()
+    pdf_password = None
     key = _storage_key(document_id)
     try:
         # Validated again on the assembled bytes, never trusting what was
@@ -562,6 +564,25 @@ async def finalize_upload(
                 "File is too large. The limit is "
                 f"{_megabytes(settings.MAX_UPLOAD_BYTES)} per file.",
             )
+        if extension == "pdf":
+            try:
+                with fitz.open(stream=spool.read(), filetype="pdf") as pdf:
+                    if pdf.needs_pass:
+                        if not payload.password:
+                            raise _error(
+                                status.HTTP_400_BAD_REQUEST,
+                                f"Password required for {upload.filename}",
+                            )
+                        if not pdf.authenticate(payload.password):
+                            raise _error(
+                                status.HTTP_400_BAD_REQUEST,
+                                f"Password incorrect for {upload.filename}",
+                            )
+                        pdf_password = payload.password
+            except (RuntimeError, ValueError):
+                raise await _fail(db, storage, upload, "Invalid PDF file")
+            finally:
+                spool.seek(0)
         if batch_id is not None:
             await _check_batch(db, batch_id, current_user.id)
         if not payload.allow_duplicate:
@@ -616,6 +637,7 @@ async def finalize_upload(
         file_size_bytes=size,
         file_type=CONTENT_TYPE_BY_EXTENSION[extension],
         storage_key=key,
+        pdf_password=pdf_password,
         status="queued",
         batch_id=batch.id if batch else None,
         # The US-79 fingerprint, so later uploads of these bytes are warned.

@@ -43,6 +43,7 @@ export type ModelUsage = {
 
 export type DocumentSummary = {
   id: string;
+  owner_id?: string | null;
   filename: string;
   file_size_bytes: number;
   file_type: string;
@@ -308,7 +309,8 @@ export async function uploadDocument(
   uploadId: string,
   onProgress: (percent: number) => void,
   batchId?: string,
-  allowDuplicate = false
+  allowDuplicate = false,
+  password?: string
 ): Promise<UploadOutcome> {
   const form = new FormData();
   form.append('files', file);
@@ -316,6 +318,7 @@ export async function uploadDocument(
   // Groups this file with the others of the same run (US-31).
   if (batchId) form.append('batch_id', batchId);
   if (allowDuplicate) form.append('allow_duplicate', 'true');
+  if (password !== undefined) form.append('password', password);
   try {
     const res = await api.post<UploadResponse>(
       '/api/v1/documents/upload',

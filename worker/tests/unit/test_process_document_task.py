@@ -29,6 +29,24 @@ class TestSuccess:
         assert job.document.status == "completed"
         assert job.document.page_count == 3
 
+    def test_passes_pdf_password_to_parser(
+        self, job, session, storage, parser, monkeypatch
+    ):
+        job.document.pdf_password = "secret"
+        received_passwords = []
+        original_load_file = type(parser).load_file
+
+        def load_file(self, file_data, password=None):
+            received_passwords.append(password)
+            original_load_file(self, file_data)
+
+        monkeypatch.setattr(type(parser), "load_file", load_file)
+
+        process_document_task(str(job.id))
+
+        assert received_passwords == ["secret"]
+        assert job.status == "completed"
+
 
 # Test behavior for all failures
 class TestAllFailure:
@@ -95,7 +113,11 @@ class TestJobDeleted:
 
     def test_deleted_during_inference(self, job, store, session, parser, monkeypatch):
         parser.configure(page_count=3)
-        monkeypatch.setattr(type(parser), "process_sync", lambda self, pages=None: _delete_job(store, job))
+        monkeypatch.setattr(
+            type(parser),
+            "process_sync",
+            lambda self, pages=None: _delete_job(store, job),
+        )
 
         process_document_task(str(job.id))
 
@@ -226,7 +248,9 @@ class TestFigureImages:
         assert store[self.KEY] == b"png"
         assert self._image_keys(session) == [self.KEY]
 
-    def test_failed_upload_drops_only_the_picture(self, job, session, storage, parser, monkeypatch):
+    def test_failed_upload_drops_only_the_picture(
+        self, job, session, storage, parser, monkeypatch
+    ):
         """Test that a failed upload only drops the picture"""
         parser.configure(figures={self.KEY: b"png"})
 
@@ -240,7 +264,9 @@ class TestFigureImages:
         assert job.status == "completed"
         assert self._image_keys(session) == []
 
-    def test_uncommitted_crops_are_removed(self, job, store, session, storage, parser, monkeypatch):
+    def test_uncommitted_crops_are_removed(
+        self, job, store, session, storage, parser, monkeypatch
+    ):
         """Test if image is removed when the database fails before commit"""
         parser.configure(figures={self.KEY: b"png"})
 
@@ -255,9 +281,11 @@ class TestFigureImages:
 
         assert self.KEY not in store
 
-    def test_replaced_crops_are_removed_after_commit(self, job, store, session, storage, parser):
+    def test_replaced_crops_are_removed_after_commit(
+        self, job, store, session, storage, parser
+    ):
         """Test if replaced crops are removed after commit"""
-        
+
         old_key = "documents/abc/figures/old.png"
         store[old_key] = b"old"
         session.existing_image_keys = [old_key]
@@ -268,9 +296,11 @@ class TestFigureImages:
         assert old_key not in store
         assert store[self.KEY] == b"png"
 
-    def test_replaced_crops_are_kept_when_nothing_is_committed(self, job, store, session, storage, parser, monkeypatch):
+    def test_replaced_crops_are_kept_when_nothing_is_committed(
+        self, job, store, session, storage, parser, monkeypatch
+    ):
         """Test if replaced crops are kept when nothing is committed"""
-        
+
         old_key = "documents/abc/figures/old.png"
         store[old_key] = b"old"
         session.existing_image_keys = [old_key]

@@ -1,10 +1,12 @@
 import hashlib
+import io
 import logging
 from collections import Counter
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import filetype
+import fitz
 from fastapi import (
     APIRouter,
     Depends,
@@ -71,6 +73,7 @@ from app.schemas import (
     JobOut,
     ModelUsage,
     PageOut,
+    SetDocumentPasswordRequest,
     UploadAccepted,
     UploadRejected,
     UploadResponse,
@@ -317,6 +320,7 @@ async def upload_documents(
     client_upload_ids: list[str] | None = Form(None),
     batch_id: UUID | None = Form(None),
     allow_duplicate: bool = Form(False),
+    password: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -338,6 +342,8 @@ async def upload_documents(
     stored (US-79). Sending it again with ``allow_duplicate`` (applies to
     every file of the request; the Upload page sends one file per request)
     stores a separate copy, subject to the usual size and quota checks.
+
+    ``password`` applies to every password-protected PDF in the request.
     """
     if client_upload_ids is not None:
         if len(client_upload_ids) != len(files):
@@ -429,6 +435,35 @@ async def upload_documents(
                 )
             )
             continue
+        pdf_password = None
+        if extension == "pdf":
+            pdf_data = await upload.read()
+            await upload.seek(0)
+            try:
+                with fitz.open(stream=pdf_data, filetype="pdf") as pdf:
+                    if pdf.needs_pass:
+                        if not password:
+                            rejected.append(
+                                UploadRejected(
+                                    filename=filename,
+                                    reason=f"Password required for {filename}",
+                                )
+                            )
+                            continue
+                        if not pdf.authenticate(password):
+                            rejected.append(
+                                UploadRejected(
+                                    filename=filename,
+                                    reason=f"Password incorrect for {filename}",
+                                )
+                            )
+                            continue
+                        pdf_password = password
+            except (RuntimeError, ValueError):
+                rejected.append(
+                    UploadRejected(filename=filename, reason="Invalid PDF file")
+                )
+                continue
         if not allow_duplicate:
             # After the checks on the file itself (a file that could never be
             # stored is not worth a duplicate warning) and before quota: when
@@ -488,6 +523,7 @@ async def upload_documents(
             file_size_bytes=size,
             file_type=CONTENT_TYPE_BY_EXTENSION[extension],
             storage_key=key,
+            pdf_password=None,
             status="queued",
             client_upload_id=upload_id,
             batch_id=batch.id if batch else None,
@@ -496,6 +532,7 @@ async def upload_documents(
         job = Job(
             id=uuid4(),
             document_id=document_id,
+            password=pdf_password,
             status="queued",
             current_stage="queued",
             pages_processed=0,
@@ -1254,6 +1291,73 @@ def _iter_object(handle, chunk_size: int = READ_CHUNK):
         handle.close()
 
 
+def _load_pdf(handle):
+    try:
+        return handle.read()
+    finally:
+        handle.close()
+
+
+def _decrypted_pdf(file_data, password):
+    with fitz.open(stream=file_data, filetype="pdf") as doc:
+        if not doc.needs_pass:
+            return file_data
+
+        if password is None:
+            raise ValueError("Password is required")
+
+        if not doc.authenticate(password):
+            raise ValueError("Incorrect PDF password")
+
+        return doc.tobytes(encryption=fitz.PDF_ENCRYPT_NONE)
+
+
+def _pdf_password_correct(file_data, password):
+    with fitz.open(stream=file_data, filetype="pdf") as doc:
+        return not doc.needs_pass or bool(doc.authenticate(password))
+
+
+@router.post("/{document_id}/password")
+async def set_document_password(
+    body: SetDocumentPasswordRequest,
+    access: DocumentAccess = Depends(require_owner_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Store the password of a protected PDF once it is verified against the file."""
+    document = access.document
+
+    if body.validate:
+        try:
+            handle = await run_in_threadpool(
+                get_storage().download_file, document.storage_key
+            )
+        except ObjectNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="The original file is no longer in storage",
+            ) from None
+
+        file_data = await run_in_threadpool(_load_pdf, handle)
+        try:
+            valid = await run_in_threadpool(
+                _pdf_password_correct, file_data, body.password
+            )
+        except (RuntimeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Unable to process PDF",
+            ) from None
+        if not valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Incorrect PDF password",
+            )
+
+    document.pdf_password = body.password
+    await db.commit()
+    return {"ok": True}
+
+
 @router.get("/{document_id}/content")
 async def get_document_content(
     access: DocumentAccess = Depends(require_read_access),
@@ -1282,6 +1386,39 @@ async def get_document_content(
     suffix = f".{extension}" if extension else ""
     filename = f"{safe_stem(document.filename, fallback)}{suffix}"
     unicode_filename = f"{display_stem(document.filename, fallback)}{suffix}"
+
+    if extension == "pdf":
+        try:
+            file_data = await run_in_threadpool(_load_pdf, handle)
+            decrypted = await run_in_threadpool(
+                _decrypted_pdf, file_data, document.pdf_password
+            )
+
+            return StreamingResponse(
+                io.BytesIO(decrypted),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": content_disposition(
+                        filename,
+                        disposition="inline",
+                        unicode_filename=unicode_filename,
+                    ),
+                    "Cache-Control": "no-store",
+                },
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            ) from e
+
+        except Exception:
+            logger.exception("Failed to process PDF for document %s", document.id)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Unable to process PDF",
+            ) from None
+
     return StreamingResponse(
         _iter_object(handle),
         media_type=document.file_type or "application/octet-stream",

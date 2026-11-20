@@ -10,6 +10,7 @@ import os
 import uuid
 from datetime import timedelta
 
+import fitz
 import pytest
 from sqlalchemy import func, select
 from yarrow_db.models import Batch, Document, Job, UploadChunk, UploadSession, User
@@ -119,6 +120,41 @@ def storage(fake_storage, monkeypatch) -> CountingStorage:
 # Criterion 1: an interrupted upload resumes from the last confirmed chunk.
 # ---------------------------------------------------------------------------
 class TestResume:
+    async def test_password_protected_pdf_retries_finalize(
+        self, client, auth_headers, storage, fake_queue, db_session
+    ):
+        with fitz.open() as pdf:
+            pdf.new_page()
+            content = pdf.tobytes(
+                encryption=fitz.PDF_ENCRYPT_AES_256,
+                owner_pw="owner-password",
+                user_pw="document-password",
+            )
+        session_id = await _started(client, auth_headers, content)
+        await _send_all(client, auth_headers, session_id, content)
+        url = f"{UPLOADS}/{session_id}/finalize"
+
+        missing = await client.post(url, headers=auth_headers)
+        assert missing.status_code == 400
+        assert missing.json()["detail"] == "Password required for scan.pdf"
+
+        incorrect = await client.post(
+            url, headers=auth_headers, json={"password": "wrong"}
+        )
+        assert incorrect.status_code == 400
+        assert incorrect.json()["detail"] == "Password incorrect for scan.pdf"
+        assert _chunk_objects(storage)
+        assert not fake_queue
+
+        done = await client.post(
+            url, headers=auth_headers, json={"password": "document-password"}
+        )
+        assert done.status_code == 200, done.text
+        document = await db_session.get(Document, uuid.UUID(done.json()["document_id"]))
+        assert document.pdf_password == "document-password"
+        assert len(fake_queue) == 1
+        assert "password" not in done.json()
+
     async def test_interrupted_upload_resumes_from_last_confirmed_chunk(
         self, client, auth_headers, storage, fake_queue, db_session
     ):

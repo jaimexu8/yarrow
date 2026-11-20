@@ -5,18 +5,46 @@ import {
   listDocuments,
   moveDocumentToFolder,
   trashDaysLeft,
+  uploadDocument,
 } from './documents';
 
 vi.mock('./api', () => ({
   default: {
     get: vi.fn(),
     patch: vi.fn(),
+    post: vi.fn(),
   },
 }));
 
 afterEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
+});
+
+it('sends a PDF password as part of the upload form', async () => {
+  // Mock the API response for the upload endpoint
+  vi.mocked(api.post).mockResolvedValueOnce({
+    data: { accepted: [{ document_id: 'doc-1' }], rejected: [] },
+  });
+
+  // Create a PDF file to upload
+  const file = new File(['%PDF'], 'protected.pdf', { type: 'application/pdf' });
+  const outcome = await uploadDocument(
+    file,
+    'upload-1',
+    () => {},
+    'batch-1',
+    false,
+    'secret'
+  );
+
+  // Expect the upload to be accepted
+  expect(outcome.kind).toBe('accepted');
+
+  // Expect the API to have been called with the correct form data
+  const form = vi.mocked(api.post).mock.calls[0][1] as FormData;
+  expect(form.get('password')).toBe('secret');
+  expect(form.get('client_upload_ids')).toBe('upload-1');
 });
 
 it('keeps a fixed 7-day trash window', () => {
