@@ -1,7 +1,12 @@
 import api from './api';
 
 export type PageStatus =
-  'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
+  | 'pending'
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'canceled';
 
 export type JobStage =
   | 'queued'
