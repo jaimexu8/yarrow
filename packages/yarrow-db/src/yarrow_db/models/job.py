@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime
 from typing import Literal, get_args
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -50,6 +59,9 @@ class Job(Base):
     model_name = Column(String(128))
     model_version = Column(String(64))
     pipeline_version = Column(String(64))
+    merge_consecutive_tables = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
