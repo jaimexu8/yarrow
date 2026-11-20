@@ -29,6 +29,9 @@ JobStage = Literal[
 ]
 JOB_STAGES: tuple[JobStage, ...] = get_args(JobStage)
 
+JobErrorStage = Literal["downloading", "parsing", "finalizing", "queue_timeout"]
+JOB_ERROR_STAGES: tuple[JobErrorStage, ...] = get_args(JobErrorStage)
+
 
 class Job(Base):
     __tablename__ = "jobs"
@@ -44,6 +47,7 @@ class Job(Base):
     pages_processed = Column(Integer, default=0)
     total_pages = Column(Integer, default=0)
     error_message = Column(String)
+    error_stage = Column(String(32))
     # Celery task id returned by send_task, needed to revoke a queued job (US-42).
     celery_task_id = Column(String, index=True)
     canceled_by_id = Column(

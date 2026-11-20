@@ -3,7 +3,7 @@ from .batch import Batch
 from .cloud_credential import CloudCredential
 from .document import Document
 from .folder import Folder
-from .job import JOB_STAGES, Job, JobStage
+from .job import JOB_ERROR_STAGES, JOB_STAGES, Job, JobErrorStage, JobStage
 from .job_page import OPEN_PAGE_STATUSES, PAGE_STATUSES, JobPage, PageStatus
 from .page import Page
 from .region import Region, RegionImage, RegionText
@@ -16,6 +16,7 @@ from .user import User
 from .warning import Warning
 
 __all__ = [
+    "JOB_ERROR_STAGES",
     "JOB_STAGES",
     "OPEN_PAGE_STATUSES",
     "PAGE_STATUSES",
@@ -27,6 +28,7 @@ __all__ = [
     "DocumentTag",
     "Folder",
     "Job",
+    "JobErrorStage",
     "JobPage",
     "JobStage",
     "Page",
