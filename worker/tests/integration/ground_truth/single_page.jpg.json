@@ -16,6 +16,13 @@
             "block_label": "table",
             "is_table": true,
             "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": false
           }
         ]
       }
@@ -24,11 +31,11 @@
       "counts": {
         "documents": 1,
         "pages": 1,
-        "regions": 1,
+        "regions": 2,
         "region_texts": 0,
         "tables": 1,
         "region_tables": 1,
-        "table_cells": 2
+        "table_cells": 3
       },
       "tables": [
         {
@@ -47,7 +54,8 @@
               "col_end": 1,
               "cells": [
                 [0, 0, 1, 2, false],
-                [1, 0, 1, 2, false]
+                [1, 0, 1, 1, false],
+                [1, 1, 1, 1, false]
               ]
             }
           ]
@@ -58,11 +66,11 @@
       "counts": {
         "documents": 1,
         "pages": 1,
-        "regions": 1,
+        "regions": 2,
         "region_texts": 0,
         "tables": 1,
         "region_tables": 1,
-        "table_cells": 2
+        "table_cells": 3
       },
       "tables": [
         {
@@ -81,7 +89,8 @@
               "col_end": 1,
               "cells": [
                 [0, 0, 1, 2, false],
-                [1, 0, 1, 2, false]
+                [1, 0, 1, 1, false],
+                [1, 1, 1, 1, false]
               ]
             }
           ]

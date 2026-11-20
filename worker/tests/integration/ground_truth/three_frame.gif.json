@@ -15,7 +15,7 @@
             "region_type": "paragraph",
             "block_label": "text",
             "is_table": false,
-            "has_text": true
+            "has_text": false
           }
         ]
       },
@@ -27,7 +27,7 @@
             "region_type": "paragraph",
             "block_label": "text",
             "is_table": false,
-            "has_text": true
+            "has_text": false
           }
         ]
       },
@@ -39,7 +39,7 @@
             "region_type": "paragraph",
             "block_label": "text",
             "is_table": false,
-            "has_text": true
+            "has_text": false
           }
         ]
       }
@@ -49,7 +49,7 @@
         "documents": 1,
         "pages": 3,
         "regions": 3,
-        "region_texts": 3,
+        "region_texts": 0,
         "tables": 0,
         "region_tables": 0,
         "table_cells": 0
@@ -61,7 +61,7 @@
         "documents": 1,
         "pages": 3,
         "regions": 3,
-        "region_texts": 3,
+        "region_texts": 0,
         "tables": 0,
         "region_tables": 0,
         "table_cells": 0

@@ -1,0 +1,62 @@
+{
+  "file": "bottom_heavy_upside_down.png",
+  "bytes": 102794,
+  "sha256": "5537618abf3ebb97471c527ebba99d32a15ee8da00190feeef3964f69a8b3610",
+  "detected_extension": "png",
+  "kind": "processable",
+  "expected_pages": 1,
+  "model_graph": {
+    "pages": [
+      {
+        "page_number": 1,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 1,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 2,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          }
+        ]
+      }
+    ],
+    "unmerged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 3,
+        "region_texts": 3,
+        "tables": 0,
+        "region_tables": 0,
+        "table_cells": 0
+      },
+      "tables": []
+    },
+    "merged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 3,
+        "region_texts": 3,
+        "tables": 0,
+        "region_tables": 0,
+        "table_cells": 0
+      },
+      "tables": []
+    }
+  }
+}

@@ -1,0 +1,349 @@
+{
+  "file": "ocr_rotation_test.pdf",
+  "bytes": 9810,
+  "sha256": "aa4de327069c0c5dbb2fad640bf3b0713eb45b376fd1ba7f0ea59fb770cd27de",
+  "detected_extension": "pdf",
+  "kind": "processable",
+  "expected_pages": 7,
+  "model_graph": {
+    "pages": [
+      {
+        "page_number": 1,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 1,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 2,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 3,
+            "region_type": "table",
+            "block_label": "table",
+            "is_table": true,
+            "has_text": false
+          },
+          {
+            "reading_order": 4,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 5,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 6,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          }
+        ]
+      },
+      {
+        "page_number": 2,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      },
+      {
+        "page_number": 3,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      },
+      {
+        "page_number": 4,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      },
+      {
+        "page_number": 5,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      },
+      {
+        "page_number": 6,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 1,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 2,
+            "region_type": "table",
+            "block_label": "table",
+            "is_table": true,
+            "has_text": false
+          },
+          {
+            "reading_order": 3,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 4,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 5,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          }
+        ]
+      },
+      {
+        "page_number": 7,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 2,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          }
+        ]
+      }
+    ],
+    "unmerged": {
+      "counts": {
+        "documents": 1,
+        "pages": 7,
+        "regions": 20,
+        "region_texts": 13,
+        "tables": 2,
+        "region_tables": 2,
+        "table_cells": 30
+      },
+      "tables": [
+        {
+          "row_count": 5,
+          "col_count": 3,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 1,
+              "region_reading_order": 3,
+              "row_start": 0,
+              "row_end": 4,
+              "col_start": 0,
+              "col_end": 2,
+              "cells": [
+                [0, 0, 1, 1, false],
+                [0, 1, 1, 1, false],
+                [0, 2, 1, 1, false],
+                [1, 0, 1, 1, false],
+                [1, 1, 1, 1, false],
+                [1, 2, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false],
+                [2, 2, 1, 1, false],
+                [3, 0, 1, 1, false],
+                [3, 1, 1, 1, false],
+                [3, 2, 1, 1, false],
+                [4, 0, 1, 1, false],
+                [4, 1, 1, 1, false],
+                [4, 2, 1, 1, false]
+              ]
+            }
+          ]
+        },
+        {
+          "row_count": 5,
+          "col_count": 3,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 6,
+              "region_reading_order": 2,
+              "row_start": 0,
+              "row_end": 4,
+              "col_start": 0,
+              "col_end": 2,
+              "cells": [
+                [0, 0, 1, 1, false],
+                [0, 1, 1, 1, false],
+                [0, 2, 1, 1, false],
+                [1, 0, 1, 1, false],
+                [1, 1, 1, 1, false],
+                [1, 2, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false],
+                [2, 2, 1, 1, false],
+                [3, 0, 1, 1, false],
+                [3, 1, 1, 1, false],
+                [3, 2, 1, 1, false],
+                [4, 0, 1, 1, false],
+                [4, 1, 1, 1, false],
+                [4, 2, 1, 1, false]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "merged": {
+      "counts": {
+        "documents": 1,
+        "pages": 7,
+        "regions": 20,
+        "region_texts": 13,
+        "tables": 2,
+        "region_tables": 2,
+        "table_cells": 30
+      },
+      "tables": [
+        {
+          "row_count": 5,
+          "col_count": 3,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 1,
+              "region_reading_order": 3,
+              "row_start": 0,
+              "row_end": 4,
+              "col_start": 0,
+              "col_end": 2,
+              "cells": [
+                [0, 0, 1, 1, false],
+                [0, 1, 1, 1, false],
+                [0, 2, 1, 1, false],
+                [1, 0, 1, 1, false],
+                [1, 1, 1, 1, false],
+                [1, 2, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false],
+                [2, 2, 1, 1, false],
+                [3, 0, 1, 1, false],
+                [3, 1, 1, 1, false],
+                [3, 2, 1, 1, false],
+                [4, 0, 1, 1, false],
+                [4, 1, 1, 1, false],
+                [4, 2, 1, 1, false]
+              ]
+            }
+          ]
+        },
+        {
+          "row_count": 5,
+          "col_count": 3,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 6,
+              "region_reading_order": 2,
+              "row_start": 0,
+              "row_end": 4,
+              "col_start": 0,
+              "col_end": 2,
+              "cells": [
+                [0, 0, 1, 1, false],
+                [0, 1, 1, 1, false],
+                [0, 2, 1, 1, false],
+                [1, 0, 1, 1, false],
+                [1, 1, 1, 1, false],
+                [1, 2, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false],
+                [2, 2, 1, 1, false],
+                [3, 0, 1, 1, false],
+                [3, 1, 1, 1, false],
+                [3, 2, 1, 1, false],
+                [4, 0, 1, 1, false],
+                [4, 1, 1, 1, false],
+                [4, 2, 1, 1, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

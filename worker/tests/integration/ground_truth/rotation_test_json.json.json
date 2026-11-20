@@ -1,0 +1,9 @@
+{
+  "file": "rotation_test_json.json",
+  "bytes": 817,
+  "sha256": "4335a2922816908c4ef84de9f3756bc084e2c5d33220df7f01150606adc619ee",
+  "detected_extension": null,
+  "kind": "unsupported",
+  "expected_pages": 0,
+  "expected_error_message": "No loader found for file extension: None"
+}

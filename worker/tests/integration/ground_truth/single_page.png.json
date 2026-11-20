@@ -1,7 +1,7 @@
 {
   "file": "single_page.png",
-  "bytes": 9667,
-  "sha256": "115bd8c64d5927baf2c787970747c35e8ea3f27e1acc0d60a7788e7b4dd68d2d",
+  "bytes": 37084,
+  "sha256": "9f864c7e68faf74aa11dadf126613a9f919e06812c20647ee1eaf10d8bc0e669",
   "detected_extension": "png",
   "kind": "processable",
   "expected_pages": 1,
@@ -16,6 +16,13 @@
             "block_label": "table",
             "is_table": true,
             "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": false
           }
         ]
       }
@@ -24,16 +31,16 @@
       "counts": {
         "documents": 1,
         "pages": 1,
-        "regions": 1,
+        "regions": 2,
         "region_texts": 0,
         "tables": 1,
         "region_tables": 1,
-        "table_cells": 1
+        "table_cells": 2
       },
       "tables": [
         {
-          "row_count": 1,
-          "col_count": 1,
+          "row_count": 2,
+          "col_count": 2,
           "is_stitched": false,
           "title": null,
           "parts": [
@@ -42,11 +49,12 @@
               "page_number": 1,
               "region_reading_order": 0,
               "row_start": 0,
-              "row_end": 0,
+              "row_end": 1,
               "col_start": 0,
-              "col_end": 0,
+              "col_end": 1,
               "cells": [
-                [0, 0, 1, 1, false]
+                [0, 0, 1, 2, false],
+                [1, 0, 1, 2, false]
               ]
             }
           ]
@@ -57,16 +65,16 @@
       "counts": {
         "documents": 1,
         "pages": 1,
-        "regions": 1,
+        "regions": 2,
         "region_texts": 0,
         "tables": 1,
         "region_tables": 1,
-        "table_cells": 1
+        "table_cells": 2
       },
       "tables": [
         {
-          "row_count": 1,
-          "col_count": 1,
+          "row_count": 2,
+          "col_count": 2,
           "is_stitched": false,
           "title": null,
           "parts": [
@@ -75,11 +83,12 @@
               "page_number": 1,
               "region_reading_order": 0,
               "row_start": 0,
-              "row_end": 0,
+              "row_end": 1,
               "col_start": 0,
-              "col_end": 0,
+              "col_end": 1,
               "cells": [
-                [0, 0, 1, 1, false]
+                [0, 0, 1, 2, false],
+                [1, 0, 1, 2, false]
               ]
             }
           ]
