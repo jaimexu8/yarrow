@@ -22,7 +22,7 @@ answer is replayed from the golden file. It also cannot exercise OTSL
 conversion: the capture stored the final HTML table text, not the raw OTSL the
 model emitted, so the gateway's ``_normalize_direct_table_content`` sees HTML
 and leaves it alone. Property tests cover OTSL conversion. Two scan_dark text
-differences observed in a live shadow run were accepted by the owner because
+differences observed in a live shadow run were accepted because
 that page is a scan-quality warning fixture, not a correctness baseline.
 
 Figure digests are compared strictly when the recorded bytes can be
