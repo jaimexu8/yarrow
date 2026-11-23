@@ -50,6 +50,10 @@ yarrow-storage = {path = "../packages/yarrow-storage", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
+# Parallel integration suite: `pytest tests/integration -n 2 --dist load`
+# runs in about 3m40s versus 25m serial. `-n 4` is faster but VLM batching
+# occasionally shifts a table cell count, so -n 2 is the supported setting.
+pytest-xdist = "*"
 hypothesis = "*"
 
 [tool.pytest.ini_options]

@@ -42,6 +42,7 @@ mypy = "*"
 respx = "*"
 requests = "^2.34.2"
 hypothesis = "*"
+pymupdf = "*"
 
 [tool.ruff]
 line-length = 88
