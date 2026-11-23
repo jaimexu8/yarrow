@@ -217,24 +217,28 @@ def assert_matches_ground_truth(
 def _run_pipeline(
     job_id: UUID, pages: list[int] | None = None, merge: bool = False
 ) -> None:
-    """Drive the cascade in-process for one run.
+    """Drive the four-step cascade in-process for one run.
 
-    The old monolithic `process_document_task` is gone; this replaces it by:
-    - no-op-ing `celery_app.send_task` so `ingest_document` does not enqueue
-      `parse_page` onto the broker (the test drives `parse_page` directly),
-    - running `ingest_document` (download, rasterize, orient, seed, fan-out),
-    - calling `parse_page` once per seeded queued job_page (the run's pages),
-    - running `finalize_document` (stitch tables, derive status, clean up).
+    `ingest_document` fans out prepare_pages batches, which the harness runs
+    to upload rasters and seed queued job pages. Then `parse_page` runs once
+    per queued page and `finalize_document` stitches tables and sets status.
 
-    `pages` maps to the old `page_to_process` (1-based page numbers); `merge`
-    maps to the old `merge_consecutive_tables`. The FakeDocumentParser (the
-    `parser` fixture) is still in effect, so `ingest_document` and `parse_page`
-    build parsers from it and non-failed pages hit the live ORT gateway.
+    `pages` is the 1-based page list to (re)process; `merge` is the table
+    merge flag. The FakeDocumentParser failure simulation is unchanged.
     """
+    enqueued: list[tuple[str, list, str]] = []
     with mock.patch.object(
-        ingestion.celery_app, "send_task", mock.MagicMock(return_value=None)
+        ingestion.celery_app,
+        "send_task",
+        side_effect=lambda name, args, queue: enqueued.append((name, args, queue)),
     ):
         ingest_document(str(job_id), pages=pages, merge_consecutive_tables=merge)
+
+        for name, args, _queue in enqueued:
+            if name == "app.tasks.ingestion.prepare_pages" and args[0] == str(job_id):
+                ingestion.prepare_pages.apply(
+                    kwargs={"job_id": str(job_id), "page_numbers": args[1]}
+                )
 
         with session_scope() as session:
             run_page_numbers = list(
