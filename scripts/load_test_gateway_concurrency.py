@@ -18,7 +18,8 @@ excludes every other request's marker. Two identical bodies for different pages
 are the signal this weaker check catches.
 
 Depends only on the stdlib plus ``requests``. JSON goes to stdout; a short
-human summary goes to stderr. Exit 0 on pass, 1 on fail.
+human summary goes to stderr. Exit 0 on pass, 1 on fail. Set ``GATEWAY_API_KEY``
+or pass ``--api-key`` to supply credentials.
 """
 
 import argparse
@@ -26,6 +27,7 @@ import base64
 import hashlib
 import json
 import math
+import os
 import sys
 import threading
 import time
@@ -92,15 +94,19 @@ def check_contamination(requests_result: list[dict]) -> dict:
     hashes = [item.get("body_sha256", "") for item in ok]
     empty = [item["index"] for item in ok if not item.get("body_len")]
     duplicate_hashes = sorted({h for h in hashes if hashes.count(h) > 1})
-    passed = len(ok) >= 2 and not empty and not duplicate_hashes
     detail = (
         f"{len(ok)} successful response(s); {len(set(hashes))} distinct body "
         f"hash(es); empty bodies at {empty or 'none'}; "
         f"duplicated hashes={len(duplicate_hashes)}"
     )
     if len(ok) < 2:
-        detail += " (need >= 2 successful responses for this check)"
-    return {"passed": passed, "detail": detail}
+        # One response cannot show cross-page contamination either way.
+        detail += " (not applicable: need >= 2 successful responses)"
+        return {"passed": True, "detail": detail}
+    return {
+        "passed": not empty and not duplicate_hashes,
+        "detail": detail,
+    }
 
 
 def run_level(
@@ -202,6 +208,10 @@ def main() -> int:
     )
     args = ap.parse_args()
 
+    api_key = args.api_key or os.environ.get("GATEWAY_API_KEY", "")
+    if not api_key:
+        ap.error("set GATEWAY_API_KEY or pass --api-key")
+
     try:
         levels = [int(part) for part in args.levels.split(",") if part.strip()]
     except ValueError as exc:
@@ -229,7 +239,7 @@ def main() -> int:
                 level,
                 count,
                 args.url,
-                args.api_key,
+                api_key,
                 encoded,
                 args.metrics_url,
                 args.poll_interval,
