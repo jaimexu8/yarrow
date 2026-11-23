@@ -258,7 +258,7 @@ class DocumentParser:
         kind = filetype.guess(file_data)
         return None if kind is None else kind.extension
 
-    def load_file(self, file_data: bytes, password: str | None = None) -> None:
+    def _loader_for(self, file_data: bytes) -> FileLoader:
         file_extension = self.detect_extension(file_data)
 
         loader = (
@@ -268,8 +268,25 @@ class DocumentParser:
         )
         if loader is None:
             raise ValueError(f"No loader found for file extension: {file_extension}")
+        return loader
 
-        self.pages = loader.process_file(file_data, password=password)
+    def load_file(self, file_data: bytes, password: str | None = None) -> None:
+        self.pages = self._loader_for(file_data).process_file(
+            file_data, password=password
+        )
+
+    def count_pages(self, file_data: bytes, password: str | None = None) -> int:
+        return self._loader_for(file_data).count_pages(file_data, password=password)
+
+    def load_pages(
+        self,
+        file_data: bytes,
+        page_numbers: list[int],
+        password: str | None = None,
+    ) -> None:
+        self.pages = self._loader_for(file_data).process_pages(
+            file_data, page_numbers, password=password
+        )
 
     def correct_orientations(self, pages_to_process: tuple[int] | None = None) -> None:
         """Detect and fix the rotation of every page, in place.
