@@ -1,0 +1,3129 @@
+{
+  "bytes": 13882812,
+  "detected_extension": "png",
+  "expected": {
+    "blocks": [
+      {
+        "block_bbox": [
+          1459,
+          70,
+          1583,
+          114
+        ],
+        "block_content": "",
+        "block_id": 0,
+        "block_label": "number",
+        "block_order": null
+      },
+      {
+        "block_bbox": [
+          374,
+          190,
+          1067,
+          241
+        ],
+        "block_content": "Tentative Schedule Of Topics",
+        "block_id": 1,
+        "block_label": "paragraph_title",
+        "block_order": 0
+      },
+      {
+        "block_bbox": [
+          372,
+          272,
+          1597,
+          330
+        ],
+        "block_content": "1. Course overview; introduction to operating systems",
+        "block_id": 2,
+        "block_label": "text",
+        "block_order": 1
+      },
+      {
+        "block_bbox": [
+          366,
+          336,
+          2676,
+          447
+        ],
+        "block_content": "2. Quick review of computer architecture; Process management: process scheduling and context switching",
+        "block_id": 3,
+        "block_label": "text",
+        "block_order": 2
+      },
+      {
+        "block_bbox": [
+          366,
+          464,
+          2115,
+          522
+        ],
+        "block_content": "3. Process management: process suspension and resumption; message passing",
+        "block_id": 4,
+        "block_label": "text",
+        "block_order": 3
+      },
+      {
+        "block_bbox": [
+          363,
+          533,
+          1862,
+          586
+        ],
+        "block_content": "4.Process management: process coordination and synchronization",
+        "block_id": 5,
+        "block_label": "text",
+        "block_order": 4
+      },
+      {
+        "block_bbox": [
+          364,
+          599,
+          2095,
+          656
+        ],
+        "block_content": "5. Low-level memory management: address spaces, stack and heap segments",
+        "block_id": 6,
+        "block_label": "text",
+        "block_order": 5
+      },
+      {
+        "block_bbox": [
+          363,
+          666,
+          2281,
+          723
+        ],
+        "block_content": "6. High-level memory management: partitioning and virtual memory; demand paging",
+        "block_id": 7,
+        "block_label": "text",
+        "block_order": 6
+      },
+      {
+        "block_bbox": [
+          366,
+          734,
+          1370,
+          786
+        ],
+        "block_content": "7.High-level synchronous message passing",
+        "block_id": 8,
+        "block_label": "text",
+        "block_order": 7
+      },
+      {
+        "block_bbox": [
+          363,
+          800,
+          1843,
+          849
+        ],
+        "block_content": "8. Device management: exceptions, interrupts, and device drivers",
+        "block_id": 9,
+        "block_label": "text",
+        "block_order": 8
+      },
+      {
+        "block_bbox": [
+          360,
+          866,
+          2130,
+          918
+        ],
+        "block_content": "9. Device management: device-independent I/O and an example device driver",
+        "block_id": 10,
+        "block_label": "text",
+        "block_order": 9
+      },
+      {
+        "block_bbox": [
+          364,
+          933,
+          1808,
+          986
+        ],
+        "block_content": "10. Networking and protocol implementation; network processes",
+        "block_id": 11,
+        "block_label": "text",
+        "block_order": 10
+      },
+      {
+        "block_bbox": [
+          365,
+          1000,
+          1528,
+          1050
+        ],
+        "block_content": "11. Remote disk and remote file access mechanisms",
+        "block_id": 12,
+        "block_label": "text",
+        "block_order": 11
+      },
+      {
+        "block_bbox": [
+          366,
+          1069,
+          1602,
+          1120
+        ],
+        "block_content": "12. File systems, file names, and a syntactic namespace",
+        "block_id": 13,
+        "block_label": "text",
+        "block_order": 12
+      },
+      {
+        "block_bbox": [
+          365,
+          1134,
+          1146,
+          1187
+        ],
+        "block_content": "13.Pipes and user interface (shell)",
+        "block_id": 14,
+        "block_label": "text",
+        "block_order": 13
+      },
+      {
+        "block_bbox": [
+          365,
+          1201,
+          1538,
+          1253
+        ],
+        "block_content": "14. Operating system configuration and initialization",
+        "block_id": 15,
+        "block_label": "text",
+        "block_order": 14
+      },
+      {
+        "block_bbox": [
+          362,
+          1281,
+          1087,
+          1330
+        ],
+        "block_content": "15. Multicore operating systems",
+        "block_id": 16,
+        "block_label": "paragraph_title",
+        "block_order": 15
+      },
+      {
+        "block_bbox": [
+          354,
+          1368,
+          2681,
+          1481
+        ],
+        "block_content": "Note: the selection of topics and the order may change to accommodate lab assignments (we have not yet finalized the set of lab assignments).",
+        "block_id": 17,
+        "block_label": "text",
+        "block_order": 16
+      },
+      {
+        "block_bbox": [
+          357,
+          1550,
+          634,
+          1594
+        ],
+        "block_content": "Attendance",
+        "block_id": 18,
+        "block_label": "paragraph_title",
+        "block_order": 17
+      },
+      {
+        "block_bbox": [
+          350,
+          1632,
+          2685,
+          1846
+        ],
+        "block_content": "Students are expected to be present for every meeting of the classes in which they are enrolled. Only the instructor can excuse a student from a course requirement or responsibility. When conflicts or absences can be anticipated, such as for many University sponsored activities and religious observances, the student should inform the instructor of the situation as far in advance as possible and plan to make up for missed work.",
+        "block_id": 19,
+        "block_label": "text",
+        "block_order": 18
+      },
+      {
+        "block_bbox": [
+          351,
+          1906,
+          980,
+          1955
+        ],
+        "block_content": "Changes For Emergencies",
+        "block_id": 20,
+        "block_label": "paragraph_title",
+        "block_order": 19
+      },
+      {
+        "block_bbox": [
+          345,
+          1989,
+          2689,
+          2148
+        ],
+        "block_content": "In the event of a major campus emergency, course requirements, deadlines and grading percentages are subject to change that may be necessitated by a revised semester calendar or other circumstances. If an emergency occurs, you can consult the CS web page for details.",
+        "block_id": 21,
+        "block_label": "text",
+        "block_order": 20
+      },
+      {
+        "block_bbox": [
+          350,
+          2208,
+          959,
+          2253
+        ],
+        "block_content": "Students with Disabilities",
+        "block_id": 22,
+        "block_label": "paragraph_title",
+        "block_order": 21
+      },
+      {
+        "block_bbox": [
+          338,
+          2290,
+          2700,
+          2730
+        ],
+        "block_content": "Purdue University is required to respond to the needs of students with disabilities as outlined in both the Rehabilitation Act of 1973 and the Americans with Disabilities Act of 1990 through the provision of auxiliary aids and services that allow a student with a disability to access and participate fully in the programs, services, and activities at Purdue University. If you have a disability that requires special academic accommodation, please make an appointment to speak with the instructor within the first three (3) weeks of the semester in order to discuss any adjustments. It is the student's responsibility to notify the Disability Resource Center (http://www.purdue.edu/drc) of an impairment/condition that may require accommodations and/or classroom modifications. We cannot arrange special accommodations without confirmation from the Disability Resource Center.",
+        "block_id": 23,
+        "block_label": "text",
+        "block_order": 22
+      },
+      {
+        "block_bbox": [
+          340,
+          2791,
+          814,
+          2840
+        ],
+        "block_content": "Academic Integrity",
+        "block_id": 24,
+        "block_label": "paragraph_title",
+        "block_order": 23
+      },
+      {
+        "block_bbox": [
+          450,
+          2875,
+          1990,
+          2925
+        ],
+        "block_content": "You are expected to read and follow Purdue's guide to academic integrity:",
+        "block_id": 25,
+        "block_label": "text",
+        "block_order": 24
+      },
+      {
+        "block_bbox": [
+          883,
+          2943,
+          2159,
+          2995
+        ],
+        "block_content": "http://www.purdue.edu/purdue/about/integrity_statement.html",
+        "block_id": 26,
+        "block_label": "text",
+        "block_order": 25
+      },
+      {
+        "block_bbox": [
+          328,
+          3023,
+          2733,
+          3534
+        ],
+        "block_content": "Behavior consistent with cheating, copying, and academic dishonesty is not tolerated. Depending on the severity, such behavior may result in a zero score on an assignment or exam, a failing grade for the class, or even expulsion. Purdue prohibits dishonesty in connection with any University activity. Cheating, plagiarism, or knowingly furnishing false information to the University are examples of dishonesty. (Part 5, Section III-B-2-a, University Regulations). Furthermore, the University Senate has stipulated that the commitment of acts of cheating, lying, and deceit in any of their diverse forms (such as the use of substitutes for taking examinations, the use of illegal cribs, plagiarism, and copying during examinations) is dishonest and must not be tolerated. Moreover, knowingly to aid and abet, directly or indirectly, other parties in committing dishonest acts is in itself dishonest. (University Senate Document 7218, December 15, 1972).",
+        "block_id": 27,
+        "block_label": "text",
+        "block_order": 26
+      },
+      {
+        "block_bbox": [
+          322,
+          3559,
+          2745,
+          3666
+        ],
+        "block_content": "The course policy is that students who are found guilty of dishonesty will receive a zero for the work in question and the Dean of Students will be notified for possible further action.",
+        "block_id": 28,
+        "block_label": "text",
+        "block_order": 27
+      }
+    ],
+    "height": 4032,
+    "markdown": {
+      "markdown_images_count": 0,
+      "markdown_images_keys": [],
+      "markdown_images_sha256": {},
+      "text": "Tentative Schedule Of Topics\n\n1. Course overview; introduction to operating systems\n\n2. Quick review of computer architecture; Process management: process scheduling and context switching\n\n3. Process management: process suspension and resumption; message passing\n\n4.Process management: process coordination and synchronization\n\n5. Low-level memory management: address spaces, stack and heap segments\n\n6. High-level memory management: partitioning and virtual memory; demand paging\n\n7.High-level synchronous message passing\n\n8. Device management: exceptions, interrupts, and device drivers\n\n9. Device management: device-independent I/O and an example device driver\n\n10. Networking and protocol implementation; network processes\n\n11. Remote disk and remote file access mechanisms\n\n12. File systems, file names, and a syntactic namespace\n\n13.Pipes and user interface (shell)\n\n14. Operating system configuration and initialization\n\n15. Multicore operating systems\n\nNote: the selection of topics and the order may change to accommodate lab assignments (we have not yet finalized the set of lab assignments).\n\nAttendance\n\nStudents are expected to be present for every meeting of the classes in which they are enrolled. Only the instructor can excuse a student from a course requirement or responsibility. When conflicts or absences can be anticipated, such as for many University sponsored activities and religious observances, the student should inform the instructor of the situation as far in advance as possible and plan to make up for missed work.\n\nChanges For Emergencies\n\nIn the event of a major campus emergency, course requirements, deadlines and grading percentages are subject to change that may be necessitated by a revised semester calendar or other circumstances. If an emergency occurs, you can consult the CS web page for details.\n\nStudents with Disabilities\n\nPurdue University is required to respond to the needs of students with disabilities as outlined in both the Rehabilitation Act of 1973 and the Americans with Disabilities Act of 1990 through the provision of auxiliary aids and services that allow a student with a disability to access and participate fully in the programs, services, and activities at Purdue University. If you have a disability that requires special academic accommodation, please make an appointment to speak with the instructor within the first three (3) weeks of the semester in order to discuss any adjustments. It is the student's responsibility to notify the Disability Resource Center (http://www.purdue.edu/drc) of an impairment/condition that may require accommodations and/or classroom modifications. We cannot arrange special accommodations without confirmation from the Disability Resource Center.\n\nAcademic Integrity\n\nYou are expected to read and follow Purdue's guide to academic integrity:\n\nhttp://www.purdue.edu/purdue/about/integrity_statement.html\n\nBehavior consistent with cheating, copying, and academic dishonesty is not tolerated. Depending on the severity, such behavior may result in a zero score on an assignment or exam, a failing grade for the class, or even expulsion. Purdue prohibits dishonesty in connection with any University activity. Cheating, plagiarism, or knowingly furnishing false information to the University are examples of dishonesty. (Part 5, Section III-B-2-a, University Regulations). Furthermore, the University Senate has stipulated that the commitment of acts of cheating, lying, and deceit in any of their diverse forms (such as the use of substitutes for taking examinations, the use of illegal cribs, plagiarism, and copying during examinations) is dishonest and must not be tolerated. Moreover, knowingly to aid and abet, directly or indirectly, other parties in committing dishonest acts is in itself dishonest. (University Senate Document 7218, December 15, 1972).\n\nThe course policy is that students who are found guilty of dishonesty will receive a zero for the work in question and the Dean of Students will be notified for possible further action."
+    },
+    "table_res_list": [],
+    "width": 3024
+  },
+  "expected_pages": 1,
+  "file": "scan_normal.png",
+  "kind": "image",
+  "recorded_structure": {
+    "height": 4032,
+    "overall_ocr_res": {
+      "dt_polys": [
+        [
+          [
+            1460,
+            69
+          ],
+          [
+            1586,
+            69
+          ],
+          [
+            1586,
+            124
+          ],
+          [
+            1460,
+            124
+          ]
+        ],
+        [
+          [
+            374,
+            181
+          ],
+          [
+            1075,
+            186
+          ],
+          [
+            1074,
+            257
+          ],
+          [
+            374,
+            253
+          ]
+        ],
+        [
+          [
+            452,
+            263
+          ],
+          [
+            1603,
+            277
+          ],
+          [
+            1602,
+            342
+          ],
+          [
+            451,
+            327
+          ]
+        ],
+        [
+          [
+            378,
+            276
+          ],
+          [
+            482,
+            276
+          ],
+          [
+            482,
+            322
+          ],
+          [
+            378,
+            322
+          ]
+        ],
+        [
+          [
+            376,
+            346
+          ],
+          [
+            417,
+            346
+          ],
+          [
+            417,
+            382
+          ],
+          [
+            376,
+            382
+          ]
+        ],
+        [
+          [
+            456,
+            391
+          ],
+          [
+            681,
+            398
+          ],
+          [
+            679,
+            458
+          ],
+          [
+            454,
+            451
+          ]
+        ],
+        [
+          [
+            447,
+            456
+          ],
+          [
+            2116,
+            468
+          ],
+          [
+            2116,
+            536
+          ],
+          [
+            446,
+            525
+          ]
+        ],
+        [
+          [
+            367,
+            462
+          ],
+          [
+            430,
+            462
+          ],
+          [
+            430,
+            512
+          ],
+          [
+            367,
+            512
+          ]
+        ],
+        [
+          [
+            449,
+            525
+          ],
+          [
+            1866,
+            536
+          ],
+          [
+            1866,
+            601
+          ],
+          [
+            448,
+            590
+          ]
+        ],
+        [
+          [
+            372,
+            537
+          ],
+          [
+            421,
+            537
+          ],
+          [
+            421,
+            576
+          ],
+          [
+            372,
+            576
+          ]
+        ],
+        [
+          [
+            446,
+            587
+          ],
+          [
+            2097,
+            597
+          ],
+          [
+            2097,
+            671
+          ],
+          [
+            445,
+            661
+          ]
+        ],
+        [
+          [
+            369,
+            601
+          ],
+          [
+            422,
+            601
+          ],
+          [
+            422,
+            642
+          ],
+          [
+            369,
+            642
+          ]
+        ],
+        [
+          [
+            451,
+            653
+          ],
+          [
+            2283,
+            664
+          ],
+          [
+            2283,
+            739
+          ],
+          [
+            450,
+            728
+          ]
+        ],
+        [
+          [
+            374,
+            671
+          ],
+          [
+            413,
+            671
+          ],
+          [
+            413,
+            709
+          ],
+          [
+            374,
+            709
+          ]
+        ],
+        [
+          [
+            455,
+            728
+          ],
+          [
+            1369,
+            739
+          ],
+          [
+            1369,
+            801
+          ],
+          [
+            454,
+            789
+          ]
+        ],
+        [
+          [
+            369,
+            735
+          ],
+          [
+            417,
+            735
+          ],
+          [
+            417,
+            779
+          ],
+          [
+            369,
+            779
+          ]
+        ],
+        [
+          [
+            450,
+            791
+          ],
+          [
+            1848,
+            795
+          ],
+          [
+            1848,
+            867
+          ],
+          [
+            449,
+            863
+          ]
+        ],
+        [
+          [
+            368,
+            796
+          ],
+          [
+            430,
+            796
+          ],
+          [
+            430,
+            848
+          ],
+          [
+            368,
+            848
+          ]
+        ],
+        [
+          [
+            444,
+            854
+          ],
+          [
+            2139,
+            863
+          ],
+          [
+            2139,
+            941
+          ],
+          [
+            443,
+            931
+          ]
+        ],
+        [
+          [
+            365,
+            862
+          ],
+          [
+            467,
+            862
+          ],
+          [
+            467,
+            916
+          ],
+          [
+            365,
+            916
+          ]
+        ],
+        [
+          [
+            363,
+            922
+          ],
+          [
+            1812,
+            932
+          ],
+          [
+            1811,
+            1006
+          ],
+          [
+            363,
+            997
+          ]
+        ],
+        [
+          [
+            367,
+            994
+          ],
+          [
+            1529,
+            1002
+          ],
+          [
+            1529,
+            1067
+          ],
+          [
+            367,
+            1058
+          ]
+        ],
+        [
+          [
+            365,
+            1060
+          ],
+          [
+            1609,
+            1068
+          ],
+          [
+            1608,
+            1135
+          ],
+          [
+            365,
+            1128
+          ]
+        ],
+        [
+          [
+            369,
+            1133
+          ],
+          [
+            1142,
+            1137
+          ],
+          [
+            1142,
+            1196
+          ],
+          [
+            369,
+            1191
+          ]
+        ],
+        [
+          [
+            364,
+            1194
+          ],
+          [
+            1543,
+            1198
+          ],
+          [
+            1543,
+            1269
+          ],
+          [
+            364,
+            1266
+          ]
+        ],
+        [
+          [
+            365,
+            1274
+          ],
+          [
+            1090,
+            1281
+          ],
+          [
+            1089,
+            1344
+          ],
+          [
+            365,
+            1336
+          ]
+        ],
+        [
+          [
+            468,
+            1365
+          ],
+          [
+            2691,
+            1365
+          ],
+          [
+            2691,
+            1429
+          ],
+          [
+            468,
+            1429
+          ]
+        ],
+        [
+          [
+            360,
+            1428
+          ],
+          [
+            1342,
+            1425
+          ],
+          [
+            1342,
+            1490
+          ],
+          [
+            360,
+            1493
+          ]
+        ],
+        [
+          [
+            364,
+            1546
+          ],
+          [
+            642,
+            1548
+          ],
+          [
+            641,
+            1606
+          ],
+          [
+            364,
+            1604
+          ]
+        ],
+        [
+          [
+            466,
+            1631
+          ],
+          [
+            2690,
+            1629
+          ],
+          [
+            2690,
+            1690
+          ],
+          [
+            467,
+            1692
+          ]
+        ],
+        [
+          [
+            361,
+            1691
+          ],
+          [
+            2689,
+            1686
+          ],
+          [
+            2689,
+            1741
+          ],
+          [
+            361,
+            1746
+          ]
+        ],
+        [
+          [
+            361,
+            1743
+          ],
+          [
+            2693,
+            1737
+          ],
+          [
+            2693,
+            1795
+          ],
+          [
+            361,
+            1801
+          ]
+        ],
+        [
+          [
+            358,
+            1796
+          ],
+          [
+            2247,
+            1794
+          ],
+          [
+            2247,
+            1853
+          ],
+          [
+            358,
+            1855
+          ]
+        ],
+        [
+          [
+            359,
+            1903
+          ],
+          [
+            986,
+            1901
+          ],
+          [
+            986,
+            1967
+          ],
+          [
+            359,
+            1969
+          ]
+        ],
+        [
+          [
+            461,
+            1986
+          ],
+          [
+            2691,
+            1983
+          ],
+          [
+            2691,
+            2047
+          ],
+          [
+            462,
+            2050
+          ]
+        ],
+        [
+          [
+            350,
+            2041
+          ],
+          [
+            2698,
+            2039
+          ],
+          [
+            2698,
+            2107
+          ],
+          [
+            350,
+            2109
+          ]
+        ],
+        [
+          [
+            354,
+            2103
+          ],
+          [
+            1428,
+            2097
+          ],
+          [
+            1429,
+            2154
+          ],
+          [
+            354,
+            2160
+          ]
+        ],
+        [
+          [
+            357,
+            2208
+          ],
+          [
+            966,
+            2208
+          ],
+          [
+            966,
+            2265
+          ],
+          [
+            357,
+            2265
+          ]
+        ],
+        [
+          [
+            456,
+            2291
+          ],
+          [
+            2704,
+            2284
+          ],
+          [
+            2704,
+            2344
+          ],
+          [
+            457,
+            2351
+          ]
+        ],
+        [
+          [
+            350,
+            2343
+          ],
+          [
+            2702,
+            2344
+          ],
+          [
+            2702,
+            2405
+          ],
+          [
+            350,
+            2404
+          ]
+        ],
+        [
+          [
+            348,
+            2402
+          ],
+          [
+            2704,
+            2399
+          ],
+          [
+            2704,
+            2459
+          ],
+          [
+            348,
+            2463
+          ]
+        ],
+        [
+          [
+            348,
+            2455
+          ],
+          [
+            2706,
+            2454
+          ],
+          [
+            2706,
+            2515
+          ],
+          [
+            348,
+            2516
+          ]
+        ],
+        [
+          [
+            345,
+            2510
+          ],
+          [
+            2710,
+            2505
+          ],
+          [
+            2710,
+            2572
+          ],
+          [
+            345,
+            2578
+          ]
+        ],
+        [
+          [
+            347,
+            2566
+          ],
+          [
+            2708,
+            2564
+          ],
+          [
+            2708,
+            2626
+          ],
+          [
+            347,
+            2628
+          ]
+        ],
+        [
+          [
+            346,
+            2619
+          ],
+          [
+            2714,
+            2620
+          ],
+          [
+            2714,
+            2687
+          ],
+          [
+            346,
+            2686
+          ]
+        ],
+        [
+          [
+            347,
+            2681
+          ],
+          [
+            2057,
+            2674
+          ],
+          [
+            2057,
+            2736
+          ],
+          [
+            347,
+            2743
+          ]
+        ],
+        [
+          [
+            346,
+            2784
+          ],
+          [
+            816,
+            2788
+          ],
+          [
+            815,
+            2854
+          ],
+          [
+            346,
+            2849
+          ]
+        ],
+        [
+          [
+            456,
+            2870
+          ],
+          [
+            1991,
+            2870
+          ],
+          [
+            1991,
+            2937
+          ],
+          [
+            456,
+            2937
+          ]
+        ],
+        [
+          [
+            894,
+            2941
+          ],
+          [
+            2162,
+            2937
+          ],
+          [
+            2163,
+            2999
+          ],
+          [
+            894,
+            3003
+          ]
+        ],
+        [
+          [
+            334,
+            3008
+          ],
+          [
+            2731,
+            3018
+          ],
+          [
+            2730,
+            3096
+          ],
+          [
+            334,
+            3085
+          ]
+        ],
+        [
+          [
+            333,
+            3068
+          ],
+          [
+            2734,
+            3076
+          ],
+          [
+            2733,
+            3150
+          ],
+          [
+            333,
+            3142
+          ]
+        ],
+        [
+          [
+            333,
+            3120
+          ],
+          [
+            2738,
+            3133
+          ],
+          [
+            2737,
+            3215
+          ],
+          [
+            333,
+            3201
+          ]
+        ],
+        [
+          [
+            334,
+            3470
+          ],
+          [
+            1286,
+            3475
+          ],
+          [
+            1286,
+            3539
+          ],
+          [
+            334,
+            3535
+          ]
+        ],
+        [
+          [
+            330,
+            3614
+          ],
+          [
+            1758,
+            3609
+          ],
+          [
+            1758,
+            3674
+          ],
+          [
+            330,
+            3679
+          ]
+        ]
+      ],
+      "model_settings": {
+        "use_doc_preprocessor": false,
+        "use_textline_orientation": true
+      },
+      "rec_boxes": [
+        [
+          1460.0,
+          69.0,
+          1586.0,
+          124.0
+        ],
+        [
+          374.0,
+          181.0,
+          1075.0,
+          257.0
+        ],
+        [
+          451.0,
+          263.0,
+          1603.0,
+          342.0
+        ],
+        [
+          378.0,
+          276.0,
+          482.0,
+          322.0
+        ],
+        [
+          376.0,
+          346.0,
+          417.0,
+          382.0
+        ],
+        [
+          454.0,
+          391.0,
+          681.0,
+          458.0
+        ],
+        [
+          446.0,
+          456.0,
+          2116.0,
+          536.0
+        ],
+        [
+          367.0,
+          462.0,
+          430.0,
+          512.0
+        ],
+        [
+          448.0,
+          525.0,
+          1866.0,
+          601.0
+        ],
+        [
+          372.0,
+          537.0,
+          421.0,
+          576.0
+        ],
+        [
+          445.0,
+          587.0,
+          2097.0,
+          671.0
+        ],
+        [
+          369.0,
+          601.0,
+          422.0,
+          642.0
+        ],
+        [
+          450.0,
+          653.0,
+          2283.0,
+          739.0
+        ],
+        [
+          374.0,
+          671.0,
+          413.0,
+          709.0
+        ],
+        [
+          454.0,
+          728.0,
+          1369.0,
+          801.0
+        ],
+        [
+          369.0,
+          735.0,
+          417.0,
+          779.0
+        ],
+        [
+          449.0,
+          791.0,
+          1848.0,
+          867.0
+        ],
+        [
+          368.0,
+          796.0,
+          430.0,
+          848.0
+        ],
+        [
+          443.0,
+          854.0,
+          2139.0,
+          941.0
+        ],
+        [
+          365.0,
+          862.0,
+          467.0,
+          916.0
+        ],
+        [
+          363.0,
+          922.0,
+          1812.0,
+          1006.0
+        ],
+        [
+          367.0,
+          994.0,
+          1529.0,
+          1067.0
+        ],
+        [
+          365.0,
+          1060.0,
+          1609.0,
+          1135.0
+        ],
+        [
+          369.0,
+          1133.0,
+          1142.0,
+          1196.0
+        ],
+        [
+          364.0,
+          1194.0,
+          1543.0,
+          1269.0
+        ],
+        [
+          365.0,
+          1274.0,
+          1090.0,
+          1344.0
+        ],
+        [
+          468.0,
+          1365.0,
+          2691.0,
+          1429.0
+        ],
+        [
+          360.0,
+          1425.0,
+          1342.0,
+          1493.0
+        ],
+        [
+          364.0,
+          1546.0,
+          642.0,
+          1606.0
+        ],
+        [
+          466.0,
+          1629.0,
+          2690.0,
+          1692.0
+        ],
+        [
+          361.0,
+          1686.0,
+          2689.0,
+          1746.0
+        ],
+        [
+          361.0,
+          1737.0,
+          2693.0,
+          1801.0
+        ],
+        [
+          358.0,
+          1794.0,
+          2247.0,
+          1855.0
+        ],
+        [
+          359.0,
+          1901.0,
+          986.0,
+          1969.0
+        ],
+        [
+          461.0,
+          1983.0,
+          2691.0,
+          2050.0
+        ],
+        [
+          350.0,
+          2039.0,
+          2698.0,
+          2109.0
+        ],
+        [
+          354.0,
+          2097.0,
+          1429.0,
+          2160.0
+        ],
+        [
+          357.0,
+          2208.0,
+          966.0,
+          2265.0
+        ],
+        [
+          456.0,
+          2284.0,
+          2704.0,
+          2351.0
+        ],
+        [
+          350.0,
+          2343.0,
+          2702.0,
+          2405.0
+        ],
+        [
+          348.0,
+          2399.0,
+          2704.0,
+          2463.0
+        ],
+        [
+          348.0,
+          2454.0,
+          2706.0,
+          2516.0
+        ],
+        [
+          345.0,
+          2505.0,
+          2710.0,
+          2578.0
+        ],
+        [
+          347.0,
+          2564.0,
+          2708.0,
+          2628.0
+        ],
+        [
+          346.0,
+          2619.0,
+          2714.0,
+          2687.0
+        ],
+        [
+          347.0,
+          2674.0,
+          2057.0,
+          2743.0
+        ],
+        [
+          346.0,
+          2784.0,
+          816.0,
+          2854.0
+        ],
+        [
+          456.0,
+          2870.0,
+          1991.0,
+          2937.0
+        ],
+        [
+          894.0,
+          2937.0,
+          2163.0,
+          3003.0
+        ],
+        [
+          334.0,
+          3008.0,
+          2731.0,
+          3096.0
+        ],
+        [
+          333.0,
+          3068.0,
+          2734.0,
+          3150.0
+        ],
+        [
+          333.0,
+          3120.0,
+          2738.0,
+          3215.0
+        ],
+        [
+          334.0,
+          3470.0,
+          1286.0,
+          3539.0
+        ],
+        [
+          330.0,
+          3609.0,
+          1758.0,
+          3679.0
+        ]
+      ],
+      "rec_polys": [
+        [
+          [
+            1460,
+            69
+          ],
+          [
+            1586,
+            69
+          ],
+          [
+            1586,
+            124
+          ],
+          [
+            1460,
+            124
+          ]
+        ],
+        [
+          [
+            374,
+            181
+          ],
+          [
+            1075,
+            186
+          ],
+          [
+            1074,
+            257
+          ],
+          [
+            374,
+            253
+          ]
+        ],
+        [
+          [
+            452,
+            263
+          ],
+          [
+            1603,
+            277
+          ],
+          [
+            1602,
+            342
+          ],
+          [
+            451,
+            327
+          ]
+        ],
+        [
+          [
+            378,
+            276
+          ],
+          [
+            482,
+            276
+          ],
+          [
+            482,
+            322
+          ],
+          [
+            378,
+            322
+          ]
+        ],
+        [
+          [
+            376,
+            346
+          ],
+          [
+            417,
+            346
+          ],
+          [
+            417,
+            382
+          ],
+          [
+            376,
+            382
+          ]
+        ],
+        [
+          [
+            456,
+            391
+          ],
+          [
+            681,
+            398
+          ],
+          [
+            679,
+            458
+          ],
+          [
+            454,
+            451
+          ]
+        ],
+        [
+          [
+            447,
+            456
+          ],
+          [
+            2116,
+            468
+          ],
+          [
+            2116,
+            536
+          ],
+          [
+            446,
+            525
+          ]
+        ],
+        [
+          [
+            367,
+            462
+          ],
+          [
+            430,
+            462
+          ],
+          [
+            430,
+            512
+          ],
+          [
+            367,
+            512
+          ]
+        ],
+        [
+          [
+            449,
+            525
+          ],
+          [
+            1866,
+            536
+          ],
+          [
+            1866,
+            601
+          ],
+          [
+            448,
+            590
+          ]
+        ],
+        [
+          [
+            372,
+            537
+          ],
+          [
+            421,
+            537
+          ],
+          [
+            421,
+            576
+          ],
+          [
+            372,
+            576
+          ]
+        ],
+        [
+          [
+            446,
+            587
+          ],
+          [
+            2097,
+            597
+          ],
+          [
+            2097,
+            671
+          ],
+          [
+            445,
+            661
+          ]
+        ],
+        [
+          [
+            369,
+            601
+          ],
+          [
+            422,
+            601
+          ],
+          [
+            422,
+            642
+          ],
+          [
+            369,
+            642
+          ]
+        ],
+        [
+          [
+            451,
+            653
+          ],
+          [
+            2283,
+            664
+          ],
+          [
+            2283,
+            739
+          ],
+          [
+            450,
+            728
+          ]
+        ],
+        [
+          [
+            374,
+            671
+          ],
+          [
+            413,
+            671
+          ],
+          [
+            413,
+            709
+          ],
+          [
+            374,
+            709
+          ]
+        ],
+        [
+          [
+            455,
+            728
+          ],
+          [
+            1369,
+            739
+          ],
+          [
+            1369,
+            801
+          ],
+          [
+            454,
+            789
+          ]
+        ],
+        [
+          [
+            369,
+            735
+          ],
+          [
+            417,
+            735
+          ],
+          [
+            417,
+            779
+          ],
+          [
+            369,
+            779
+          ]
+        ],
+        [
+          [
+            450,
+            791
+          ],
+          [
+            1848,
+            795
+          ],
+          [
+            1848,
+            867
+          ],
+          [
+            449,
+            863
+          ]
+        ],
+        [
+          [
+            368,
+            796
+          ],
+          [
+            430,
+            796
+          ],
+          [
+            430,
+            848
+          ],
+          [
+            368,
+            848
+          ]
+        ],
+        [
+          [
+            444,
+            854
+          ],
+          [
+            2139,
+            863
+          ],
+          [
+            2139,
+            941
+          ],
+          [
+            443,
+            931
+          ]
+        ],
+        [
+          [
+            365,
+            862
+          ],
+          [
+            467,
+            862
+          ],
+          [
+            467,
+            916
+          ],
+          [
+            365,
+            916
+          ]
+        ],
+        [
+          [
+            363,
+            922
+          ],
+          [
+            1812,
+            932
+          ],
+          [
+            1811,
+            1006
+          ],
+          [
+            363,
+            997
+          ]
+        ],
+        [
+          [
+            367,
+            994
+          ],
+          [
+            1529,
+            1002
+          ],
+          [
+            1529,
+            1067
+          ],
+          [
+            367,
+            1058
+          ]
+        ],
+        [
+          [
+            365,
+            1060
+          ],
+          [
+            1609,
+            1068
+          ],
+          [
+            1608,
+            1135
+          ],
+          [
+            365,
+            1128
+          ]
+        ],
+        [
+          [
+            369,
+            1133
+          ],
+          [
+            1142,
+            1137
+          ],
+          [
+            1142,
+            1196
+          ],
+          [
+            369,
+            1191
+          ]
+        ],
+        [
+          [
+            364,
+            1194
+          ],
+          [
+            1543,
+            1198
+          ],
+          [
+            1543,
+            1269
+          ],
+          [
+            364,
+            1266
+          ]
+        ],
+        [
+          [
+            365,
+            1274
+          ],
+          [
+            1090,
+            1281
+          ],
+          [
+            1089,
+            1344
+          ],
+          [
+            365,
+            1336
+          ]
+        ],
+        [
+          [
+            468,
+            1365
+          ],
+          [
+            2691,
+            1365
+          ],
+          [
+            2691,
+            1429
+          ],
+          [
+            468,
+            1429
+          ]
+        ],
+        [
+          [
+            360,
+            1428
+          ],
+          [
+            1342,
+            1425
+          ],
+          [
+            1342,
+            1490
+          ],
+          [
+            360,
+            1493
+          ]
+        ],
+        [
+          [
+            364,
+            1546
+          ],
+          [
+            642,
+            1548
+          ],
+          [
+            641,
+            1606
+          ],
+          [
+            364,
+            1604
+          ]
+        ],
+        [
+          [
+            466,
+            1631
+          ],
+          [
+            2690,
+            1629
+          ],
+          [
+            2690,
+            1690
+          ],
+          [
+            467,
+            1692
+          ]
+        ],
+        [
+          [
+            361,
+            1691
+          ],
+          [
+            2689,
+            1686
+          ],
+          [
+            2689,
+            1741
+          ],
+          [
+            361,
+            1746
+          ]
+        ],
+        [
+          [
+            361,
+            1743
+          ],
+          [
+            2693,
+            1737
+          ],
+          [
+            2693,
+            1795
+          ],
+          [
+            361,
+            1801
+          ]
+        ],
+        [
+          [
+            358,
+            1796
+          ],
+          [
+            2247,
+            1794
+          ],
+          [
+            2247,
+            1853
+          ],
+          [
+            358,
+            1855
+          ]
+        ],
+        [
+          [
+            359,
+            1903
+          ],
+          [
+            986,
+            1901
+          ],
+          [
+            986,
+            1967
+          ],
+          [
+            359,
+            1969
+          ]
+        ],
+        [
+          [
+            461,
+            1986
+          ],
+          [
+            2691,
+            1983
+          ],
+          [
+            2691,
+            2047
+          ],
+          [
+            462,
+            2050
+          ]
+        ],
+        [
+          [
+            350,
+            2041
+          ],
+          [
+            2698,
+            2039
+          ],
+          [
+            2698,
+            2107
+          ],
+          [
+            350,
+            2109
+          ]
+        ],
+        [
+          [
+            354,
+            2103
+          ],
+          [
+            1428,
+            2097
+          ],
+          [
+            1429,
+            2154
+          ],
+          [
+            354,
+            2160
+          ]
+        ],
+        [
+          [
+            357,
+            2208
+          ],
+          [
+            966,
+            2208
+          ],
+          [
+            966,
+            2265
+          ],
+          [
+            357,
+            2265
+          ]
+        ],
+        [
+          [
+            456,
+            2291
+          ],
+          [
+            2704,
+            2284
+          ],
+          [
+            2704,
+            2344
+          ],
+          [
+            457,
+            2351
+          ]
+        ],
+        [
+          [
+            350,
+            2343
+          ],
+          [
+            2702,
+            2344
+          ],
+          [
+            2702,
+            2405
+          ],
+          [
+            350,
+            2404
+          ]
+        ],
+        [
+          [
+            348,
+            2402
+          ],
+          [
+            2704,
+            2399
+          ],
+          [
+            2704,
+            2459
+          ],
+          [
+            348,
+            2463
+          ]
+        ],
+        [
+          [
+            348,
+            2455
+          ],
+          [
+            2706,
+            2454
+          ],
+          [
+            2706,
+            2515
+          ],
+          [
+            348,
+            2516
+          ]
+        ],
+        [
+          [
+            345,
+            2510
+          ],
+          [
+            2710,
+            2505
+          ],
+          [
+            2710,
+            2572
+          ],
+          [
+            345,
+            2578
+          ]
+        ],
+        [
+          [
+            347,
+            2566
+          ],
+          [
+            2708,
+            2564
+          ],
+          [
+            2708,
+            2626
+          ],
+          [
+            347,
+            2628
+          ]
+        ],
+        [
+          [
+            346,
+            2619
+          ],
+          [
+            2714,
+            2620
+          ],
+          [
+            2714,
+            2687
+          ],
+          [
+            346,
+            2686
+          ]
+        ],
+        [
+          [
+            347,
+            2681
+          ],
+          [
+            2057,
+            2674
+          ],
+          [
+            2057,
+            2736
+          ],
+          [
+            347,
+            2743
+          ]
+        ],
+        [
+          [
+            346,
+            2784
+          ],
+          [
+            816,
+            2788
+          ],
+          [
+            815,
+            2854
+          ],
+          [
+            346,
+            2849
+          ]
+        ],
+        [
+          [
+            456,
+            2870
+          ],
+          [
+            1991,
+            2870
+          ],
+          [
+            1991,
+            2937
+          ],
+          [
+            456,
+            2937
+          ]
+        ],
+        [
+          [
+            894,
+            2941
+          ],
+          [
+            2162,
+            2937
+          ],
+          [
+            2163,
+            2999
+          ],
+          [
+            894,
+            3003
+          ]
+        ],
+        [
+          [
+            334,
+            3008
+          ],
+          [
+            2731,
+            3018
+          ],
+          [
+            2730,
+            3096
+          ],
+          [
+            334,
+            3085
+          ]
+        ],
+        [
+          [
+            333,
+            3068
+          ],
+          [
+            2734,
+            3076
+          ],
+          [
+            2733,
+            3150
+          ],
+          [
+            333,
+            3142
+          ]
+        ],
+        [
+          [
+            333,
+            3120
+          ],
+          [
+            2738,
+            3133
+          ],
+          [
+            2737,
+            3215
+          ],
+          [
+            333,
+            3201
+          ]
+        ],
+        [
+          [
+            334,
+            3470
+          ],
+          [
+            1286,
+            3475
+          ],
+          [
+            1286,
+            3539
+          ],
+          [
+            334,
+            3535
+          ]
+        ],
+        [
+          [
+            330,
+            3614
+          ],
+          [
+            1758,
+            3609
+          ],
+          [
+            1758,
+            3674
+          ],
+          [
+            330,
+            3679
+          ]
+        ]
+      ],
+      "rec_scores": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "rec_texts": [],
+      "return_word_box": false,
+      "text_det_params": {
+        "box_thresh": 0.6,
+        "limit_side_len": 736,
+        "limit_type": "min",
+        "max_side_limit": 4000,
+        "thresh": 0.3,
+        "unclip_ratio": 1.5
+      },
+      "text_rec_score_thresh": 0.0,
+      "text_type": "general",
+      "textline_orientation_angles": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "parsing_res_list": [
+      {
+        "block_bbox": [
+          1459,
+          70,
+          1583,
+          114
+        ],
+        "block_content": "",
+        "block_id": 0,
+        "block_label": "number",
+        "block_order": null
+      },
+      {
+        "block_bbox": [
+          374,
+          190,
+          1067,
+          241
+        ],
+        "block_content": "",
+        "block_id": 1,
+        "block_label": "paragraph_title",
+        "block_order": 0
+      },
+      {
+        "block_bbox": [
+          372,
+          272,
+          1597,
+          330
+        ],
+        "block_content": "",
+        "block_id": 2,
+        "block_label": "text",
+        "block_order": 1
+      },
+      {
+        "block_bbox": [
+          366,
+          336,
+          2676,
+          447
+        ],
+        "block_content": "",
+        "block_id": 3,
+        "block_label": "text",
+        "block_order": 2
+      },
+      {
+        "block_bbox": [
+          366,
+          464,
+          2115,
+          522
+        ],
+        "block_content": "",
+        "block_id": 4,
+        "block_label": "text",
+        "block_order": 3
+      },
+      {
+        "block_bbox": [
+          363,
+          533,
+          1862,
+          586
+        ],
+        "block_content": "",
+        "block_id": 5,
+        "block_label": "text",
+        "block_order": 4
+      },
+      {
+        "block_bbox": [
+          364,
+          599,
+          2095,
+          656
+        ],
+        "block_content": "",
+        "block_id": 6,
+        "block_label": "text",
+        "block_order": 5
+      },
+      {
+        "block_bbox": [
+          363,
+          666,
+          2281,
+          723
+        ],
+        "block_content": "",
+        "block_id": 7,
+        "block_label": "text",
+        "block_order": 6
+      },
+      {
+        "block_bbox": [
+          366,
+          734,
+          1370,
+          786
+        ],
+        "block_content": "",
+        "block_id": 8,
+        "block_label": "text",
+        "block_order": 7
+      },
+      {
+        "block_bbox": [
+          363,
+          800,
+          1843,
+          849
+        ],
+        "block_content": "",
+        "block_id": 9,
+        "block_label": "text",
+        "block_order": 8
+      },
+      {
+        "block_bbox": [
+          360,
+          866,
+          2130,
+          918
+        ],
+        "block_content": "",
+        "block_id": 10,
+        "block_label": "text",
+        "block_order": 9
+      },
+      {
+        "block_bbox": [
+          364,
+          933,
+          1808,
+          986
+        ],
+        "block_content": "",
+        "block_id": 11,
+        "block_label": "text",
+        "block_order": 10
+      },
+      {
+        "block_bbox": [
+          365,
+          1000,
+          1528,
+          1050
+        ],
+        "block_content": "",
+        "block_id": 12,
+        "block_label": "text",
+        "block_order": 11
+      },
+      {
+        "block_bbox": [
+          366,
+          1069,
+          1602,
+          1120
+        ],
+        "block_content": "",
+        "block_id": 13,
+        "block_label": "text",
+        "block_order": 12
+      },
+      {
+        "block_bbox": [
+          365,
+          1134,
+          1146,
+          1187
+        ],
+        "block_content": "",
+        "block_id": 14,
+        "block_label": "text",
+        "block_order": 13
+      },
+      {
+        "block_bbox": [
+          365,
+          1201,
+          1538,
+          1253
+        ],
+        "block_content": "",
+        "block_id": 15,
+        "block_label": "text",
+        "block_order": 14
+      },
+      {
+        "block_bbox": [
+          362,
+          1281,
+          1087,
+          1330
+        ],
+        "block_content": "",
+        "block_id": 16,
+        "block_label": "paragraph_title",
+        "block_order": 15
+      },
+      {
+        "block_bbox": [
+          354,
+          1368,
+          2681,
+          1481
+        ],
+        "block_content": "",
+        "block_id": 17,
+        "block_label": "text",
+        "block_order": 16
+      },
+      {
+        "block_bbox": [
+          357,
+          1550,
+          634,
+          1594
+        ],
+        "block_content": "",
+        "block_id": 18,
+        "block_label": "paragraph_title",
+        "block_order": 17
+      },
+      {
+        "block_bbox": [
+          350,
+          1632,
+          2685,
+          1846
+        ],
+        "block_content": "",
+        "block_id": 19,
+        "block_label": "text",
+        "block_order": 18
+      },
+      {
+        "block_bbox": [
+          351,
+          1906,
+          980,
+          1955
+        ],
+        "block_content": "",
+        "block_id": 20,
+        "block_label": "paragraph_title",
+        "block_order": 19
+      },
+      {
+        "block_bbox": [
+          345,
+          1989,
+          2689,
+          2148
+        ],
+        "block_content": "",
+        "block_id": 21,
+        "block_label": "text",
+        "block_order": 20
+      },
+      {
+        "block_bbox": [
+          350,
+          2208,
+          959,
+          2253
+        ],
+        "block_content": "",
+        "block_id": 22,
+        "block_label": "paragraph_title",
+        "block_order": 21
+      },
+      {
+        "block_bbox": [
+          338,
+          2290,
+          2700,
+          2730
+        ],
+        "block_content": "",
+        "block_id": 23,
+        "block_label": "text",
+        "block_order": 22
+      },
+      {
+        "block_bbox": [
+          340,
+          2791,
+          814,
+          2840
+        ],
+        "block_content": "",
+        "block_id": 24,
+        "block_label": "paragraph_title",
+        "block_order": 23
+      },
+      {
+        "block_bbox": [
+          450,
+          2875,
+          1990,
+          2925
+        ],
+        "block_content": "",
+        "block_id": 25,
+        "block_label": "text",
+        "block_order": 24
+      },
+      {
+        "block_bbox": [
+          883,
+          2943,
+          2159,
+          2995
+        ],
+        "block_content": "",
+        "block_id": 26,
+        "block_label": "text",
+        "block_order": 25
+      },
+      {
+        "block_bbox": [
+          328,
+          3023,
+          2733,
+          3534
+        ],
+        "block_content": "",
+        "block_id": 27,
+        "block_label": "text",
+        "block_order": 26
+      },
+      {
+        "block_bbox": [
+          322,
+          3559,
+          2745,
+          3666
+        ],
+        "block_content": "",
+        "block_id": 28,
+        "block_label": "text",
+        "block_order": 27
+      }
+    ],
+    "table_res_list": [],
+    "width": 3024
+  },
+  "sha256": "3ceba251c100b9ee7e9ecac6b4bfa99a46202d310600a146f706506c55309674",
+  "source_page": 1
+}

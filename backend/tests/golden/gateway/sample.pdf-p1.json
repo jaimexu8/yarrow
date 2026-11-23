@@ -1,0 +1,1489 @@
+{
+  "bytes": 178373,
+  "detected_extension": "png",
+  "expected": {
+    "blocks": [
+      {
+        "block_bbox": [
+          361,
+          170,
+          855,
+          208
+        ],
+        "block_content": "",
+        "block_id": 0,
+        "block_label": "header",
+        "block_order": null
+      },
+      {
+        "block_bbox": [
+          32,
+          232,
+          258,
+          252
+        ],
+        "block_content": "Product Name: Yarrow",
+        "block_id": 1,
+        "block_label": "text",
+        "block_order": 0
+      },
+      {
+        "block_bbox": [
+          32,
+          319,
+          213,
+          339
+        ],
+        "block_content": "Team Number: 13",
+        "block_id": 2,
+        "block_label": "text",
+        "block_order": 1
+      },
+      {
+        "block_bbox": [
+          30,
+          378,
+          509,
+          545
+        ],
+        "block_content": "Team:\nAagam Bapna - abapna@purdue.edu\nCheng-En Lee - lee4649@purdue.edu\nAnthony McCrovitz - amccrov@purdue.edu\nDaniel Benes-Magana - dbenesma@purdue.edu\nJaime Xu - xu1545@purdue.edu",
+        "block_id": 3,
+        "block_label": "text",
+        "block_order": 2
+      },
+      {
+        "block_bbox": [
+          31,
+          611,
+          233,
+          634
+        ],
+        "block_content": "Sprint Overview",
+        "block_id": 4,
+        "block_label": "paragraph_title",
+        "block_order": 3
+      },
+      {
+        "block_bbox": [
+          30,
+          667,
+          1182,
+          746
+        ],
+        "block_content": "The goal of Sprint 1 is to establish Yarrow's core system architecture and implement the basic functionality needed for its primary user workflows. This includes authentication and user management, document upload and processing, search, and system administration.",
+        "block_id": 5,
+        "block_label": "text",
+        "block_order": 4
+      },
+      {
+        "block_bbox": [
+          29,
+          779,
+          1165,
+          887
+        ],
+        "block_content": "By the end of the sprint, users should be able to create an account, log in, upload one or more documents for processing, and view extracted text alongside the original document. Users should also be able to search processed document content. Administrator users should be able to manage non-administrator accounts and view system resource usage.",
+        "block_id": 6,
+        "block_label": "text",
+        "block_order": 5
+      },
+      {
+        "block_bbox": [
+          32,
+          919,
+          286,
+          938
+        ],
+        "block_content": "",
+        "block_id": 7,
+        "block_label": "paragraph_title",
+        "block_order": 6
+      },
+      {
+        "block_bbox": [
+          32,
+          977,
+          489,
+          998
+        ],
+        "block_content": "Meeting Schedule: Monday 11:00 - 11:30 AM",
+        "block_id": 8,
+        "block_label": "text",
+        "block_order": 7
+      },
+      {
+        "block_bbox": [
+          32,
+          1036,
+          257,
+          1057
+        ],
+        "block_content": "Risk and Challenges:",
+        "block_id": 9,
+        "block_label": "paragraph_title",
+        "block_order": 8
+      },
+      {
+        "block_bbox": [
+          29,
+          1088,
+          1140,
+          1170
+        ],
+        "block_content": "Yarrow has a relatively complex architecture involving a Next.js frontend, FastAPI backend services, PostgreSQL, document-processing workers, and vLLM-based inference services. A major challenge during Sprint 1 will be integrating and deploying these components while ensuring that they communicate reliably.",
+        "block_id": 10,
+        "block_label": "text",
+        "block_order": 9
+      },
+      {
+        "block_bbox": [
+          30,
+          1200,
+          1188,
+          1280
+        ],
+        "block_content": "Because this is the first implementation sprint, the team may also discover requirements that require changes to the initial architecture. To reduce this risk, the team will keep system components modular and coordinate integration work throughout the sprint.",
+        "block_id": 11,
+        "block_label": "text",
+        "block_order": 10
+      }
+    ],
+    "height": 1584,
+    "markdown": {
+      "markdown_images_count": 0,
+      "markdown_images_keys": [],
+      "markdown_images_sha256": {},
+      "text": "Product Name: Yarrow\n\nTeam Number: 13\n\nTeam:\nAagam Bapna - abapna@purdue.edu\nCheng-En Lee - lee4649@purdue.edu\nAnthony McCrovitz - amccrov@purdue.edu\nDaniel Benes-Magana - dbenesma@purdue.edu\nJaime Xu - xu1545@purdue.edu\n\nSprint Overview\n\nThe goal of Sprint 1 is to establish Yarrow's core system architecture and implement the basic functionality needed for its primary user workflows. This includes authentication and user management, document upload and processing, search, and system administration.\n\nBy the end of the sprint, users should be able to create an account, log in, upload one or more documents for processing, and view extracted text alongside the original document. Users should also be able to search processed document content. Administrator users should be able to manage non-administrator accounts and view system resource usage.\n\nMeeting Schedule: Monday 11:00 - 11:30 AM\n\nRisk and Challenges:\n\nYarrow has a relatively complex architecture involving a Next.js frontend, FastAPI backend services, PostgreSQL, document-processing workers, and vLLM-based inference services. A major challenge during Sprint 1 will be integrating and deploying these components while ensuring that they communicate reliably.\n\nBecause this is the first implementation sprint, the team may also discover requirements that require changes to the initial architecture. To reduce this risk, the team will keep system components modular and coordinate integration work throughout the sprint."
+    },
+    "table_res_list": [],
+    "width": 1224
+  },
+  "expected_pages": 1,
+  "file": "sample.pdf",
+  "kind": "pdf_first_page",
+  "recorded_structure": {
+    "height": 1584,
+    "overall_ocr_res": {
+      "dt_polys": [
+        [
+          [
+            363,
+            166
+          ],
+          [
+            860,
+            172
+          ],
+          [
+            859,
+            216
+          ],
+          [
+            362,
+            210
+          ]
+        ],
+        [
+          [
+            34,
+            232
+          ],
+          [
+            261,
+            232
+          ],
+          [
+            261,
+            258
+          ],
+          [
+            34,
+            258
+          ]
+        ],
+        [
+          [
+            33,
+            318
+          ],
+          [
+            214,
+            318
+          ],
+          [
+            214,
+            345
+          ],
+          [
+            33,
+            345
+          ]
+        ],
+        [
+          [
+            32,
+            375
+          ],
+          [
+            102,
+            377
+          ],
+          [
+            101,
+            402
+          ],
+          [
+            31,
+            400
+          ]
+        ],
+        [
+          [
+            33,
+            408
+          ],
+          [
+            404,
+            408
+          ],
+          [
+            404,
+            435
+          ],
+          [
+            33,
+            435
+          ]
+        ],
+        [
+          [
+            35,
+            438
+          ],
+          [
+            409,
+            438
+          ],
+          [
+            409,
+            461
+          ],
+          [
+            35,
+            461
+          ]
+        ],
+        [
+          [
+            34,
+            466
+          ],
+          [
+            456,
+            466
+          ],
+          [
+            456,
+            490
+          ],
+          [
+            34,
+            490
+          ]
+        ],
+        [
+          [
+            34,
+            495
+          ],
+          [
+            510,
+            495
+          ],
+          [
+            510,
+            519
+          ],
+          [
+            34,
+            519
+          ]
+        ],
+        [
+          [
+            32,
+            522
+          ],
+          [
+            355,
+            523
+          ],
+          [
+            355,
+            549
+          ],
+          [
+            32,
+            548
+          ]
+        ],
+        [
+          [
+            35,
+            612
+          ],
+          [
+            235,
+            612
+          ],
+          [
+            235,
+            640
+          ],
+          [
+            35,
+            640
+          ]
+        ],
+        [
+          [
+            34,
+            666
+          ],
+          [
+            1184,
+            666
+          ],
+          [
+            1184,
+            693
+          ],
+          [
+            34,
+            693
+          ]
+        ],
+        [
+          [
+            32,
+            697
+          ],
+          [
+            1141,
+            698
+          ],
+          [
+            1141,
+            725
+          ],
+          [
+            32,
+            724
+          ]
+        ],
+        [
+          [
+            35,
+            727
+          ],
+          [
+            374,
+            727
+          ],
+          [
+            374,
+            750
+          ],
+          [
+            35,
+            750
+          ]
+        ],
+        [
+          [
+            33,
+            779
+          ],
+          [
+            1098,
+            778
+          ],
+          [
+            1098,
+            805
+          ],
+          [
+            33,
+            806
+          ]
+        ],
+        [
+          [
+            33,
+            809
+          ],
+          [
+            1167,
+            808
+          ],
+          [
+            1167,
+            835
+          ],
+          [
+            33,
+            836
+          ]
+        ],
+        [
+          [
+            35,
+            839
+          ],
+          [
+            1112,
+            839
+          ],
+          [
+            1112,
+            862
+          ],
+          [
+            35,
+            862
+          ]
+        ],
+        [
+          [
+            33,
+            870
+          ],
+          [
+            194,
+            870
+          ],
+          [
+            194,
+            894
+          ],
+          [
+            33,
+            894
+          ]
+        ],
+        [
+          [
+            34,
+            919
+          ],
+          [
+            288,
+            917
+          ],
+          [
+            288,
+            943
+          ],
+          [
+            34,
+            946
+          ]
+        ],
+        [
+          [
+            34,
+            977
+          ],
+          [
+            491,
+            977
+          ],
+          [
+            491,
+            1004
+          ],
+          [
+            34,
+            1004
+          ]
+        ],
+        [
+          [
+            32,
+            1035
+          ],
+          [
+            259,
+            1038
+          ],
+          [
+            259,
+            1065
+          ],
+          [
+            32,
+            1063
+          ]
+        ],
+        [
+          [
+            31,
+            1086
+          ],
+          [
+            1144,
+            1087
+          ],
+          [
+            1144,
+            1117
+          ],
+          [
+            31,
+            1116
+          ]
+        ],
+        [
+          [
+            34,
+            1119
+          ],
+          [
+            1095,
+            1119
+          ],
+          [
+            1095,
+            1145
+          ],
+          [
+            34,
+            1145
+          ]
+        ],
+        [
+          [
+            33,
+            1145
+          ],
+          [
+            923,
+            1146
+          ],
+          [
+            923,
+            1176
+          ],
+          [
+            33,
+            1175
+          ]
+        ],
+        [
+          [
+            33,
+            1199
+          ],
+          [
+            1161,
+            1201
+          ],
+          [
+            1161,
+            1227
+          ],
+          [
+            33,
+            1225
+          ]
+        ],
+        [
+          [
+            32,
+            1229
+          ],
+          [
+            1190,
+            1230
+          ],
+          [
+            1190,
+            1256
+          ],
+          [
+            32,
+            1255
+          ]
+        ],
+        [
+          [
+            33,
+            1259
+          ],
+          [
+            246,
+            1259
+          ],
+          [
+            246,
+            1286
+          ],
+          [
+            33,
+            1286
+          ]
+        ]
+      ],
+      "model_settings": {
+        "use_doc_preprocessor": false,
+        "use_textline_orientation": true
+      },
+      "rec_boxes": [
+        [
+          362.0,
+          166.0,
+          860.0,
+          216.0
+        ],
+        [
+          34.0,
+          232.0,
+          261.0,
+          258.0
+        ],
+        [
+          33.0,
+          318.0,
+          214.0,
+          345.0
+        ],
+        [
+          31.0,
+          375.0,
+          102.0,
+          402.0
+        ],
+        [
+          33.0,
+          408.0,
+          404.0,
+          435.0
+        ],
+        [
+          35.0,
+          438.0,
+          409.0,
+          461.0
+        ],
+        [
+          34.0,
+          466.0,
+          456.0,
+          490.0
+        ],
+        [
+          34.0,
+          495.0,
+          510.0,
+          519.0
+        ],
+        [
+          32.0,
+          522.0,
+          355.0,
+          549.0
+        ],
+        [
+          35.0,
+          612.0,
+          235.0,
+          640.0
+        ],
+        [
+          34.0,
+          666.0,
+          1184.0,
+          693.0
+        ],
+        [
+          32.0,
+          697.0,
+          1141.0,
+          725.0
+        ],
+        [
+          35.0,
+          727.0,
+          374.0,
+          750.0
+        ],
+        [
+          33.0,
+          778.0,
+          1098.0,
+          806.0
+        ],
+        [
+          33.0,
+          808.0,
+          1167.0,
+          836.0
+        ],
+        [
+          35.0,
+          839.0,
+          1112.0,
+          862.0
+        ],
+        [
+          33.0,
+          870.0,
+          194.0,
+          894.0
+        ],
+        [
+          34.0,
+          917.0,
+          288.0,
+          946.0
+        ],
+        [
+          34.0,
+          977.0,
+          491.0,
+          1004.0
+        ],
+        [
+          32.0,
+          1035.0,
+          259.0,
+          1065.0
+        ],
+        [
+          31.0,
+          1086.0,
+          1144.0,
+          1117.0
+        ],
+        [
+          34.0,
+          1119.0,
+          1095.0,
+          1145.0
+        ],
+        [
+          33.0,
+          1145.0,
+          923.0,
+          1176.0
+        ],
+        [
+          33.0,
+          1199.0,
+          1161.0,
+          1227.0
+        ],
+        [
+          32.0,
+          1229.0,
+          1190.0,
+          1256.0
+        ],
+        [
+          33.0,
+          1259.0,
+          246.0,
+          1286.0
+        ]
+      ],
+      "rec_polys": [
+        [
+          [
+            363,
+            166
+          ],
+          [
+            860,
+            172
+          ],
+          [
+            859,
+            216
+          ],
+          [
+            362,
+            210
+          ]
+        ],
+        [
+          [
+            34,
+            232
+          ],
+          [
+            261,
+            232
+          ],
+          [
+            261,
+            258
+          ],
+          [
+            34,
+            258
+          ]
+        ],
+        [
+          [
+            33,
+            318
+          ],
+          [
+            214,
+            318
+          ],
+          [
+            214,
+            345
+          ],
+          [
+            33,
+            345
+          ]
+        ],
+        [
+          [
+            32,
+            375
+          ],
+          [
+            102,
+            377
+          ],
+          [
+            101,
+            402
+          ],
+          [
+            31,
+            400
+          ]
+        ],
+        [
+          [
+            33,
+            408
+          ],
+          [
+            404,
+            408
+          ],
+          [
+            404,
+            435
+          ],
+          [
+            33,
+            435
+          ]
+        ],
+        [
+          [
+            35,
+            438
+          ],
+          [
+            409,
+            438
+          ],
+          [
+            409,
+            461
+          ],
+          [
+            35,
+            461
+          ]
+        ],
+        [
+          [
+            34,
+            466
+          ],
+          [
+            456,
+            466
+          ],
+          [
+            456,
+            490
+          ],
+          [
+            34,
+            490
+          ]
+        ],
+        [
+          [
+            34,
+            495
+          ],
+          [
+            510,
+            495
+          ],
+          [
+            510,
+            519
+          ],
+          [
+            34,
+            519
+          ]
+        ],
+        [
+          [
+            32,
+            522
+          ],
+          [
+            355,
+            523
+          ],
+          [
+            355,
+            549
+          ],
+          [
+            32,
+            548
+          ]
+        ],
+        [
+          [
+            35,
+            612
+          ],
+          [
+            235,
+            612
+          ],
+          [
+            235,
+            640
+          ],
+          [
+            35,
+            640
+          ]
+        ],
+        [
+          [
+            34,
+            666
+          ],
+          [
+            1184,
+            666
+          ],
+          [
+            1184,
+            693
+          ],
+          [
+            34,
+            693
+          ]
+        ],
+        [
+          [
+            32,
+            697
+          ],
+          [
+            1141,
+            698
+          ],
+          [
+            1141,
+            725
+          ],
+          [
+            32,
+            724
+          ]
+        ],
+        [
+          [
+            35,
+            727
+          ],
+          [
+            374,
+            727
+          ],
+          [
+            374,
+            750
+          ],
+          [
+            35,
+            750
+          ]
+        ],
+        [
+          [
+            33,
+            779
+          ],
+          [
+            1098,
+            778
+          ],
+          [
+            1098,
+            805
+          ],
+          [
+            33,
+            806
+          ]
+        ],
+        [
+          [
+            33,
+            809
+          ],
+          [
+            1167,
+            808
+          ],
+          [
+            1167,
+            835
+          ],
+          [
+            33,
+            836
+          ]
+        ],
+        [
+          [
+            35,
+            839
+          ],
+          [
+            1112,
+            839
+          ],
+          [
+            1112,
+            862
+          ],
+          [
+            35,
+            862
+          ]
+        ],
+        [
+          [
+            33,
+            870
+          ],
+          [
+            194,
+            870
+          ],
+          [
+            194,
+            894
+          ],
+          [
+            33,
+            894
+          ]
+        ],
+        [
+          [
+            34,
+            919
+          ],
+          [
+            288,
+            917
+          ],
+          [
+            288,
+            943
+          ],
+          [
+            34,
+            946
+          ]
+        ],
+        [
+          [
+            34,
+            977
+          ],
+          [
+            491,
+            977
+          ],
+          [
+            491,
+            1004
+          ],
+          [
+            34,
+            1004
+          ]
+        ],
+        [
+          [
+            32,
+            1035
+          ],
+          [
+            259,
+            1038
+          ],
+          [
+            259,
+            1065
+          ],
+          [
+            32,
+            1063
+          ]
+        ],
+        [
+          [
+            31,
+            1086
+          ],
+          [
+            1144,
+            1087
+          ],
+          [
+            1144,
+            1117
+          ],
+          [
+            31,
+            1116
+          ]
+        ],
+        [
+          [
+            34,
+            1119
+          ],
+          [
+            1095,
+            1119
+          ],
+          [
+            1095,
+            1145
+          ],
+          [
+            34,
+            1145
+          ]
+        ],
+        [
+          [
+            33,
+            1145
+          ],
+          [
+            923,
+            1146
+          ],
+          [
+            923,
+            1176
+          ],
+          [
+            33,
+            1175
+          ]
+        ],
+        [
+          [
+            33,
+            1199
+          ],
+          [
+            1161,
+            1201
+          ],
+          [
+            1161,
+            1227
+          ],
+          [
+            33,
+            1225
+          ]
+        ],
+        [
+          [
+            32,
+            1229
+          ],
+          [
+            1190,
+            1230
+          ],
+          [
+            1190,
+            1256
+          ],
+          [
+            32,
+            1255
+          ]
+        ],
+        [
+          [
+            33,
+            1259
+          ],
+          [
+            246,
+            1259
+          ],
+          [
+            246,
+            1286
+          ],
+          [
+            33,
+            1286
+          ]
+        ]
+      ],
+      "rec_scores": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "rec_texts": [],
+      "return_word_box": false,
+      "text_det_params": {
+        "box_thresh": 0.6,
+        "limit_side_len": 736,
+        "limit_type": "min",
+        "max_side_limit": 4000,
+        "thresh": 0.3,
+        "unclip_ratio": 1.5
+      },
+      "text_rec_score_thresh": 0.0,
+      "text_type": "general",
+      "textline_orientation_angles": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "parsing_res_list": [
+      {
+        "block_bbox": [
+          361,
+          170,
+          855,
+          208
+        ],
+        "block_content": "",
+        "block_id": 0,
+        "block_label": "header",
+        "block_order": null
+      },
+      {
+        "block_bbox": [
+          32,
+          232,
+          258,
+          252
+        ],
+        "block_content": "",
+        "block_id": 1,
+        "block_label": "text",
+        "block_order": 0
+      },
+      {
+        "block_bbox": [
+          32,
+          319,
+          213,
+          339
+        ],
+        "block_content": "",
+        "block_id": 2,
+        "block_label": "text",
+        "block_order": 1
+      },
+      {
+        "block_bbox": [
+          30,
+          378,
+          509,
+          545
+        ],
+        "block_content": "",
+        "block_id": 3,
+        "block_label": "text",
+        "block_order": 2
+      },
+      {
+        "block_bbox": [
+          31,
+          611,
+          233,
+          634
+        ],
+        "block_content": "",
+        "block_id": 4,
+        "block_label": "paragraph_title",
+        "block_order": 3
+      },
+      {
+        "block_bbox": [
+          30,
+          667,
+          1182,
+          746
+        ],
+        "block_content": "",
+        "block_id": 5,
+        "block_label": "text",
+        "block_order": 4
+      },
+      {
+        "block_bbox": [
+          29,
+          779,
+          1165,
+          887
+        ],
+        "block_content": "",
+        "block_id": 6,
+        "block_label": "text",
+        "block_order": 5
+      },
+      {
+        "block_bbox": [
+          32,
+          919,
+          286,
+          938
+        ],
+        "block_content": "",
+        "block_id": 7,
+        "block_label": "paragraph_title",
+        "block_order": 6
+      },
+      {
+        "block_bbox": [
+          32,
+          977,
+          489,
+          998
+        ],
+        "block_content": "",
+        "block_id": 8,
+        "block_label": "text",
+        "block_order": 7
+      },
+      {
+        "block_bbox": [
+          32,
+          1036,
+          257,
+          1057
+        ],
+        "block_content": "",
+        "block_id": 9,
+        "block_label": "paragraph_title",
+        "block_order": 8
+      },
+      {
+        "block_bbox": [
+          29,
+          1088,
+          1140,
+          1170
+        ],
+        "block_content": "",
+        "block_id": 10,
+        "block_label": "text",
+        "block_order": 9
+      },
+      {
+        "block_bbox": [
+          30,
+          1200,
+          1188,
+          1280
+        ],
+        "block_content": "",
+        "block_id": 11,
+        "block_label": "text",
+        "block_order": 10
+      }
+    ],
+    "table_res_list": [],
+    "width": 1224
+  },
+  "sha256": "482a325f57598dc18d7a733b829dc15e2778a43455f0d28d3fa46ccd542c446e",
+  "source_page": 1
+}

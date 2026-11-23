@@ -1,0 +1,185 @@
+{
+  "bytes": 37084,
+  "detected_extension": "png",
+  "expected": {
+    "blocks": [
+      {
+        "block_bbox": [
+          38,
+          37,
+          1238,
+          1610
+        ],
+        "block_content": "<table><tr><td colspan=\"2\">Sentinet single_page.jpg</td></tr><tr><td colspan=\"2\">Sentinel single_page.jpg</td></tr></table>",
+        "block_id": 0,
+        "block_label": "table",
+        "block_order": null
+      },
+      {
+        "block_bbox": [
+          58,
+          57,
+          180,
+          72
+        ],
+        "block_content": "",
+        "block_id": 1,
+        "block_label": "text",
+        "block_order": 0
+      }
+    ],
+    "height": 1650,
+    "markdown": {
+      "markdown_images_count": 0,
+      "markdown_images_keys": [],
+      "markdown_images_sha256": {},
+      "text": "<table><tr><td colspan=\"2\">Sentinet single_page.jpg</td></tr><tr><td colspan=\"2\">Sentinel single_page.jpg</td></tr></table>"
+    },
+    "table_res_list": [
+      {
+        "cell_box_list": [
+          [
+            42.39810752868652,
+            56.43542289733887,
+            1234.14892578125,
+            1603.3533935546875
+          ]
+        ],
+        "pred_html": "",
+        "table_ocr_pred": {
+          "rec_boxes": [],
+          "rec_polys": [],
+          "rec_scores": [],
+          "rec_texts": []
+        }
+      }
+    ],
+    "width": 1275
+  },
+  "expected_pages": 1,
+  "file": "single_page.png",
+  "kind": "image",
+  "recorded_structure": {
+    "height": 1650,
+    "overall_ocr_res": {
+      "dt_polys": [
+        [
+          [
+            57,
+            54
+          ],
+          [
+            180,
+            58
+          ],
+          [
+            180,
+            76
+          ],
+          [
+            57,
+            72
+          ]
+        ]
+      ],
+      "model_settings": {
+        "use_doc_preprocessor": false,
+        "use_textline_orientation": true
+      },
+      "rec_boxes": [
+        [
+          57.0,
+          54.0,
+          180.0,
+          76.0
+        ]
+      ],
+      "rec_polys": [
+        [
+          [
+            57,
+            54
+          ],
+          [
+            180,
+            58
+          ],
+          [
+            180,
+            76
+          ],
+          [
+            57,
+            72
+          ]
+        ]
+      ],
+      "rec_scores": [
+        null
+      ],
+      "rec_texts": [],
+      "return_word_box": false,
+      "text_det_params": {
+        "box_thresh": 0.6,
+        "limit_side_len": 736,
+        "limit_type": "min",
+        "max_side_limit": 4000,
+        "thresh": 0.3,
+        "unclip_ratio": 1.5
+      },
+      "text_rec_score_thresh": 0.0,
+      "text_type": "general",
+      "textline_orientation_angles": [
+        0
+      ]
+    },
+    "parsing_res_list": [
+      {
+        "block_bbox": [
+          38,
+          37,
+          1238,
+          1610
+        ],
+        "block_content": "",
+        "block_id": 0,
+        "block_label": "table",
+        "block_order": null
+      },
+      {
+        "block_bbox": [
+          58,
+          57,
+          180,
+          72
+        ],
+        "block_content": "",
+        "block_id": 1,
+        "block_label": "text",
+        "block_order": 0
+      }
+    ],
+    "table_res_list": [
+      {
+        "cell_box_list": [
+          [
+            42.39810752868652,
+            56.43542289733887,
+            1234.14892578125,
+            1603.3533935546875
+          ]
+        ],
+        "pred_html": "",
+        "table_ocr_pred": {
+          "rec_boxes": [],
+          "rec_polys": [],
+          "rec_scores": [],
+          "rec_texts": []
+        }
+      }
+    ],
+    "width": 1275
+  },
+  "sha256": "9f864c7e68faf74aa11dadf126613a9f919e06812c20647ee1eaf10d8bc0e669",
+  "source_page": 1
+}

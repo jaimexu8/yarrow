@@ -1,0 +1,633 @@
+{
+  "bytes": 103742,
+  "detected_extension": "png",
+  "expected": {
+    "blocks": [
+      {
+        "block_bbox": [
+          116,
+          123,
+          292,
+          230
+        ],
+        "block_content": "MEMO\ninternal note",
+        "block_id": 0,
+        "block_label": "text",
+        "block_order": 0
+      },
+      {
+        "block_bbox": [
+          111,
+          951,
+          1220,
+          1607
+        ],
+        "block_content": "The budget review flagged several items for follow-up. We will pair on the trickiest parts and track the gaps. Risks include the storage quota and the cluster downtime. The plan covers the next two sprints and the final review. Success means a stable build and a clean, readable report. Questions go to the channel so the whole team can weigh in. We will refine the scope before the next planning meeting. The owners will confirm the dates and the acceptance goals. Please review the attached figures and note any objections. The final summary will go to the archive after sign-off.",
+        "block_id": 1,
+        "block_label": "text",
+        "block_order": 1
+      }
+    ],
+    "height": 1650,
+    "markdown": {
+      "markdown_images_count": 0,
+      "markdown_images_keys": [],
+      "markdown_images_sha256": {},
+      "text": "MEMO\ninternal note\n\nThe budget review flagged several items for follow-up. We will pair on the trickiest parts and track the gaps. Risks include the storage quota and the cluster downtime. The plan covers the next two sprints and the final review. Success means a stable build and a clean, readable report. Questions go to the channel so the whole team can weigh in. We will refine the scope before the next planning meeting. The owners will confirm the dates and the acceptance goals. Please review the attached figures and note any objections. The final summary will go to the archive after sign-off."
+    },
+    "table_res_list": [],
+    "width": 1275
+  },
+  "expected_pages": 1,
+  "file": "bottom_heavy_upright.png",
+  "kind": "image",
+  "recorded_structure": {
+    "height": 1650,
+    "overall_ocr_res": {
+      "dt_polys": [
+        [
+          [
+            119,
+            121
+          ],
+          [
+            259,
+            123
+          ],
+          [
+            258,
+            170
+          ],
+          [
+            118,
+            167
+          ]
+        ],
+        [
+          [
+            117,
+            199
+          ],
+          [
+            294,
+            199
+          ],
+          [
+            294,
+            237
+          ],
+          [
+            117,
+            237
+          ]
+        ],
+        [
+          [
+            117,
+            951
+          ],
+          [
+            1105,
+            951
+          ],
+          [
+            1105,
+            1002
+          ],
+          [
+            117,
+            1002
+          ]
+        ],
+        [
+          [
+            116,
+            1016
+          ],
+          [
+            1081,
+            1019
+          ],
+          [
+            1081,
+            1073
+          ],
+          [
+            115,
+            1070
+          ]
+        ],
+        [
+          [
+            116,
+            1086
+          ],
+          [
+            1175,
+            1087
+          ],
+          [
+            1175,
+            1136
+          ],
+          [
+            116,
+            1135
+          ]
+        ],
+        [
+          [
+            118,
+            1155
+          ],
+          [
+            1156,
+            1155
+          ],
+          [
+            1156,
+            1205
+          ],
+          [
+            118,
+            1205
+          ]
+        ],
+        [
+          [
+            116,
+            1220
+          ],
+          [
+            1183,
+            1223
+          ],
+          [
+            1183,
+            1273
+          ],
+          [
+            116,
+            1270
+          ]
+        ],
+        [
+          [
+            118,
+            1290
+          ],
+          [
+            1224,
+            1291
+          ],
+          [
+            1224,
+            1342
+          ],
+          [
+            118,
+            1341
+          ]
+        ],
+        [
+          [
+            115,
+            1353
+          ],
+          [
+            1180,
+            1359
+          ],
+          [
+            1180,
+            1412
+          ],
+          [
+            114,
+            1407
+          ]
+        ],
+        [
+          [
+            117,
+            1424
+          ],
+          [
+            1217,
+            1430
+          ],
+          [
+            1217,
+            1478
+          ],
+          [
+            116,
+            1471
+          ]
+        ],
+        [
+          [
+            116,
+            1493
+          ],
+          [
+            1202,
+            1496
+          ],
+          [
+            1202,
+            1547
+          ],
+          [
+            116,
+            1544
+          ]
+        ],
+        [
+          [
+            115,
+            1561
+          ],
+          [
+            1103,
+            1564
+          ],
+          [
+            1103,
+            1617
+          ],
+          [
+            114,
+            1614
+          ]
+        ]
+      ],
+      "model_settings": {
+        "use_doc_preprocessor": false,
+        "use_textline_orientation": true
+      },
+      "rec_boxes": [
+        [
+          118.0,
+          121.0,
+          259.0,
+          170.0
+        ],
+        [
+          117.0,
+          199.0,
+          294.0,
+          237.0
+        ],
+        [
+          117.0,
+          951.0,
+          1105.0,
+          1002.0
+        ],
+        [
+          115.0,
+          1016.0,
+          1081.0,
+          1073.0
+        ],
+        [
+          116.0,
+          1086.0,
+          1175.0,
+          1136.0
+        ],
+        [
+          118.0,
+          1155.0,
+          1156.0,
+          1205.0
+        ],
+        [
+          116.0,
+          1220.0,
+          1183.0,
+          1273.0
+        ],
+        [
+          118.0,
+          1290.0,
+          1224.0,
+          1342.0
+        ],
+        [
+          114.0,
+          1353.0,
+          1180.0,
+          1412.0
+        ],
+        [
+          116.0,
+          1424.0,
+          1217.0,
+          1478.0
+        ],
+        [
+          116.0,
+          1493.0,
+          1202.0,
+          1547.0
+        ],
+        [
+          114.0,
+          1561.0,
+          1103.0,
+          1617.0
+        ]
+      ],
+      "rec_polys": [
+        [
+          [
+            119,
+            121
+          ],
+          [
+            259,
+            123
+          ],
+          [
+            258,
+            170
+          ],
+          [
+            118,
+            167
+          ]
+        ],
+        [
+          [
+            117,
+            199
+          ],
+          [
+            294,
+            199
+          ],
+          [
+            294,
+            237
+          ],
+          [
+            117,
+            237
+          ]
+        ],
+        [
+          [
+            117,
+            951
+          ],
+          [
+            1105,
+            951
+          ],
+          [
+            1105,
+            1002
+          ],
+          [
+            117,
+            1002
+          ]
+        ],
+        [
+          [
+            116,
+            1016
+          ],
+          [
+            1081,
+            1019
+          ],
+          [
+            1081,
+            1073
+          ],
+          [
+            115,
+            1070
+          ]
+        ],
+        [
+          [
+            116,
+            1086
+          ],
+          [
+            1175,
+            1087
+          ],
+          [
+            1175,
+            1136
+          ],
+          [
+            116,
+            1135
+          ]
+        ],
+        [
+          [
+            118,
+            1155
+          ],
+          [
+            1156,
+            1155
+          ],
+          [
+            1156,
+            1205
+          ],
+          [
+            118,
+            1205
+          ]
+        ],
+        [
+          [
+            116,
+            1220
+          ],
+          [
+            1183,
+            1223
+          ],
+          [
+            1183,
+            1273
+          ],
+          [
+            116,
+            1270
+          ]
+        ],
+        [
+          [
+            118,
+            1290
+          ],
+          [
+            1224,
+            1291
+          ],
+          [
+            1224,
+            1342
+          ],
+          [
+            118,
+            1341
+          ]
+        ],
+        [
+          [
+            115,
+            1353
+          ],
+          [
+            1180,
+            1359
+          ],
+          [
+            1180,
+            1412
+          ],
+          [
+            114,
+            1407
+          ]
+        ],
+        [
+          [
+            117,
+            1424
+          ],
+          [
+            1217,
+            1430
+          ],
+          [
+            1217,
+            1478
+          ],
+          [
+            116,
+            1471
+          ]
+        ],
+        [
+          [
+            116,
+            1493
+          ],
+          [
+            1202,
+            1496
+          ],
+          [
+            1202,
+            1547
+          ],
+          [
+            116,
+            1544
+          ]
+        ],
+        [
+          [
+            115,
+            1561
+          ],
+          [
+            1103,
+            1564
+          ],
+          [
+            1103,
+            1617
+          ],
+          [
+            114,
+            1614
+          ]
+        ]
+      ],
+      "rec_scores": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "rec_texts": [],
+      "return_word_box": false,
+      "text_det_params": {
+        "box_thresh": 0.6,
+        "limit_side_len": 736,
+        "limit_type": "min",
+        "max_side_limit": 4000,
+        "thresh": 0.3,
+        "unclip_ratio": 1.5
+      },
+      "text_rec_score_thresh": 0.0,
+      "text_type": "general",
+      "textline_orientation_angles": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "parsing_res_list": [
+      {
+        "block_bbox": [
+          116,
+          123,
+          292,
+          230
+        ],
+        "block_content": "",
+        "block_id": 0,
+        "block_label": "text",
+        "block_order": 0
+      },
+      {
+        "block_bbox": [
+          111,
+          951,
+          1220,
+          1607
+        ],
+        "block_content": "",
+        "block_id": 1,
+        "block_label": "text",
+        "block_order": 1
+      }
+    ],
+    "table_res_list": [],
+    "width": 1275
+  },
+  "sha256": "a39e013fca4e6c440017d5cebd88909c7051175e33fcb5bceb5d81f0cae6dee9",
+  "source_page": 1
+}
