@@ -82,8 +82,11 @@ class Gateway:
     the first argument, so they bind correctly when called on a DocumentParser
     instance) and patches them onto DocumentParser via monkeypatch.
 
+    - count_pages returns the configured page count without loading the file.
     - load_file produces page_count placeholder pages (valid base64, not a real
       image, so _raster_size / build_thumbnail fail gracefully).
+    - load_pages produces a full-length pages list but fills placeholders only
+      for the selected page numbers; every other slot is an empty string.
     - correct_orientations records a rotation for each page in rotations.
     - parse_single_page returns a completed Page (with optional corrected image
       and figure crops), or records a page_error and returns a failed Page when
@@ -101,7 +104,13 @@ class Gateway:
         self.warnings: dict[int, str] = {}
 
     def configure(
-        self, pages=1, model=None, rotations=None, figures=None, manual=None, warnings=None
+        self,
+        pages=1,
+        model=None,
+        rotations=None,
+        figures=None,
+        manual=None,
+        warnings=None,
     ):
         self.page_count = pages
         if model is not None:
@@ -114,12 +123,26 @@ class Gateway:
     def fail(self, page_no, error):
         self.failures[page_no] = error
 
+    def count_pages(self, parser, file_data):
+        return self.page_count
+
     def load_file(self, parser, file_data):
         import base64
 
         parser.pages = [
             base64.b64encode(f"page_{i}".encode()).decode()
             for i in range(self.page_count)
+        ]
+
+    def load_pages(self, parser, file_data, page_numbers):
+        import base64
+
+        selected = set(page_numbers)
+        parser.pages = [
+            base64.b64encode(f"page_{number}".encode()).decode()
+            if number in selected
+            else ""
+            for number in range(1, self.page_count + 1)
         ]
 
     def correct_orientations(self, parser, pages_to_process=None):
@@ -139,9 +162,7 @@ class Gateway:
                 f"{type(error).__name__}: {error}",
                 error,
             )
-            return [
-                Page(document_id=document.id, page_number=number, status="failed")
-            ]
+            return [Page(document_id=document.id, page_number=number, status="failed")]
         page = Page(
             document_id=document.id,
             page_number=number,
@@ -158,7 +179,11 @@ class Gateway:
         objects = [page]
         if page_index in self.warnings:
             objects.append(
-                Warning(page_id=page.id, warning_type="quality", message=self.warnings[page_index])
+                Warning(
+                    page_id=page.id,
+                    warning_type="quality",
+                    message=self.warnings[page_index],
+                )
             )
         if self.figures:
             parser.figure_images.update(self.figures)
@@ -257,8 +282,14 @@ def gateway(monkeypatch):
 
     gw = Gateway()
 
+    def count_pages(parser, file_data):
+        return gw.count_pages(parser, file_data)
+
     def load_file(parser, file_data):
         gw.load_file(parser, file_data)
+
+    def load_pages(parser, file_data, page_numbers):
+        gw.load_pages(parser, file_data, page_numbers)
 
     def correct_orientations(parser, pages_to_process=None):
         gw.correct_orientations(parser, pages_to_process)
@@ -269,9 +300,13 @@ def gateway(monkeypatch):
     def parse_single_page(parser, document, page_index):
         return gw.parse_single_page(parser, document, page_index)
 
+    monkeypatch.setattr(DocumentParser, "count_pages", count_pages, raising=False)
     monkeypatch.setattr(DocumentParser, "load_file", load_file)
+    monkeypatch.setattr(DocumentParser, "load_pages", load_pages, raising=False)
     monkeypatch.setattr(DocumentParser, "correct_orientations", correct_orientations)
-    monkeypatch.setattr(DocumentParser, "apply_manual_rotations", apply_manual_rotations)
+    monkeypatch.setattr(
+        DocumentParser, "apply_manual_rotations", apply_manual_rotations
+    )
     monkeypatch.setattr(DocumentParser, "parse_single_page", parse_single_page)
     return gw
 

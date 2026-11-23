@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     INFERENCE_MODEL_NAME: str = "unknown"
     INFERENCE_MODEL_VERSION: str = "unknown"
 
+    INGEST_PAGE_BATCH_SIZE: int = 25
+
     PAGE_QUEUE_TIMEOUT_SECONDS: int = 1800
     PAGE_STALE_SECONDS: int = 1800
     MAX_PAGE_DELIVERIES: int = 6

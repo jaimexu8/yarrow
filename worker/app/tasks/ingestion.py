@@ -172,6 +172,13 @@ def _run_page_numbers(page_count: int, page_to_process: tuple | None) -> list[in
     ]
 
 
+def _page_chunks(numbers: list[int], size: int):
+    """Split ordered page numbers into contiguous batches."""
+    size = max(1, size)
+    for start in range(0, len(numbers), size):
+        yield numbers[start : start + size]
+
+
 def _lock_running_job(session: Session, job_id: str) -> Job:
     job = session.get(Job, UUID(job_id), with_for_update=True)
     if job is None:
@@ -429,6 +436,43 @@ def _enqueue_parse_page(job_id: str, page_no: int) -> None:
     )
 
 
+def _maybe_start_parsing(job_id: str) -> None:
+    """Flip a preparing job to parsing once every run page has a queued row.
+
+    Set equality on the actual row page numbers, not a count or a hard-coded
+    range, so a partial reprocess still fires with its own set of pages. The
+    stage check under the row lock keeps a second caller from firing twice.
+    """
+    to_parse: list[int] = []
+    try:
+        with session_scope() as session:
+            job = _lock_running_job(session, job_id)
+            if job.status != "processing" or job.current_stage != "preparing":
+                return
+            rows = session.execute(
+                select(JobPage.page_number, JobPage.status).where(
+                    JobPage.job_id == job.id
+                )
+            ).all()
+            if not rows or len(rows) != job.total_pages:
+                return
+            if any(status != "queued" for _number, status in rows):
+                return
+            to_parse = [number for number, _status in rows]
+            job.current_stage = "parsing"
+    except (JobCanceledError, JobDeletedError):
+        return
+
+    for number in to_parse:
+        # A reprocess must not inherit a stale delivery count within the
+        # counters' TTL.
+        _clear_page_delivery(job_id, number)
+        try:
+            _enqueue_parse_page(job_id, number)
+        except Exception:
+            logger.exception(f"Could not enqueue parse_page for {job_id}:{number}")
+
+
 def _enqueue_finalize(job_id: str) -> None:
     celery_app.send_task(
         "app.tasks.ingestion.finalize_document", args=[job_id], queue="default"
@@ -495,16 +539,15 @@ def ingest_document(
     pages: list[int] | None = None,
     merge_consecutive_tables: bool = False,
 ):
-    """Download, rasterize, orient and seed one run, then fan out parse_page.
+    """Count the run's pages and fan out prepare_pages batches on the ocr queue.
 
     Idempotent: the sweeper re-enqueues it when a job gets stuck in
-    downloading/preparing, so a second pass must converge on the same state
-    rather than fail on it.
+    downloading/preparing. A second pass while the job is preparing heals the
+    missing batches instead of resetting work already done.
     """
     logger.info(f"Starting ingest for job {job_id}")
     storage_key = ""
-    document_id: UUID | None = None
-    thumbnail_keys: dict[int, str] = {}
+    already_preparing = False
 
     with session_scope() as session:
         job = session.get(Job, UUID(job_id))
@@ -516,10 +559,18 @@ def ingest_document(
         if job.status == "canceled":
             logger.info(f"Job {job_id} was canceled; skipping ingest")
             return
+        # A sweeper re-enqueue while batches are being prepared must heal, not
+        # reset: keep that stage and the rows prepare_pages already seeded.
+        already_preparing = job.current_stage == "preparing" and (
+            session.execute(
+                select(JobPage.id).where(JobPage.job_id == job.id).limit(1)
+            ).first()
+            is not None
+        )
         job.status = "processing"
-        job.current_stage = "downloading"
+        if not already_preparing:
+            job.current_stage = "downloading"
         job.document.status = "processing"
-        document_id = job.document.id
         storage_key = job.document.storage_key
 
     file_data = None
@@ -536,19 +587,92 @@ def ingest_document(
 
     parser = DocumentParser()
     try:
-        parser.load_file(file_data)
+        page_count = parser.count_pages(file_data)
     except ValueError as error:
         _mark_failed(job_id, str(error))
         raise
 
-    _set_stage(job_id, "preparing")
+    run_page_numbers = _run_page_numbers(page_count, pages)
 
-    # Manual-rotation overrides first, then auto
-    # detection for the run's pages only.
+    if already_preparing:
+        with session_scope() as session:
+            queued_pages = set(
+                session.execute(
+                    select(JobPage.page_number).where(
+                        JobPage.job_id == UUID(job_id), JobPage.status == "queued"
+                    )
+                ).scalars()
+            )
+        to_enqueue = [
+            number for number in run_page_numbers if number not in queued_pages
+        ]
+    else:
+        with session_scope() as session:
+            job = _lock_running_job(session, job_id)
+            job.total_pages = len(run_page_numbers)
+            job.pages_processed = 0
+            job.merge_consecutive_tables = merge_consecutive_tables
+            job.document.page_count = page_count
+            session.execute(delete(JobPage).where(JobPage.job_id == job.id))
+        to_enqueue = run_page_numbers
+        _set_stage(job_id, "preparing")
+
+    if not run_page_numbers:
+        _set_stage(job_id, "parsing")
+        return
+
+    for chunk in _page_chunks(to_enqueue, settings.INGEST_PAGE_BATCH_SIZE):
+        try:
+            celery_app.send_task(
+                "app.tasks.ingestion.prepare_pages",
+                args=[job_id, chunk],
+                queue="ocr",
+            )
+        except Exception:
+            # The broker is unreachable; the job stays preparing and the
+            # sweeper re-enqueues ingest, which only sends missing batches.
+            logger.exception(f"Could not enqueue prepare_pages for {job_id}:{chunk}")
+
+
+@celery_app.task(
+    name="app.tasks.ingestion.prepare_pages",
+    queue="ocr",
+    soft_time_limit=600,
+    time_limit=660,
+    acks_late=False,
+)
+def prepare_pages(job_id: str, page_numbers: list[int]):
+    """Load, orient, seed and upload one batch of an ingest run.
+
+    Idempotent per batch: a duplicate delivery upserts the same rows. The
+    parsing gate opens only once every run page has a queued job_page.
+    """
+    logger.info(f"Preparing pages {page_numbers} for job {job_id}")
+    try:
+        with session_scope() as session:
+            job = _lock_running_job(session, job_id)
+            if job.status != "processing" or job.current_stage != "preparing":
+                return
+            document = session.get(Document, job.document_id)
+            if document is None:
+                return
+            document_id = document.id
+            storage_key = document.storage_key
+    except (JobCanceledError, JobDeletedError):
+        logger.info(f"Job {job_id} was canceled or deleted; skipping prepare_pages")
+        return
+
+    file_data = get_storage().download_bytes(storage_key)
+
+    parser = DocumentParser()
+    parser.load_pages(file_data, page_numbers)
+
+    # Manual-rotation overrides first, then auto detection for this batch.
     with session_scope() as session:
         rotation_rows = session.execute(
             select(Page.page_number, Page.manual_rotation_deg).where(
                 Page.document_id == document_id,
+                Page.page_number.in_(page_numbers),
                 Page.manual_rotation_deg.is_not(None),
             )
         ).all()
@@ -561,15 +685,13 @@ def ingest_document(
             and 1 <= page_number <= len(parser.pages)
         }
     )
-    parser.correct_orientations(pages)
+    parser.correct_orientations(tuple(page_numbers))
 
-    run_page_numbers = _run_page_numbers(len(parser.pages), pages)
-    thumbnail_keys = _store_thumbnails(document_id, parser, run_page_numbers)
+    thumbnail_keys = _store_thumbnails(document_id, parser, page_numbers)
 
-    # Upload each run page's corrected raster. A rotated page also gets its upright image at pages/{n}.png
-    # here, because all orientation happens in this run and parse_page will not
-    # re-rotate an already-upright raster.
-    for number in run_page_numbers:
+    # Upload this batch's corrected rasters; a rotated page also gets its
+    # upright image at pages/{n}.png because parse_page will not re-rotate.
+    for number in page_numbers:
         raster = base64.b64decode(parser.pages[number - 1])
         get_storage().upload_file(
             io.BytesIO(raster), f"documents/{document_id}/rasters/{number}.png"
@@ -581,22 +703,21 @@ def ingest_document(
 
     with session_scope() as session:
         job = _lock_running_job(session, job_id)
-        run_page_ids = [
+        if job.status != "processing" or job.current_stage != "preparing":
+            return
+        batch_page_ids = [
             row
             for row in session.execute(
                 select(Page.id).where(
                     Page.document_id == document_id,
-                    Page.page_number.in_(run_page_numbers),
+                    Page.page_number.in_(page_numbers),
                 )
             ).scalars()
         ]
-        _delete_page_children(session, run_page_ids)
+        _delete_page_children(session, batch_page_ids)
 
-        # Upsert a Page row for every document page on (document_id,
-        # page_number). Run pages become pending placeholders; non-run pages
-        # are left untouched.
-        run_page_objs: dict[int, Page] = {}
-        for number in range(1, len(parser.pages) + 1):
+        batch_page_objs: dict[int, Page] = {}
+        for number in page_numbers:
             page = (
                 session.execute(
                     select(Page).where(
@@ -609,26 +730,23 @@ def ingest_document(
             if page is None:
                 page = Page(document_id=document_id, page_number=number)
                 session.add(page)
-            if number in run_page_numbers:
-                page.status = "pending"
-                page.error_message = None
-                page.error_code = None
-                page.width, page.height = _raster_size(parser.pages[number - 1])
-                if _is_rotated(parser, number - 1):
-                    page.page_image_key = f"documents/{document_id}/pages/{number}.png"
-                if number - 1 in parser.manual_rotations:
-                    page.manual_rotation_deg = parser.manual_rotations[number - 1]
-                if number in thumbnail_keys:
-                    page.thumbnail_key = thumbnail_keys[number]
-                run_page_objs[number] = page
+            page.status = "pending"
+            page.error_message = None
+            page.error_code = None
+            page.width, page.height = _raster_size(parser.pages[number - 1])
+            if _is_rotated(parser, number - 1):
+                page.page_image_key = f"documents/{document_id}/pages/{number}.png"
+            if number - 1 in parser.manual_rotations:
+                page.manual_rotation_deg = parser.manual_rotations[number - 1]
+            if number in thumbnail_keys:
+                page.thumbnail_key = thumbnail_keys[number]
+            batch_page_objs[number] = page
 
-        # Auto-rotation warning: ingest does all orientation, so the "Page was
-        # auto-rotated by N°" warning is recorded here. parse_page re-parses
-        # the already-upright raster and would not re-detect the rotation.
-        # Manual-rotation warnings are emitted by parse_single_page (via the
-        # seeded manual_rotations), so they are not inserted here.
+        # Auto-rotation happens here, so the warning is recorded now; parse_page
+        # sees only the upright raster. Manual-rotation warnings come from
+        # parse_single_page via the seeded manual_rotations.
         session.flush()
-        for number, page in run_page_objs.items():
+        for number, page in batch_page_objs.items():
             angle = parser.page_orientations.get(number - 1)
             if angle:
                 session.add(
@@ -639,35 +757,25 @@ def ingest_document(
                     )
                 )
 
-        job.total_pages = len(run_page_numbers)
-        job.pages_processed = 0
-        job.merge_consecutive_tables = merge_consecutive_tables
-        job.current_stage = "parsing"
-        job.document.page_count = len(parser.pages)
-        session.execute(delete(JobPage).where(JobPage.job_id == job.id))
-        now = _utcnow()
-        session.add_all(
-            [
-                JobPage(
-                    job_id=job.id, page_number=number, status="queued", queued_at=now
-                )
-                for number in run_page_numbers
-            ]
+        queued = set(
+            session.execute(
+                select(JobPage.page_number).where(JobPage.job_id == job.id)
+            ).scalars()
         )
+        now = _utcnow()
+        for number in page_numbers:
+            if number in queued:
+                continue
+            session.add(
+                JobPage(
+                    job_id=job.id,
+                    page_number=number,
+                    status="queued",
+                    queued_at=now,
+                )
+            )
 
-    # A reprocess must not inherit a stale delivery count within the counters'
-    # TTL, so clear every run page's counter right after the commit.
-    for number in run_page_numbers:
-        _clear_page_delivery(job_id, number)
-
-    for number in run_page_numbers:
-        try:
-            _enqueue_parse_page(job_id, number)
-        except Exception:
-            # The broker is unreachable; the job is already in parsing with
-            # queued job_pages, so the sweeper and the queue timeout recover
-            # it rather than losing the whole run to a broker blip.
-            logger.exception(f"Could not enqueue parse_page for {job_id}:{number}")
+    _maybe_start_parsing(job_id)
 
 
 @celery_app.task(

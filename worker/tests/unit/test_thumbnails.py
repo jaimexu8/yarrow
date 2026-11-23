@@ -86,15 +86,27 @@ def storage(monkeypatch):
 def pages(monkeypatch):
     page_count = {"value": 3}
 
+    def count_pages(self, file_data):
+        return page_count["value"]
+
     def load_file(self, file_data):
         self.pages = [
             _page_image(number) for number in range(1, page_count["value"] + 1)
         ]
 
+    def load_pages(self, file_data, page_numbers):
+        selected = set(page_numbers)
+        self.pages = [
+            _page_image(number) if number in selected else ""
+            for number in range(1, page_count["value"] + 1)
+        ]
+
     def correct_orientations(self, pages_to_process=None):
         return None
 
+    monkeypatch.setattr(DocumentParser, "count_pages", count_pages, raising=False)
     monkeypatch.setattr(DocumentParser, "load_file", load_file)
+    monkeypatch.setattr(DocumentParser, "load_pages", load_pages, raising=False)
     monkeypatch.setattr(DocumentParser, "correct_orientations", correct_orientations)
     monkeypatch.setattr(DocumentParser, "apply_manual_rotations", lambda self, r: None)
 
@@ -139,6 +151,20 @@ def _key(document_id: UUID, page_number: int) -> str:
     return f"documents/{document_id}/thumbnails/{page_number}.webp"
 
 
+PREPARE = "app.tasks.ingestion.prepare_pages"
+
+
+def _run_prepare_pages(enqueue, job_id):
+    """Run every prepare_pages batch ingest_document enqueued for this job."""
+    batches = [
+        args[1]
+        for name, _queue, args in list(enqueue)
+        if name == PREPARE and args[0] == str(job_id)
+    ]
+    for page_numbers in batches:
+        ingestion.prepare_pages(str(job_id), page_numbers)
+
+
 class TestBuildThumbnail:
     def test_is_160_px_wide_webp_keeping_aspect_ratio(self):
         thumbnail = Image.open(
@@ -152,7 +178,9 @@ class TestBuildThumbnail:
 
     def test_landscape_page_keeps_its_ratio(self):
         thumbnail = Image.open(
-            io.BytesIO(build_thumbnail(_encode(Image.new("RGB", (2000, 1000), "white"))))
+            io.BytesIO(
+                build_thumbnail(_encode(Image.new("RGB", (2000, 1000), "white")))
+            )
         )
 
         assert thumbnail.size == (160, 80)
@@ -180,11 +208,12 @@ class TestBuildThumbnail:
 
 @pytest.mark.usefixtures("enqueue")
 class TestThumbnailGeneration:
-    def test_every_run_page_gets_a_thumbnail(self, sessions, storage, pages):
+    def test_every_run_page_gets_a_thumbnail(self, sessions, storage, pages, enqueue):
         pages.configure(3)
         document_id, job_id = _seed_job(sessions, 3)
 
         ingest_document(str(job_id))
+        _run_prepare_pages(enqueue, job_id)
 
         stored = _pages(sessions, document_id)
         assert {number: page.thumbnail_key for number, page in stored.items()} == {
@@ -194,12 +223,15 @@ class TestThumbnailGeneration:
         assert thumbnail.format == "WEBP"
         assert thumbnail.size == (160, 200)
 
-    def test_upload_failure_does_not_fail_the_job(self, sessions, storage, pages):
+    def test_upload_failure_does_not_fail_the_job(
+        self, sessions, storage, pages, enqueue
+    ):
         pages.configure(2)
         document_id, job_id = _seed_job(sessions, 2)
         storage.failing.add(_key(document_id, 2))
 
         ingest_document(str(job_id))  # must not raise
+        _run_prepare_pages(enqueue, job_id)
 
         with sessions() as session:
             job = session.get(Job, job_id)
@@ -209,7 +241,7 @@ class TestThumbnailGeneration:
         assert stored[2].thumbnail_key is None
 
     def test_unreadable_page_image_does_not_fail_the_job(
-        self, sessions, storage, pages, monkeypatch
+        self, sessions, storage, pages, monkeypatch, enqueue
     ):
         pages.configure(1)
         document_id, job_id = _seed_job(sessions, 1)
@@ -220,15 +252,17 @@ class TestThumbnailGeneration:
         monkeypatch.setattr(ingestion, "build_thumbnail", broken)
 
         ingest_document(str(job_id))  # must not raise
+        _run_prepare_pages(enqueue, job_id)
 
         with sessions() as session:
             assert session.get(Job, job_id).status == "processing"
         assert _pages(sessions, document_id)[1].thumbnail_key is None
 
-    def test_reprocess_rewrites_only_its_pages(self, sessions, storage, pages):
+    def test_reprocess_rewrites_only_its_pages(self, sessions, storage, pages, enqueue):
         pages.configure(3)
         document_id, job_id = _seed_job(sessions, 3)
         ingest_document(str(job_id))
+        _run_prepare_pages(enqueue, job_id)
         storage.objects = {key: b"old" for key in storage.objects}
         with sessions() as session:
             rerun = Job(
@@ -240,6 +274,7 @@ class TestThumbnailGeneration:
             session.add(rerun)
 
         ingest_document(str(rerun.id), pages=(2,))
+        _run_prepare_pages(enqueue, rerun.id)
 
         assert storage.objects[_key(document_id, 1)] == b"old"
         assert storage.objects[_key(document_id, 3)] == b"old"
@@ -248,7 +283,7 @@ class TestThumbnailGeneration:
             page.thumbnail_key for page in _pages(sessions, document_id).values()
         )
 
-    def test_canceled_job_leaves_no_thumbnails(self, sessions, storage, pages):
+    def test_canceled_job_leaves_no_thumbnails(self, sessions, storage, pages, enqueue):
         pages.configure(1)
         document_id, job_id = _seed_job(sessions, 1)
         with sessions() as session:
@@ -257,11 +292,12 @@ class TestThumbnailGeneration:
             )
 
         ingest_document(str(job_id))
+        _run_prepare_pages(enqueue, job_id)
 
         assert _key(document_id, 1) not in storage.objects
 
     def test_storage_failure_on_the_file_is_unaffected(
-        self, sessions, storage, pages, monkeypatch
+        self, sessions, storage, pages, monkeypatch, enqueue
     ):
         pages.configure(1)
         _, job_id = _seed_job(sessions, 1)
@@ -273,5 +309,6 @@ class TestThumbnailGeneration:
 
         with pytest.raises(requests.ConnectionError):
             ingest_document(str(job_id))
+        _run_prepare_pages(enqueue, job_id)
 
         assert storage.objects == {}
