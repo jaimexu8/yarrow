@@ -484,3 +484,31 @@ test('Set password keeps the dialog open when the password is wrong', async () =
     await within(dialog).findByText('Incorrect password. Try again.')
   ).toBeTruthy();
 });
+
+// US-116: a library with no documents shows the first-time guide, and it is
+// gone as soon as the user has a document.
+test('an empty library shows the first-time guide', () => {
+  state.documents = [];
+  render(<DocumentLibrary />);
+
+  expect(
+    screen.getByRole('heading', { name: 'Get started with Yarrow' })
+  ).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Upload documents' })).toBeTruthy();
+  expect(
+    screen.getByRole('button', { name: 'Try sample document' })
+  ).toBeTruthy();
+});
+
+test('the first-time guide is not shown once there is a document', () => {
+  state.documents = [makeDoc('a', 'yarrow-sample-document.pdf', 'queued')];
+  render(<DocumentLibrary />);
+
+  expect(
+    screen.queryByRole('heading', { name: 'Get started with Yarrow' })
+  ).toBeNull();
+  expect(
+    screen.queryByRole('button', { name: 'Try sample document' })
+  ).toBeNull();
+  expect(checkbox('yarrow-sample-document.pdf')).toBeTruthy();
+});

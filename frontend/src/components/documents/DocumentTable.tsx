@@ -24,7 +24,6 @@ import {
   Search,
   SearchX,
   Tag as TagIcon,
-  Upload,
   Trash,
   X,
   XCircle,
@@ -80,6 +79,7 @@ import {
   useReprocessAction,
   useCancelProcessing,
 } from './documentActions';
+import { FirstTimeGuide } from './FirstTimeGuide';
 
 const FILE_TYPE_LABELS: Record<string, string> = {
   'application/pdf': 'PDF',
@@ -494,7 +494,12 @@ export function DocumentLibrary() {
         </div>
 
         {documents.length === 0 ? (
-          <EmptyLibrary />
+          <FirstTimeGuide
+            onSampleUploaded={() => {
+              setAnnouncement('Sample document added. Processing has started.');
+              reload();
+            }}
+          />
         ) : inFolder.length === 0 ? (
           <EmptyFolder selection={currentFolder} folders={folders} />
         ) : visible.length === 0 ? (
@@ -1098,30 +1103,6 @@ function LoadingRows() {
           <div className="h-5 w-20 rounded-full bg-slate-100" />
         </div>
       ))}
-    </div>
-  );
-}
-
-function EmptyLibrary() {
-  return (
-    <div className="flex flex-col items-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-      <span className="flex size-11 items-center justify-center rounded-full bg-amber-50 text-amber-600">
-        <FileText aria-hidden="true" className="size-5" />
-      </span>
-      <h2 className="mt-4 text-base font-semibold text-slate-900">
-        No documents yet
-      </h2>
-      <p className="mt-1 max-w-sm text-sm text-slate-600">
-        Upload scanned PDFs or images and Yarrow will extract their text and
-        tables.
-      </p>
-      <Link
-        href="/upload"
-        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-      >
-        <Upload aria-hidden="true" className="size-4" />
-        Upload documents
-      </Link>
     </div>
   );
 }
