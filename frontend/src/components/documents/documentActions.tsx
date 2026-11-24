@@ -225,17 +225,21 @@ export function InterruptedNote({ children }: { children?: ReactNode }) {
 export function useReprocessAction(
   doc: DocumentSummary,
   onChanged: (doc: DocumentSummary) => void,
-  onStale?: () => void
+  onStale?: () => void,
+  options?: { skipTextLayer?: boolean }
 ) {
   const [reprocessing, setReprocessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const actionLabel = options?.skipTextLayer
+    ? 'Reprocess with ML'
+    : 'Reprocess';
 
   async function run() {
     setReprocessing(true);
     setError(null);
     try {
-      onChanged(await reprocessDocument(doc.id));
+      onChanged(await reprocessDocument(doc.id, options));
       setConfirming(false);
     } catch (err) {
       const apiError = toApiError(err);
@@ -258,6 +262,7 @@ export function useReprocessAction(
       open={confirming}
       reprocessing={reprocessing}
       error={error}
+      actionLabel={actionLabel}
       onConfirm={run}
       onClose={() => {
         setConfirming(false);
@@ -283,6 +288,7 @@ function ConfirmReprocessDialog({
   open,
   reprocessing,
   error,
+  actionLabel,
   onConfirm,
   onClose,
 }: {
@@ -290,6 +296,7 @@ function ConfirmReprocessDialog({
   open: boolean;
   reprocessing: boolean;
   error: string | null;
+  actionLabel: string;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -316,7 +323,7 @@ function ConfirmReprocessDialog({
             onClick={onConfirm}
             loading={reprocessing}
           >
-            {error ? 'Try again' : 'Reprocess'}
+            {error ? 'Try again' : actionLabel}
           </Button>
         </>
       }

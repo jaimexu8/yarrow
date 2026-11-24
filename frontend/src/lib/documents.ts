@@ -87,10 +87,15 @@ export function isWorkingOn(doc: DocumentSummary): boolean {
  * work (interrupted, failed or partly failed) reprocesses only the pages that
  * are not completed; a finished document is processed again in full
  */
-export async function reprocessDocument(id: string): Promise<DocumentSummary> {
-  const res = await api.post<DocumentSummary>(
-    `/api/v1/documents/${id}/reprocess`
-  );
+export async function reprocessDocument(
+  id: string,
+  options?: { skipTextLayer?: boolean }
+): Promise<DocumentSummary> {
+  const url = `/api/v1/documents/${id}/reprocess`;
+  // Without the opt-out, keep posting no body so existing callers are unchanged.
+  const res = options?.skipTextLayer
+    ? await api.post<DocumentSummary>(url, { skip_text_layer: true })
+    : await api.post<DocumentSummary>(url);
   return res.data;
 }
 
