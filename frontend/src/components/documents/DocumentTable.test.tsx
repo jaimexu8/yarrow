@@ -16,6 +16,7 @@ import {
 import { addDocumentTag, removeDocumentTag } from '@/lib/tags';
 import { createFolder, listFolders } from '@/lib/folders';
 import { setDocumentPassword } from '@/lib/viewer';
+import { uploadSampleDocument } from '@/lib/sampleDocument';
 import { DocumentLibrary } from './DocumentTable';
 
 const state = vi.hoisted(() => ({
@@ -42,6 +43,10 @@ vi.mock('@/lib/documents', async (importOriginal) => {
     moveDocumentToFolder: vi.fn(),
   };
 });
+
+vi.mock('@/lib/sampleDocument', () => ({
+  uploadSampleDocument: vi.fn(),
+}));
 
 vi.mock('@/lib/tags', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/tags')>();
@@ -511,4 +516,50 @@ test('the first-time guide is not shown once there is a document', () => {
     screen.queryByRole('button', { name: 'Try sample document' })
   ).toBeNull();
   expect(checkbox('yarrow-sample-document.pdf')).toBeTruthy();
+});
+
+test('adding the sample announces it and moves focus to the search box', async () => {
+  vi.mocked(uploadSampleDocument).mockResolvedValueOnce({
+    kind: 'accepted',
+    documentId: 'a',
+    processingStarted: true,
+  });
+  state.documents = [];
+  const { rerender } = render(<DocumentLibrary />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Try sample document' }));
+  await waitFor(() =>
+    expect(
+      screen.getByText('Sample document added. Processing has started.')
+    ).toBeTruthy()
+  );
+  // The list reloads with the sample in it; the guide and its button go.
+  state.documents = [makeDoc('a', 'yarrow-sample-document.pdf', 'queued')];
+  rerender(<DocumentLibrary />);
+
+  expect(screen.queryByRole('button', { name: /sample document/i })).toBeNull();
+  expect(document.activeElement).toBe(
+    screen.getByRole('searchbox', { name: 'Search documents by name' })
+  );
+});
+
+test('a sample that could not be queued is announced with the reason', async () => {
+  vi.mocked(uploadSampleDocument).mockResolvedValueOnce({
+    kind: 'accepted',
+    documentId: 'a',
+    processingStarted: false,
+    message: 'Processing could not be started.',
+  });
+  state.documents = [];
+  render(<DocumentLibrary />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Try sample document' }));
+
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'Sample document added. Processing could not be started.'
+      )
+    ).toBeTruthy()
+  );
 });

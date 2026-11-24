@@ -138,6 +138,15 @@ export function DocumentLibrary() {
   const [announcement, setAnnouncement] = useState('');
   const filterId = useId();
   const filterInput = useRef<HTMLInputElement>(null);
+  // The first-time guide is replaced by the library once its sample is in
+  // the list. Its button goes with it, so focus is handed to the search box.
+  const sampleAdded = useRef(false);
+  const hasDocuments = (documents?.length ?? 0) > 0;
+  useEffect(() => {
+    if (!sampleAdded.current || !hasDocuments) return;
+    sampleAdded.current = false;
+    filterInput.current?.focus();
+  }, [hasDocuments]);
   const [deletions, setDeletions] = useState(0);
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [foldersError, setFoldersError] = useState<string | null>(null);
@@ -495,8 +504,13 @@ export function DocumentLibrary() {
 
         {documents.length === 0 ? (
           <FirstTimeGuide
-            onSampleUploaded={() => {
-              setAnnouncement('Sample document added. Processing has started.');
+            onSampleUploaded={(sample) => {
+              setAnnouncement(
+                sample.processingStarted
+                  ? 'Sample document added. Processing has started.'
+                  : `Sample document added. ${sample.message ?? 'Processing could not be started.'}`
+              );
+              sampleAdded.current = true;
               reload();
             }}
           />

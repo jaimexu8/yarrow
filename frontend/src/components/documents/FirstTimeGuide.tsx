@@ -33,11 +33,15 @@ const STEPS = [
  *
  * ``onSampleUploaded`` is called once the example is in the library, so the
  * caller can reload its list; the guide then goes away with the empty state.
+ * It is told whether processing started, and the server's note if it did not.
  */
 export function FirstTimeGuide({
   onSampleUploaded,
 }: {
-  onSampleUploaded: () => void;
+  onSampleUploaded: (sample: {
+    processingStarted: boolean;
+    message?: string;
+  }) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +52,10 @@ export function FirstTimeGuide({
     const outcome = await uploadSampleDocument();
     if (outcome.kind === 'accepted') {
       // Stays busy: the guide is replaced by the library once it reloads.
-      onSampleUploaded();
+      onSampleUploaded({
+        processingStarted: outcome.processingStarted,
+        message: outcome.message,
+      });
       return;
     }
     setError(

@@ -68,6 +68,10 @@ test('Try sample document uploads the sample and tells the library', async () =>
   expect((busy as HTMLButtonElement).disabled).toBe(true);
   expect(busy.getAttribute('aria-busy')).toBe('true');
   await waitFor(() => expect(onSampleUploaded).toHaveBeenCalledTimes(1));
+  expect(onSampleUploaded).toHaveBeenCalledWith({
+    processingStarted: true,
+    message: undefined,
+  });
   expect(uploadSampleDocument).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('alert')).toBeNull();
 });
@@ -101,5 +105,25 @@ test('a rejected sample upload shows the reason from the server', async () => {
   const alert = await screen.findByRole('alert');
   expect(alert.textContent).toBe(
     'The sample document was not added. You have reached your storage limit.'
+  );
+});
+
+test('a sample that was stored but not queued passes the reason on', async () => {
+  vi.mocked(uploadSampleDocument).mockResolvedValueOnce({
+    kind: 'accepted',
+    documentId: 'doc-1',
+    processingStarted: false,
+    message: 'Processing could not be started. Use Reprocess to try again.',
+  });
+  const onSampleUploaded = vi.fn();
+  render(<FirstTimeGuide onSampleUploaded={onSampleUploaded} />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Try sample document' }));
+
+  await waitFor(() =>
+    expect(onSampleUploaded).toHaveBeenCalledWith({
+      processingStarted: false,
+      message: 'Processing could not be started. Use Reprocess to try again.',
+    })
   );
 });
