@@ -42,7 +42,7 @@ services:
     restart: unless-stopped
 
   rustfs:
-    image: rustfs/rustfs:1.0.3@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b
+    image: rustfs/rustfs:1.0.6@sha256:ee717072290bec9b11abfc0365f8310b00df1cd9b3639943edae47bdef05044a
     container_name: yarrow_rustfs
     environment:
       RUSTFS_VOLUMES: /data/rustfs0
@@ -78,20 +78,20 @@ services:
     restart: "no"
 
   create-bucket:
-    image: rustfs/rc:v0.1.36@sha256:ab024bfebee49a750ce886b4c70963ccd9ddaa03f491704a90710641d7a26699
+    image: rustfs/rc:v0.1.37@sha256:7e93fd410a8fe51514f89373e093392c92095b98dc6140335fcfe956810c4c80
     container_name: yarrow_s3_setup
     depends_on:
       rustfs:
         condition: service_healthy
-    # Anonymous access is public read-only (list/get, no put). To allow
-    # anonymous writes instead, change "download" to "public" below.
+    # The bucket is private: objects are only reachable with the S3 access key
+    # or a presigned URL. No anonymous policy is applied, so an unsigned request
+    # to the endpoint is denied.
     entrypoint:
       - /bin/sh
       - -c
       - >-
         rc alias set rustfs http://rustfs:9000 ${S3_ACCESS_KEY:-rustfsadmin} ${S3_SECRET_KEY:-rustfsadmin}
         && rc mb rustfs/${S3_BUCKET_NAME:-yarrow-documents} --ignore-existing
-        && rc anonymous set download rustfs/${S3_BUCKET_NAME:-yarrow-documents}
 
   mailpit:
     image: axllent/mailpit:latest@sha256:94f6b70c1436defae6799d9ac7ff0eeff9540465b842026d5cdb018f1c0234ea
@@ -182,8 +182,51 @@ services:
       context: .
       dockerfile: worker/Dockerfile
     container_name: yarrow_worker
-    # Lets the worker reach the host-local OCR stack (ocr_cluster/x86,
-    # published on host port 8080) via INFERENCE_SERVICE_URL.
+    # Handles the default queue (ingest/finalize/sweeper) and runs the beat
+    # schedule. Beat must be single-replica, so this service stays at one
+    # replica. It never talks to the OCR gateway.
+    volumes:
+      - ./worker:/app/worker
+      - ./packages:/app/packages
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-yarrow}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yarrow_password}
+      - POSTGRES_DB=${POSTGRES_DB:-yarrow}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - VALKEY_HOST=valkey
+      - VALKEY_PORT=6379
+      - CELERY_BROKER_URL=redis://valkey:6379/1
+      - CELERY_RESULT_BACKEND=redis://valkey:6379/2
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-rustfsadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-rustfsadmin}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-yarrow-documents}
+      - STORAGE_SWEEP_ENABLED=${STORAGE_SWEEP_ENABLED:-true}
+      - STORAGE_SWEEP_DRY_RUN=${STORAGE_SWEEP_DRY_RUN:-true}
+      - STORAGE_SWEEP_GRACE_HOURS=${STORAGE_SWEEP_GRACE_HOURS:-24}
+      - STORAGE_SWEEP_MAX_DELETES=${STORAGE_SWEEP_MAX_DELETES:-10000}
+      - STORAGE_SWEEP_LOCK_SECONDS=${STORAGE_SWEEP_LOCK_SECONDS:-7200}
+      - STORAGE_SWEEP_CRON_HOUR=${STORAGE_SWEEP_CRON_HOUR:-3}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+    command: celery -A app.celery_app worker -Q default --concurrency=2 --loglevel=info -B
+    restart: unless-stopped
+
+  worker-ocr:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: yarrow_worker_ocr
+    # Dedicated OCR queue worker: the only service that talks to the
+    # inference gateway, so it alone carries the inference env and the
+    # host-gateway extra_hosts entry for the host-local OCR stack
+    # (ocr_cluster/x86, published on host port 8080).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -205,6 +248,7 @@ services:
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-yarrow-documents}
       - INFERENCE_SERVICE_URL=${INFERENCE_SERVICE_URL}
       - INFERENCE_API_KEY=${INFERENCE_API_KEY:-}
+      - INFERENCE_TIMEOUT_SECONDS=540
     depends_on:
       postgres:
         condition: service_healthy
@@ -212,7 +256,7 @@ services:
         condition: service_healthy
       rustfs:
         condition: service_healthy
-    command: celery -A app.celery_app worker --loglevel=info
+    command: celery -A app.celery_app worker -Q ocr --concurrency=${OCR_CONCURRENCY:-3} --loglevel=info
     restart: unless-stopped
 
   frontend:

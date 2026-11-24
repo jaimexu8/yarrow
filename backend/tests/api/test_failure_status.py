@@ -39,12 +39,14 @@ async def _finish(
     status: str,
     message: str | None,
     pages: list[tuple[str, str | None]] = (),
+    error_stage: str | None = None,
 ):
     """Write what the worker writes when a job ends."""
     document = await db_session.get(Document, document_id)
     job = await db_session.get(Job, job_id)
     document.status = job.status = status
     document.error_message = job.error_message = message
+    job.error_stage = error_stage
     for number, (page_status, page_error) in enumerate(pages, start=1):
         db_session.add(
             Page(
@@ -73,6 +75,7 @@ class TestFailedIsShownAsFailed:
             job_id,
             status="failed",
             message="3 of 3 page(s) failed: 1, 2, 3",
+            error_stage="parsing",
         )
 
         listed = await _listed(client, auth_headers, document_id)
@@ -82,8 +85,11 @@ class TestFailedIsShownAsFailed:
 
         assert listed["status"] == "failed"
         assert listed["error_message"] == "3 of 3 page(s) failed: 1, 2, 3"
+        assert listed["error_stage"] == "parsing"
         assert detail["status"] == "failed"
+        assert detail["error_stage"] == "parsing"
         assert detail["jobs"][0]["status"] == "failed"
+        assert detail["jobs"][0]["error_stage"] == "parsing"
 
     async def test_failed_document_always_has_a_reason(
         self, client, auth_headers, fake_storage, fake_queue, db_session
@@ -157,6 +163,7 @@ class TestSuccessIsNotMarkedFailed:
 
         assert listed["status"] == "completed"
         assert listed["error_message"] is None
+        assert listed["error_stage"] is None
 
 
 class TestInternalsAreNotShown:
@@ -172,17 +179,29 @@ class TestInternalsAreNotShown:
     ):
         document_id, job_id = await _upload(client, auth_headers)
         await _finish(
-            db_session, document_id, job_id, status="failed", message=self.RAW
+            db_session,
+            document_id,
+            job_id,
+            status="failed",
+            message=self.RAW,
+            error_stage="downloading",
         )
 
         listed = await _listed(client, auth_headers, document_id)
-        detail = (
-            await client.get(f"{DOCUMENTS}{document_id}", headers=auth_headers)
-        ).text
+        detail_response = await client.get(
+            f"{DOCUMENTS}{document_id}", headers=auth_headers
+        )
+        detail = detail_response.json()
 
         assert listed["error_message"] == DOCUMENT_FAILED_MESSAGE
-        assert "inference" not in detail
-        assert "HTTPConnectionPool" not in detail
+        assert listed["error_stage"] == "downloading"
+        assert detail["error_stage"] == "downloading"
+        assert detail["jobs"][0]["error_stage"] == "downloading"
+        # The stage is a fixed label, never the raw text from the worker.
+        assert "inference" not in detail_response.text
+        assert "HTTPConnectionPool" not in detail_response.text
+        assert "HTTPConnectionPool" not in listed["error_message"]
+        assert "error_detail" not in detail
 
     async def test_storage_key_is_not_shown(
         self, client, auth_headers, fake_storage, fake_queue, db_session

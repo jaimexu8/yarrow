@@ -41,6 +41,7 @@ class JobPage(Base):
     status = Column(String(16), nullable=False, default="queued")
     error_code = Column(String(32))
     error_message = Column(String)
+    queued_at = Column(DateTime)
     started_at = Column(DateTime)
     finished_at = Column(DateTime)
 

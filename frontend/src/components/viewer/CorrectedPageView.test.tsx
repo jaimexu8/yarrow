@@ -65,6 +65,7 @@ function documentSummary(): DocumentSummary {
     page_count: 1,
     status: 'completed',
     error_message: null,
+    error_stage: null,
     created_at: null,
     folder_id: null,
   };

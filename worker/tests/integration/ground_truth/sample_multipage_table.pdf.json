@@ -19,6 +19,13 @@
           },
           {
             "reading_order": 1,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 2,
             "region_type": "table",
             "block_label": "table",
             "is_table": true,
@@ -67,8 +74,8 @@
       "counts": {
         "documents": 1,
         "pages": 4,
-        "regions": 5,
-        "region_texts": 1,
+        "regions": 6,
+        "region_texts": 2,
         "tables": 4,
         "region_tables": 4,
         "table_cells": 204
@@ -83,7 +90,7 @@
             {
               "reading_order": 0,
               "page_number": 1,
-              "region_reading_order": 1,
+              "region_reading_order": 2,
               "row_start": 0,
               "row_end": 16,
               "col_start": 0,
@@ -360,8 +367,8 @@
       "counts": {
         "documents": 1,
         "pages": 4,
-        "regions": 5,
-        "region_texts": 1,
+        "regions": 6,
+        "region_texts": 2,
         "tables": 1,
         "region_tables": 4,
         "table_cells": 204
@@ -376,7 +383,7 @@
             {
               "reading_order": 0,
               "page_number": 1,
-              "region_reading_order": 1,
+              "region_reading_order": 2,
               "row_start": 0,
               "row_end": 16,
               "col_start": 0,

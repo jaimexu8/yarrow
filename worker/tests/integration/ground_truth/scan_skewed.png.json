@@ -1,0 +1,40 @@
+{
+  "file": "scan_skewed.png",
+  "bytes": 7010796,
+  "sha256": "9a9670c4e132c1a677c33e872f8a6437c567fcca439bca36f92f496702ce83bd",
+  "detected_extension": "png",
+  "kind": "processable",
+  "expected_pages": 1,
+  "model_graph": {
+    "pages": [
+      {
+        "page_number": 1,
+        "regions": []
+      }
+    ],
+    "unmerged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 0,
+        "region_texts": 0,
+        "tables": 0,
+        "region_tables": 0,
+        "table_cells": 0
+      },
+      "tables": []
+    },
+    "merged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 0,
+        "region_texts": 0,
+        "tables": 0,
+        "region_tables": 0,
+        "table_cells": 0
+      },
+      "tables": []
+    }
+  }
+}

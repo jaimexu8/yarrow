@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import {
   cleanup,
   fireEvent,
@@ -17,6 +17,7 @@ import { addDocumentTag, removeDocumentTag } from '@/lib/tags';
 import { createFolder, listFolders } from '@/lib/folders';
 import { setDocumentPassword } from '@/lib/viewer';
 import { DocumentLibrary } from './DocumentTable';
+import { FailureNote } from './documentActions';
 
 const state = vi.hoisted(() => ({
   documents: [] as DocumentSummary[],
@@ -97,6 +98,7 @@ function makeDoc(
     page_count: 1,
     status,
     error_message: null,
+    error_stage: null,
     created_at: '2025-01-01T00:00:00',
     folder_id: null,
     tags,
@@ -483,4 +485,55 @@ test('Set password keeps the dialog open when the password is wrong', async () =
   expect(
     await within(dialog).findByText('Incorrect password. Try again.')
   ).toBeTruthy();
+});
+
+describe('FailureNote', () => {
+  test('shows the stage phrase and reason for a failed document', () => {
+    render(
+      <FailureNote
+        doc={{
+          ...makeDoc('c', 'invoice-c.pdf', 'failed'),
+          error_message: '2 of 2 page(s) failed: 1, 2',
+          error_stage: 'parsing',
+        }}
+      >
+        <button type="button">Reprocess</button>
+      </FailureNote>
+    );
+
+    expect(
+      screen.getByText(
+        /Failed while reading pages: 2 of 2 page\(s\) failed: 1, 2/
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText(/Some pages could not be read/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Reprocess' })).toBeTruthy();
+  });
+
+  test('keeps the amber warning for a completed document with partial failures', () => {
+    render(
+      <FailureNote
+        doc={{
+          ...makeDoc('a', 'report-a.pdf', 'completed'),
+          error_message: '2 of 2 page(s) failed: 1, 2',
+          error_stage: 'parsing',
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        /Some pages could not be read: 2 of 2 page\(s\) failed: 1, 2/
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText(/Failed while/)).toBeNull();
+  });
+
+  test('shows nothing for a completed document with no error message', () => {
+    const { container } = render(
+      <FailureNote doc={makeDoc('a', 'report-a.pdf', 'completed')} />
+    );
+
+    expect(container.textContent).toBe('');
+  });
 });

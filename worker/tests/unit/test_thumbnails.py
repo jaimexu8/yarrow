@@ -1,6 +1,7 @@
 import base64
 import io
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -9,12 +10,13 @@ from PIL import Image
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import sessionmaker
 from yarrow_db.models import Base, Document, Job, Page
+from yarrow_storage import StoredObject
 
 from app.core.config import settings
 from app.pipeline.document_parser import DocumentParser
 from app.pipeline.thumbnails import build_thumbnail
 from app.tasks import ingestion
-from app.tasks.ingestion import process_document_task
+from app.tasks.ingestion import ingest_document
 
 OK_RESPONSE = {
     "result": {
@@ -62,7 +64,6 @@ class Storage:
     def __init__(self):
         self.objects: dict[str, bytes] = {}
         self.failing: set[str] = set()
-        self.uploaded_before_ocr: set[str] = set()
 
     def download_bytes(self, key):
         return b"file"
@@ -75,6 +76,13 @@ class Storage:
     def delete_file(self, key):
         self.objects.pop(key, None)
 
+    def list_objects(self, prefix):
+        return (
+            StoredObject(key=key, last_modified=datetime.now(UTC), size=len(value))
+            for key, value in self.objects.items()
+            if key.startswith(prefix)
+        )
+
 
 @pytest.fixture
 def storage(monkeypatch):
@@ -84,34 +92,36 @@ def storage(monkeypatch):
 
 
 @pytest.fixture
-def pages(monkeypatch, storage):
+def pages(monkeypatch):
     page_count = {"value": 3}
-    hooks: list = []
 
-    def load_file(self, file_data):
+    def count_pages(self, file_data, **kwargs):
+        return page_count["value"]
+
+    def load_file(self, file_data, **kwargs):
         self.pages = [
             _page_image(number) for number in range(1, page_count["value"] + 1)
         ]
 
-    def process_page(self, page_data, page_index):
-        storage.uploaded_before_ocr.update(storage.objects)
-        page_number = self.pages.index(page_data) + 1
-        for hook in hooks:
-            hook(page_number)
-        return OK_RESPONSE
+    def load_pages(self, file_data, page_numbers, **kwargs):
+        selected = set(page_numbers)
+        self.pages = [
+            _page_image(number) if number in selected else ""
+            for number in range(1, page_count["value"] + 1)
+        ]
 
+    def correct_orientations(self, pages_to_process=None):
+        return None
+
+    monkeypatch.setattr(DocumentParser, "count_pages", count_pages, raising=False)
     monkeypatch.setattr(DocumentParser, "load_file", load_file)
-    monkeypatch.setattr(
-        DocumentParser, "correct_orientations", lambda self, pages_to_process=None: None
-    )
-    monkeypatch.setattr(DocumentParser, "process_page", process_page)
+    monkeypatch.setattr(DocumentParser, "load_pages", load_pages, raising=False)
+    monkeypatch.setattr(DocumentParser, "correct_orientations", correct_orientations)
+    monkeypatch.setattr(DocumentParser, "apply_manual_rotations", lambda self, r: None)
 
     class Pages:
         def configure(self, count: int):
             page_count["value"] = count
-
-        def on_request(self, hook):
-            hooks.append(hook)
 
     return Pages()
 
@@ -148,6 +158,20 @@ def _pages(session_scope, document_id: UUID) -> dict[int, Page]:
 
 def _key(document_id: UUID, page_number: int) -> str:
     return f"documents/{document_id}/thumbnails/{page_number}.webp"
+
+
+PREPARE = "app.tasks.ingestion.prepare_pages"
+
+
+def _run_prepare_pages(enqueue, job_id):
+    """Run every prepare_pages batch ingest_document enqueued for this job."""
+    batches = [
+        args[1]
+        for name, _queue, args in list(enqueue)
+        if name == PREPARE and args[0] == str(job_id)
+    ]
+    for page_numbers in batches:
+        ingestion.prepare_pages(str(job_id), page_numbers)
 
 
 class TestBuildThumbnail:
@@ -191,47 +215,42 @@ class TestBuildThumbnail:
         assert thumbnail.size == (80, 100)
 
 
+@pytest.mark.usefixtures("enqueue")
 class TestThumbnailGeneration:
-    def test_every_page_gets_a_thumbnail_before_ocr(self, sessions, storage, pages):
+    def test_every_run_page_gets_a_thumbnail(self, sessions, storage, pages, enqueue):
         pages.configure(3)
         document_id, job_id = _seed_job(sessions, 3)
 
-        process_document_task(str(job_id))
+        ingest_document(str(job_id))
+        _run_prepare_pages(enqueue, job_id)
 
         stored = _pages(sessions, document_id)
         assert {number: page.thumbnail_key for number, page in stored.items()} == {
             number: _key(document_id, number) for number in (1, 2, 3)
         }
-        assert all(page.has_thumbnail for page in stored.values())
-        assert {
-            _key(document_id, number) for number in (1, 2, 3)
-        } <= storage.uploaded_before_ocr
         thumbnail = Image.open(io.BytesIO(storage.objects[_key(document_id, 1)]))
         assert thumbnail.format == "WEBP"
         assert thumbnail.size == (160, 200)
 
-    def test_upload_failure_does_not_fail_the_job(self, sessions, storage, pages):
+    def test_upload_failure_does_not_fail_the_job(
+        self, sessions, storage, pages, enqueue
+    ):
         pages.configure(2)
         document_id, job_id = _seed_job(sessions, 2)
         storage.failing.add(_key(document_id, 2))
 
-        process_document_task(str(job_id))
+        ingest_document(str(job_id))  # must not raise
+        _run_prepare_pages(enqueue, job_id)
 
         with sessions() as session:
             job = session.get(Job, job_id)
-            document = session.get(Document, document_id)
+        assert job.status == "processing"
         stored = _pages(sessions, document_id)
-        assert job.status == "completed"
-        assert document.status == "completed"
-        assert {number: page.status for number, page in stored.items()} == {
-            1: "completed",
-            2: "completed",
-        }
         assert stored[1].thumbnail_key == _key(document_id, 1)
         assert stored[2].thumbnail_key is None
 
     def test_unreadable_page_image_does_not_fail_the_job(
-        self, sessions, storage, pages, monkeypatch
+        self, sessions, storage, pages, monkeypatch, enqueue
     ):
         pages.configure(1)
         document_id, job_id = _seed_job(sessions, 1)
@@ -241,16 +260,18 @@ class TestThumbnailGeneration:
 
         monkeypatch.setattr(ingestion, "build_thumbnail", broken)
 
-        process_document_task(str(job_id))
+        ingest_document(str(job_id))  # must not raise
+        _run_prepare_pages(enqueue, job_id)
 
         with sessions() as session:
-            assert session.get(Job, job_id).status == "completed"
+            assert session.get(Job, job_id).status == "processing"
         assert _pages(sessions, document_id)[1].thumbnail_key is None
 
-    def test_reprocess_rewrites_only_its_pages(self, sessions, storage, pages):
+    def test_reprocess_rewrites_only_its_pages(self, sessions, storage, pages, enqueue):
         pages.configure(3)
         document_id, job_id = _seed_job(sessions, 3)
-        process_document_task(str(job_id))
+        ingest_document(str(job_id))
+        _run_prepare_pages(enqueue, job_id)
         storage.objects = {key: b"old" for key in storage.objects}
         with sessions() as session:
             rerun = Job(
@@ -261,7 +282,8 @@ class TestThumbnailGeneration:
             )
             session.add(rerun)
 
-        process_document_task(str(rerun.id), page_to_process=(2,))
+        ingest_document(str(rerun.id), pages=(2,))
+        _run_prepare_pages(enqueue, rerun.id)
 
         assert storage.objects[_key(document_id, 1)] == b"old"
         assert storage.objects[_key(document_id, 3)] == b"old"
@@ -270,51 +292,21 @@ class TestThumbnailGeneration:
             page.thumbnail_key for page in _pages(sessions, document_id).values()
         )
 
-    def test_canceled_first_run_leaves_no_thumbnails(self, sessions, storage, pages):
+    def test_canceled_job_leaves_no_thumbnails(self, sessions, storage, pages, enqueue):
         pages.configure(1)
         document_id, job_id = _seed_job(sessions, 1)
+        with sessions() as session:
+            session.execute(
+                update(Job).where(Job.id == job_id).values(status="canceled")
+            )
 
-        def cancel(page_number):
-            with sessions() as session:
-                session.execute(
-                    update(Job).where(Job.id == job_id).values(status="canceled")
-                )
-
-        pages.on_request(cancel)
-
-        process_document_task(str(job_id))
+        ingest_document(str(job_id))
+        _run_prepare_pages(enqueue, job_id)
 
         assert _key(document_id, 1) not in storage.objects
 
-    def test_canceled_reprocess_keeps_the_thumbnails_pages_point_at(
-        self, sessions, storage, pages
-    ):
-        pages.configure(1)
-        document_id, job_id = _seed_job(sessions, 1)
-        process_document_task(str(job_id))
-        with sessions() as session:
-            rerun = Job(
-                id=uuid4(),
-                document_id=document_id,
-                status="queued",
-                current_stage="queued",
-            )
-            session.add(rerun)
-
-        def cancel(page_number):
-            with sessions() as session:
-                session.execute(
-                    update(Job).where(Job.id == rerun.id).values(status="canceled")
-                )
-
-        pages.on_request(cancel)
-
-        process_document_task(str(rerun.id))
-
-        assert _key(document_id, 1) in storage.objects
-
     def test_storage_failure_on_the_file_is_unaffected(
-        self, sessions, storage, pages, monkeypatch
+        self, sessions, storage, pages, monkeypatch, enqueue
     ):
         pages.configure(1)
         _, job_id = _seed_job(sessions, 1)
@@ -325,6 +317,7 @@ class TestThumbnailGeneration:
         monkeypatch.setattr(storage, "download_bytes", unavailable)
 
         with pytest.raises(requests.ConnectionError):
-            process_document_task(str(job_id))
+            ingest_document(str(job_id))
+        _run_prepare_pages(enqueue, job_id)
 
         assert storage.objects == {}

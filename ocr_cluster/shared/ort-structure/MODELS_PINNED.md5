@@ -1,0 +1,17 @@
+# Pinned-model manifest for the ort-structure image (build-time download).
+# One line per model the server loads, three whitespace-separated columns:
+#     <md5>  <filename (in /opt/ort/models)>  <pinned HuggingFace URL>
+# The URL is pinned to a commit hash, not `main`, so a re-download cannot
+# silently change a model. The Dockerfile reads this file, downloads each URL
+# into /opt/ort/models/, and verifies the md5, failing the build on any
+# mismatch.
+#
+# Source for the commits and md5s: ort-eval/results/parity/MODELS_PINNED.md
+# (and .md5). These are the 5 production models the server loads; the manifest's
+# other entries (V2/V3, textline-ori, rec, SLANeXt, SLANet) are comparison or
+# unused-by-this-server models and are intentionally not shipped.
+25ac9ffd23e4592a3ede4022378bc60e  doclayout_plusL.onnx  https://huggingface.co/PaddlePaddle/PP-DocLayout_plus-L_onnx/resolve/feb74619326f634e0e883218598096a3733ad9f7/inference.onnx
+0fa56aa141e26453f3575c9219cb1123  table_cls.onnx  https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_table_cls_onnx/resolve/605f623b09f67a562bae77e781d5d5266f14905a/inference.onnx
+5c6d152c323239274b6559b3a69ec807  wired_cell.onnx  https://huggingface.co/PaddlePaddle/RT-DETR-L_wired_table_cell_det_onnx/resolve/b2c0720b5fe6f1c0dd40f8a7993a3f28e04252f8/inference.onnx
+6af80cd8f7c42794836eb16765ca52f6  wireless_cell.onnx  https://huggingface.co/PaddlePaddle/RT-DETR-L_wireless_table_cell_det_onnx/resolve/94c021be206064f0136ef1383fbd4b68b168fa61/inference.onnx
+198253963920c4aecfb7a491095963ca  ocrv5_mobile_det.onnx  https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx/resolve/e6f4fa85f00e168c862bc462aebca69eef9b3d3d/inference.onnx

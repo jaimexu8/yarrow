@@ -7,6 +7,7 @@ venv/
 ENV/
 env/
 .env
+.hypothesis/
 
 # Node
 node_modules/
@@ -28,6 +29,10 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.*
 
 # Local uploads/storage
 /storage/

@@ -1,0 +1,237 @@
+{
+  "file": "scan_truncated.png",
+  "bytes": 8546963,
+  "sha256": "44c15350c022339a31c7817766682860a42c1888758211a7af15b991d1eb5f8f",
+  "detected_extension": "png",
+  "kind": "processable",
+  "expected_pages": 1,
+  "model_graph": {
+    "pages": [
+      {
+        "page_number": 1,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph",
+            "block_label": "number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 2,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 3,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 4,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 5,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 6,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 7,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 8,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 9,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 10,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 11,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 12,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 13,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 14,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 15,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 16,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 17,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 18,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 19,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 20,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 21,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 22,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 23,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 24,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 25,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 26,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 27,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          }
+        ]
+      }
+    ],
+    "unmerged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 28,
+        "region_texts": 27,
+        "tables": 0,
+        "region_tables": 0,
+        "table_cells": 0
+      },
+      "tables": []
+    },
+    "merged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 28,
+        "region_texts": 27,
+        "tables": 0,
+        "region_tables": 0,
+        "table_cells": 0
+      },
+      "tables": []
+    }
+  }
+}

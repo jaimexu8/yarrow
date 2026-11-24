@@ -62,6 +62,7 @@ export type AdminJob = {
   pages_processed: number | null;
   total_pages: number | null;
   error_message: string | null;
+  error_stage: string | null;
   created_at: string | null;
   is_stuck: boolean;
   can_cancel: boolean;

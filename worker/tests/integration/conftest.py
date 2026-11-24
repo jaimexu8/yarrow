@@ -25,10 +25,21 @@ from yarrow_db.models import (
 from yarrow_db.session import session_scope
 from yarrow_storage import get_storage
 
+from app.core.config import settings
 from app.pipeline.document_parser import DocumentParser, PageError
 from app.tasks import ingestion
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(autouse=True)
+def goldens_use_ml_path(monkeypatch):
+    """Keep the captured ground truth valid: it came from the ML path.
+
+    Individual tests can re-enable TEXT_LAYER_ENABLED with monkeypatch.
+    """
+    monkeypatch.setattr(settings, "TEXT_LAYER_ENABLED", False)
+
 
 TEST_DOCS_DIR = os.path.join(os.path.dirname(__file__), "test_docs")
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
@@ -62,11 +73,16 @@ class TestInitializer:
     def job_ids(self) -> list[UUID]:
         return [record.job_id for record in self.records]
 
-    def configure(self, filenames: list[str], filepaths: list[str]) -> list[SeededDocument]:
+    def configure(
+        self, filenames: list[str], filepaths: list[str]
+    ) -> list[SeededDocument]:
         """Upload each file and insert its document and job rows"""
 
         if len(filenames) != len(filepaths):
-            raise ValueError(f"filenames and filepaths must be the same length, " f"got {len(filenames)} and {len(filepaths)}")
+            raise ValueError(
+                f"filenames and filepaths must be the same length, "
+                f"got {len(filenames)} and {len(filepaths)}"
+            )
 
         owner: User | None = None
         if self.owner_id is None:
@@ -171,7 +187,9 @@ class TestInitializer:
         page_ids = select(Page.id).where(Page.document_id.in_(document_ids))
         region_ids = select(Region.id).where(Region.page_id.in_(page_ids))
         table_ids = select(Table.id).where(Table.document_id.in_(document_ids))
-        region_table_ids = select(RegionTable.id).where(RegionTable.region_id.in_(region_ids) | RegionTable.table_id.in_(table_ids))
+        region_table_ids = select(RegionTable.id).where(
+            RegionTable.region_id.in_(region_ids) | RegionTable.table_id.in_(table_ids)
+        )
 
         statements = [
             delete(TableCell).where(TableCell.region_table_id.in_(region_table_ids)),
@@ -192,6 +210,7 @@ class TestInitializer:
             for statement in statements:
                 session.execute(statement.execution_options(synchronize_session=False))
 
+
 class FakeDocumentParser(DocumentParser):
     failed: ClassVar[set[int]] = set()
 
@@ -203,21 +222,26 @@ class FakeDocumentParser(DocumentParser):
     def configure(cls, failed=()):
         cls.failed = set(failed)
 
-    def _process_page_isolated(self, page_index: int, page_data: str):
+    def _process_page_isolated(
+        self, page_index: int, page_data: str, structure_only: bool = False
+    ):
         if page_index in self.failed:
             self._emit_page_event(page_index + 1, "started")
-            self.page_errors[page_index] = PageError("unknown", "Exception: Simulated failure")
+            self.page_errors[page_index] = PageError(
+                "unknown", "Exception: Simulated failure"
+            )
             self._emit_page_event(page_index + 1, "failed")
             return {}
 
-        return super()._process_page_isolated(page_index, page_data)
-        
+        return super()._process_page_isolated(page_index, page_data, structure_only)
+
 
 @pytest.fixture
 def test_initializer():
     initializer = TestInitializer()
     yield initializer
     initializer.teardown()
+
 
 @pytest.fixture
 def parser(monkeypatch):

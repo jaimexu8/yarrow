@@ -1,37 +1,41 @@
-# Built from paddlex.Dockerfile. The Paddle source build is the first stage and
-# stays cached; shared/entrypoint.sh and paddlex_wrapper.py copy in the last
-# layers, so a script edit rebuilds in seconds. If the build cache is evicted,
-# --build recompiles Paddle from source (hours).
-# from source (hours).
-x-pipeline-image: &pipeline-image
-  image: ${PIPELINE_IMAGE:-paddleocr-pipeline:gpu}
-  build:
-    context: .
-    dockerfile: paddlex.Dockerfile
-    additional_contexts:
-      - shared=../shared
+# Inference node for the hybrid gateway. The gateway posts each page to
+# ort-structure for layout, then calls the VLM chat API directly for every crop;
+# there is no Paddle serving hop.
+#
+# ort-structure and the gateway are built locally; vlm-server pulls a pinned
+# vLLM image. ORT_MEM_CAP trims ORT's GPU share on a memory-tight host.
 
 services:
-  paddlex-pipeline:
-    <<: *pipeline-image
+  # Paddle-free PP-StructureV3 structure service. It
+  # is the structure backend on this node: the gateway posts every page to it
+  # See shared/ort-structure/README.md.
+  ort-structure:
+    build:
+      context: ../shared/ort-structure
+      dockerfile: Dockerfile
+    image: yarrow-ort-structure:latest
     environment:
-      DEVICE: gpu
+      STRUCTURE_API_KEY: "${STRUCTURE_API_KEY:?set STRUCTURE_API_KEY in .env}"
+      CUDA_DEVICE_ID: "0"
+      MODEL_DIR: /opt/ort/models
+      ORT_MEM_CAP: "0"
+    mem_limit: 6g
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      # /ready returns 503 until the five models load; 600 s start_period covers
+      # the load on a contended GPU.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready')"]
+      start_period: 600s
       interval: 15s
-      timeout: 5s
-      retries: 40
-      start_period: 300s
+      timeout: 10s
+      retries: 60
     deploy:
       replicas: 1
-      # replicas: 3
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    mem_limit: 6g
     restart: unless-stopped
 
   vlm-server:
@@ -47,7 +51,7 @@ services:
       - --mm-encoder-attn-backend=TORCH_SDPA
       - --gpu-memory-utilization=0.10
       - --kv-cache-memory-bytes=1073741824
-      - --max-model-len=8192
+      - --max-model-len=16384
       - --max-num-seqs=16
       - --max-num-batched-tokens=8192
       - --no-enable-prefix-caching
@@ -71,32 +75,35 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
-  paddleocr-vl-api:
-    <<: *pipeline-image
-    environment:
-      PIPELINE_NAME: PaddleOCR-VL
-      VLM_SERVER_URL: http://vlm-server:8000/v1
-    depends_on:
-      - vlm-server
-    deploy:
-      replicas: 1
-      # replicas: 8
-    mem_limit: 2g
-    restart: unless-stopped
-
   hybrid-gateway:
     build:
       context: ../shared
       dockerfile: hybrid-gateway.Dockerfile
     environment:
-      STRUCTURE_GATEWAY_URL: http://paddlex-pipeline:8080/layout-parsing
-      VL_GATEWAY_URL: http://paddleocr-vl-api:8080/layout-parsing
+      VLM_URL: "${VLM_URL:-http://vlm-server:8000/v1}"
+      VLM_MODEL: "${VLM_MODEL:-}"
+      VLM_MAX_INFLIGHT: "${VLM_MAX_INFLIGHT:-16}"
+      VLM_MAX_COMPLETION_TOKENS: "${VLM_MAX_COMPLETION_TOKENS:-8192}"
+      VLM_JPEG_QUALITY: "${VLM_JPEG_QUALITY:-75}"
+      STRUCTURE_MAX_INFLIGHT: "${STRUCTURE_MAX_INFLIGHT:-2}"
+      STRUCTURE_QUEUE_TIMEOUT: "${STRUCTURE_QUEUE_TIMEOUT:-120}"
+      GATEWAY_DEADLINE: "${GATEWAY_DEADLINE:-480}"
+      VLM_PIXEL_BUDGETS: "${VLM_PIXEL_BUDGETS:-}"
+      REQUEST_TIMEOUT: "${REQUEST_TIMEOUT:-300}"
+      STRUCTURE_GATEWAY_URL: "${STRUCTURE_GATEWAY_URL:-http://ort-structure:8080/layout-parsing}"
+      STRUCTURE_API_KEY: "${STRUCTURE_API_KEY:?set STRUCTURE_API_KEY in .env}"
       MODEL_NAME: "${MODEL_NAME:?set MODEL_NAME in .env}"
       MODEL_VERSION: "${MODEL_VERSION:?set MODEL_VERSION in .env}"
     depends_on:
-      - paddleocr-vl-api
+      # ort-structure is the structure backend; wait for its five models to
+      # load before the gateway starts serving.
+      ort-structure:
+        condition: service_healthy
+      vlm-server:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      # /ready checks ort-structure and the VLM /models endpoint.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready')"]
       interval: 15s
       timeout: 5s
       retries: 10

@@ -81,3 +81,20 @@ test('ignores stored statuses outside the page vocabulary', () => {
   const states = mergePageStates([treePage(1, 'mystery')], null);
   expect(states.get(1)?.status).toBeNull();
 });
+
+test('keeps a stored pending page so a placeholder survives an interrupted run', () => {
+  const states = mergePageStates(
+    [treePage(1, 'completed'), treePage(2, 'pending')],
+    null
+  );
+  expect(states.get(1)?.status).toBe('completed');
+  expect(states.get(2)?.status).toBe('pending');
+});
+
+test('live progress overrides a stored pending page', () => {
+  const states = mergePageStates(
+    [treePage(1, 'pending')],
+    progress([progressPage(1, 'processing')])
+  );
+  expect(states.get(1)?.status).toBe('processing');
+});

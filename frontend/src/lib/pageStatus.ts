@@ -7,6 +7,7 @@ export type PageState = {
 };
 
 const PAGE_STATUSES = new Set<string>([
+  'pending',
   'queued',
   'processing',
   'completed',

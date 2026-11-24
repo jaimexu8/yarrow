@@ -14,6 +14,7 @@ import {
 } from '@/lib/documents';
 import { cn } from '@/lib/cn';
 import { toApiError } from '@/lib/errors';
+import { errorStageLabel } from '@/lib/progress';
 
 /** Mirrors the server's rules, so most mistakes are caught before sending. */
 export function checkName(name: string): string | null {
@@ -189,6 +190,7 @@ export function FailureNote({
 }) {
   if (!doc.error_message) return null;
   const failed = doc.status === 'failed';
+  const stage = failed ? errorStageLabel(doc.error_stage) : null;
   return (
     <p
       className={cn(
@@ -196,6 +198,7 @@ export function FailureNote({
         failed ? 'text-red-700' : 'text-amber-800'
       )}
     >
+      {stage && `Failed while ${stage}: `}
       {!failed && 'Some pages could not be read: '}
       {doc.error_message}
       {children}
@@ -222,17 +225,21 @@ export function InterruptedNote({ children }: { children?: ReactNode }) {
 export function useReprocessAction(
   doc: DocumentSummary,
   onChanged: (doc: DocumentSummary) => void,
-  onStale?: () => void
+  onStale?: () => void,
+  options?: { skipTextLayer?: boolean }
 ) {
   const [reprocessing, setReprocessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const actionLabel = options?.skipTextLayer
+    ? 'Reprocess with ML'
+    : 'Reprocess';
 
   async function run() {
     setReprocessing(true);
     setError(null);
     try {
-      onChanged(await reprocessDocument(doc.id));
+      onChanged(await reprocessDocument(doc.id, options));
       setConfirming(false);
     } catch (err) {
       const apiError = toApiError(err);
@@ -255,6 +262,7 @@ export function useReprocessAction(
       open={confirming}
       reprocessing={reprocessing}
       error={error}
+      actionLabel={actionLabel}
       onConfirm={run}
       onClose={() => {
         setConfirming(false);
@@ -280,6 +288,7 @@ function ConfirmReprocessDialog({
   open,
   reprocessing,
   error,
+  actionLabel,
   onConfirm,
   onClose,
 }: {
@@ -287,6 +296,7 @@ function ConfirmReprocessDialog({
   open: boolean;
   reprocessing: boolean;
   error: string | null;
+  actionLabel: string;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -313,7 +323,7 @@ function ConfirmReprocessDialog({
             onClick={onConfirm}
             loading={reprocessing}
           >
-            {error ? 'Try again' : 'Reprocess'}
+            {error ? 'Try again' : actionLabel}
           </Button>
         </>
       }

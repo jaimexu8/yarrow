@@ -1,7 +1,7 @@
 import api from './api';
 
 export type PageStatus =
-  'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
+  'pending' | 'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
 
 export type JobStage =
   | 'queued'
@@ -53,6 +53,23 @@ export function stageLabel(stage: string | null): string {
   return stage && stage in STAGE_LABELS
     ? STAGE_LABELS[stage as JobStage]
     : 'Processing';
+}
+
+/** The stage a job had reached when it failed. Separate from current_stage. */
+export type ErrorStage =
+  'downloading' | 'parsing' | 'finalizing' | 'queue_timeout';
+
+export const ERROR_STAGE_LABELS: Record<ErrorStage, string> = {
+  downloading: 'downloading the file',
+  parsing: 'reading pages',
+  finalizing: 'saving results',
+  queue_timeout: 'waiting in the processing queue',
+};
+
+export function errorStageLabel(stage: string | null): string | null {
+  return stage && stage in ERROR_STAGE_LABELS
+    ? ERROR_STAGE_LABELS[stage as ErrorStage]
+    : null;
 }
 
 export function isJobFinished(progress: DocumentProgress | null): boolean {

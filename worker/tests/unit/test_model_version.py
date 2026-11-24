@@ -1,13 +1,14 @@
-"""Unit tests for recording the model that produced a document's results (US-85)"""
+"""Unit tests for recording the model that produced a document's results (US-85)
+
+The per-run model selection is a pure helper (_run_model) and the parser's
+ModelInfo capture; the pipeline-specific tests moved to the new tasks.
+"""
 
 from unittest.mock import MagicMock
 
-import pytest
-from yarrow_db.models import Page
-
-from app.core.config import PIPELINE_VERSION, settings
+from app.core.config import settings
 from app.pipeline.document_parser import DocumentParser, ModelInfo
-from app.tasks.ingestion import AllPagesFailedError, _run_model, process_document_task
+from app.tasks.ingestion import _run_model
 
 CURRENT = ModelInfo("PP-StructureV3+PaddleOCR-VL", "3.2.0+vl-0.9b")
 PREVIOUS = ModelInfo("PP-StructureV3+PaddleOCR-VL", "3.1.4+vl-0.9b")
@@ -63,56 +64,3 @@ def test_run_model_breaks_ties_by_later_response():
 
 def test_run_model_is_none_without_completed_pages():
     assert _run_model({}) is None
-
-
-def test_run_records_model_on_pages_job_and_document(job, session, storage, parser):
-    parser.configure(page_count=3, models={0: PREVIOUS, 1: CURRENT, 2: CURRENT})
-
-    process_document_task(str(job.id))
-
-    pages = sorted((obj for obj in session.added if isinstance(obj, Page)), key=lambda page: page.page_number)
-    assert [(page.model_name, page.model_version) for page in pages] == [PREVIOUS, CURRENT, CURRENT]
-    assert (job.model_name, job.model_version, job.pipeline_version) == (*CURRENT, PIPELINE_VERSION)
-    document = job.document
-    assert (document.model_name, document.model_version, document.pipeline_version) == (*CURRENT, PIPELINE_VERSION)
-    assert document.processed_at is not None
-
-
-def test_failed_page_records_no_model(job, session, storage, parser):
-    parser.configure(page_count=2, failed=(2,), models={0: CURRENT, 1: CURRENT})
-
-    process_document_task(str(job.id))
-
-    pages = sorted((obj for obj in session.added if isinstance(obj, Page)), key=lambda page: page.page_number)
-    assert [(page.model_name, page.model_version) for page in pages] == [CURRENT, (None, None)]
-    assert job.document.status == "completed"
-    assert (job.document.model_name, job.document.model_version) == CURRENT
-
-
-def test_reprocess_with_new_version_updates_document(job, session, storage, parser):
-    parser.configure(page_count=2, models={0: PREVIOUS, 1: PREVIOUS})
-    process_document_task(str(job.id))
-    first_processed_at = job.document.processed_at
-    assert (job.document.model_name, job.document.model_version) == PREVIOUS
-
-    parser.configure(page_count=2, models={0: CURRENT, 1: CURRENT})
-    process_document_task(str(job.id))
-
-    assert (job.model_name, job.model_version) == CURRENT
-    assert (job.document.model_name, job.document.model_version) == CURRENT
-    assert job.document.processed_at >= first_processed_at
-
-
-def test_fully_failed_run_keeps_document_model(job, session, storage, parser):
-    parser.configure(page_count=2, models={0: PREVIOUS, 1: PREVIOUS})
-    process_document_task(str(job.id))
-    processed_at = job.document.processed_at
-
-    parser.configure(page_count=2, failed=(1, 2), models={0: CURRENT, 1: CURRENT})
-    with pytest.raises(AllPagesFailedError):
-        process_document_task(str(job.id))
-
-    assert (job.model_name, job.model_version) == (None, None)
-    assert (job.document.model_name, job.document.model_version) == PREVIOUS
-    assert job.document.pipeline_version == PIPELINE_VERSION
-    assert job.document.processed_at == processed_at

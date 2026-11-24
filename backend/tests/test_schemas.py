@@ -9,6 +9,10 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas import TagCreate, UserCreate, UserOut
+from app.schemas.document import DocumentOut, JobOut
+from app.services.failure_messages import DOCUMENT_FAILED_MESSAGE
+
+ERROR_STAGES = ["downloading", "parsing", "finalizing", "queue_timeout"]
 
 
 def _user_out(email: str) -> UserOut:
@@ -51,3 +55,61 @@ def test_empty_tag_name_is_rejected():
 def test_long_tag_name_is_rejected():
     with pytest.raises(ValidationError):
         TagCreate(name="x" * 41)
+
+
+def _job_out(**extra) -> JobOut:
+    return JobOut.model_validate({"id": uuid4(), **extra})
+
+
+def _document_out(**extra) -> DocumentOut:
+    return DocumentOut.model_validate(
+        {
+            "id": uuid4(),
+            "filename": "notes.pdf",
+            "file_size_bytes": 10,
+            "file_type": "application/pdf",
+            **extra,
+        }
+    )
+
+
+@pytest.mark.parametrize("stage", ERROR_STAGES)
+def test_job_out_accepts_known_error_stage(stage):
+    assert _job_out(error_stage=stage).error_stage == stage
+
+
+def test_job_out_accepts_null_error_stage():
+    assert _job_out(error_stage=None).error_stage is None
+
+
+def test_job_out_rejects_unknown_error_stage():
+    with pytest.raises(ValidationError):
+        _job_out(error_stage="exploding")
+
+
+@pytest.mark.parametrize("stage", ERROR_STAGES)
+def test_document_out_accepts_known_error_stage(stage):
+    assert _document_out(error_stage=stage).error_stage == stage
+
+
+def test_document_out_accepts_null_error_stage():
+    assert _document_out(error_stage=None).error_stage is None
+
+
+def test_document_out_rejects_unknown_error_stage():
+    with pytest.raises(ValidationError):
+        _document_out(error_stage="exploding")
+
+
+def test_error_stage_survives_error_message_sanitizing():
+    job = _job_out(
+        status="failed", error_message="KeyError: 'x'", error_stage="parsing"
+    )
+    assert job.error_message == DOCUMENT_FAILED_MESSAGE
+    assert job.error_stage == "parsing"
+
+    document = _document_out(
+        status="failed", error_message="KeyError: 'x'", error_stage="finalizing"
+    )
+    assert document.error_message == DOCUMENT_FAILED_MESSAGE
+    assert document.error_stage == "finalizing"

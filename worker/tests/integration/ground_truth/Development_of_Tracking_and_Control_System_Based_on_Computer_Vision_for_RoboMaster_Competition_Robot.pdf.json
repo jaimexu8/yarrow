@@ -1,0 +1,1857 @@
+{
+  "file": "Development_of_Tracking_and_Control_System_Based_on_Computer_Vision_for_RoboMaster_Competition_Robot.pdf",
+  "bytes": 1325504,
+  "sha256": "10c7571ac60e4dba82020eb458f5be8d6a5e4ceadf678ae38205a649467c2a3c",
+  "detected_extension": "pdf",
+  "kind": "processable",
+  "expected_pages": 6,
+  "model_graph": {
+    "pages": [
+      {
+        "page_number": 1,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "paragraph",
+            "block_label": "doc_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 2,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 3,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 4,
+            "region_type": "paragraph",
+            "block_label": "abstract",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 5,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 6,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 7,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 8,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 9,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 10,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 11,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 12,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 13,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 14,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 15,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 16,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 17,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 18,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 19,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 20,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 21,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 22,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 23,
+            "region_type": "paragraph",
+            "block_label": "number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 24,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      },
+      {
+        "page_number": 2,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 2,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 3,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 4,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 5,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 6,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 7,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 8,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 9,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 10,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 11,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 12,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 13,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 14,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 15,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 16,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 17,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 18,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 19,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 20,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 21,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 22,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 23,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 24,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 25,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 26,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 27,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 28,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 29,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 30,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 31,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 32,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 33,
+            "region_type": "paragraph",
+            "block_label": "number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 34,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      },
+      {
+        "page_number": 3,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 2,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 3,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 4,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 5,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 6,
+            "region_type": "table",
+            "block_label": "table",
+            "is_table": true,
+            "has_text": false
+          },
+          {
+            "reading_order": 7,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 8,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 9,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 10,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 11,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 12,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 13,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 14,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 15,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 16,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 17,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 18,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 19,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 20,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 21,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 22,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 23,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 24,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 25,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 26,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 27,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 28,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 29,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 30,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 31,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 32,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 33,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 34,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 35,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 36,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 37,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 38,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 39,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 40,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 41,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 42,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 43,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 44,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 45,
+            "region_type": "paragraph",
+            "block_label": "number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 46,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      },
+      {
+        "page_number": 4,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 2,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 3,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 4,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 5,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 6,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 7,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 8,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 9,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 10,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 11,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 12,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 13,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 14,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 15,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 16,
+            "region_type": "paragraph",
+            "block_label": "chart",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 17,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 18,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 19,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 20,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 21,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 22,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 23,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 24,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 25,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 26,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 27,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 28,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 29,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 30,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 31,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 32,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 33,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 34,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 35,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 36,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 37,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 38,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 39,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 40,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 41,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 42,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 43,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 44,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 45,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 46,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 47,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 48,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 49,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 50,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 51,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 52,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 53,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 54,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 55,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 56,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 57,
+            "region_type": "paragraph",
+            "block_label": "number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 58,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      },
+      {
+        "page_number": 5,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 2,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 3,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 4,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 5,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 6,
+            "region_type": "table",
+            "block_label": "table",
+            "is_table": true,
+            "has_text": false
+          },
+          {
+            "reading_order": 7,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 8,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 9,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 10,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 11,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 12,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 13,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 14,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 15,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 16,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 17,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 18,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 19,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 20,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 21,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 22,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 23,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 24,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 25,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 26,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 27,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 28,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 29,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 30,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 31,
+            "region_type": "paragraph",
+            "block_label": "formula",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 32,
+            "region_type": "paragraph",
+            "block_label": "formula_number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 33,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 34,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 35,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 36,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 37,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 38,
+            "region_type": "paragraph",
+            "block_label": "image",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 39,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 40,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 41,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 42,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 43,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 44,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 45,
+            "region_type": "paragraph",
+            "block_label": "number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 46,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      },
+      {
+        "page_number": 6,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "header",
+            "block_label": "header",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 2,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 3,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 4,
+            "region_type": "paragraph",
+            "block_label": "text",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 5,
+            "region_type": "paragraph",
+            "block_label": "paragraph_title",
+            "is_table": false,
+            "has_text": true
+          },
+          {
+            "reading_order": 6,
+            "region_type": "paragraph",
+            "block_label": "reference",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 7,
+            "region_type": "paragraph",
+            "block_label": "reference_content",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 8,
+            "region_type": "paragraph",
+            "block_label": "reference_content",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 9,
+            "region_type": "paragraph",
+            "block_label": "reference_content",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 10,
+            "region_type": "paragraph",
+            "block_label": "reference_content",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 11,
+            "region_type": "paragraph",
+            "block_label": "reference_content",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 12,
+            "region_type": "paragraph",
+            "block_label": "reference_content",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 13,
+            "region_type": "paragraph",
+            "block_label": "reference_content",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 14,
+            "region_type": "paragraph",
+            "block_label": "reference_content",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 15,
+            "region_type": "paragraph",
+            "block_label": "reference_content",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 16,
+            "region_type": "paragraph",
+            "block_label": "reference_content",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 17,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 18,
+            "region_type": "paragraph",
+            "block_label": "number",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 19,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      }
+    ],
+    "unmerged": {
+      "counts": {
+        "documents": 1,
+        "pages": 6,
+        "regions": 233,
+        "region_texts": 112,
+        "tables": 2,
+        "region_tables": 2,
+        "table_cells": 41
+      },
+      "tables": [
+        {
+          "row_count": 10,
+          "col_count": 3,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 3,
+              "region_reading_order": 6,
+              "row_start": 0,
+              "row_end": 9,
+              "col_start": 0,
+              "col_end": 2,
+              "cells": [
+                [0, 0, 2, 1, false],
+                [0, 1, 1, 2, false],
+                [1, 1, 1, 1, false],
+                [1, 2, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false],
+                [2, 2, 1, 1, false],
+                [3, 0, 1, 1, false],
+                [3, 1, 1, 1, false],
+                [3, 2, 1, 1, false],
+                [4, 0, 1, 1, false],
+                [4, 1, 1, 1, false],
+                [4, 2, 1, 1, false],
+                [5, 0, 1, 1, false],
+                [5, 1, 1, 1, false],
+                [5, 2, 1, 1, false],
+                [6, 0, 1, 1, false],
+                [6, 1, 1, 1, false],
+                [6, 2, 1, 1, false],
+                [7, 0, 1, 1, false],
+                [7, 1, 1, 1, false],
+                [7, 2, 1, 1, false],
+                [8, 0, 1, 1, false],
+                [8, 1, 1, 1, false],
+                [8, 2, 1, 1, false],
+                [9, 0, 1, 1, false],
+                [9, 1, 1, 1, false],
+                [9, 2, 1, 1, false]
+              ]
+            }
+          ]
+        },
+        {
+          "row_count": 4,
+          "col_count": 4,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 5,
+              "region_reading_order": 6,
+              "row_start": 0,
+              "row_end": 3,
+              "col_start": 0,
+              "col_end": 3,
+              "cells": [
+                [0, 0, 2, 1, false],
+                [0, 1, 1, 3, false],
+                [1, 1, 1, 1, false],
+                [1, 2, 1, 1, false],
+                [1, 3, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false],
+                [2, 2, 1, 1, false],
+                [2, 3, 1, 1, false],
+                [3, 0, 1, 1, false],
+                [3, 1, 1, 1, false],
+                [3, 2, 1, 1, false],
+                [3, 3, 1, 1, false]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "merged": {
+      "counts": {
+        "documents": 1,
+        "pages": 6,
+        "regions": 233,
+        "region_texts": 112,
+        "tables": 2,
+        "region_tables": 2,
+        "table_cells": 41
+      },
+      "tables": [
+        {
+          "row_count": 10,
+          "col_count": 3,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 3,
+              "region_reading_order": 6,
+              "row_start": 0,
+              "row_end": 9,
+              "col_start": 0,
+              "col_end": 2,
+              "cells": [
+                [0, 0, 2, 1, false],
+                [0, 1, 1, 2, false],
+                [1, 1, 1, 1, false],
+                [1, 2, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false],
+                [2, 2, 1, 1, false],
+                [3, 0, 1, 1, false],
+                [3, 1, 1, 1, false],
+                [3, 2, 1, 1, false],
+                [4, 0, 1, 1, false],
+                [4, 1, 1, 1, false],
+                [4, 2, 1, 1, false],
+                [5, 0, 1, 1, false],
+                [5, 1, 1, 1, false],
+                [5, 2, 1, 1, false],
+                [6, 0, 1, 1, false],
+                [6, 1, 1, 1, false],
+                [6, 2, 1, 1, false],
+                [7, 0, 1, 1, false],
+                [7, 1, 1, 1, false],
+                [7, 2, 1, 1, false],
+                [8, 0, 1, 1, false],
+                [8, 1, 1, 1, false],
+                [8, 2, 1, 1, false],
+                [9, 0, 1, 1, false],
+                [9, 1, 1, 1, false],
+                [9, 2, 1, 1, false]
+              ]
+            }
+          ]
+        },
+        {
+          "row_count": 4,
+          "col_count": 4,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 5,
+              "region_reading_order": 6,
+              "row_start": 0,
+              "row_end": 3,
+              "col_start": 0,
+              "col_end": 3,
+              "cells": [
+                [0, 0, 2, 1, false],
+                [0, 1, 1, 3, false],
+                [1, 1, 1, 1, false],
+                [1, 2, 1, 1, false],
+                [1, 3, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false],
+                [2, 2, 1, 1, false],
+                [2, 3, 1, 1, false],
+                [3, 0, 1, 1, false],
+                [3, 1, 1, 1, false],
+                [3, 2, 1, 1, false],
+                [3, 3, 1, 1, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

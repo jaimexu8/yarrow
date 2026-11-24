@@ -111,6 +111,7 @@ function job(overrides: Partial<AdminJob> = {}): AdminJob {
     pages_processed: 0,
     total_pages: 0,
     error_message: null,
+    error_stage: null,
     created_at: '2026-01-01T00:00:00',
     is_stuck: false,
     can_cancel: true,

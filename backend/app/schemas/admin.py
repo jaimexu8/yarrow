@@ -3,6 +3,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from yarrow_db.models import JobErrorStage
 
 from app.schemas.common import StrictModel
 from app.services.failure_messages import (
@@ -64,6 +65,8 @@ class AdminJob(BaseModel):
     pages_processed: int | None = None
     total_pages: int | None = None
     error_message: str | None = None
+    error_stage: JobErrorStage | None = None
+    error_detail: str | None = None
     created_at: datetime | None = None
     is_stuck: bool = False
     can_cancel: bool = False
@@ -83,6 +86,19 @@ class AdminJob(BaseModel):
 
 class AdminJobCancelRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
+
+
+class OcrMetrics(BaseModel):
+    """Operator metrics for the OCR pipeline, for GET /admin/ocr/metrics."""
+
+    queue_depth: int
+    pages_queued: int
+    pages_processing: int
+    oldest_queued_seconds: float | None
+    # A windowed COUNT, not a normalized rate: the number of pages that failed
+    # with error_code inference_unavailable or queue_timeout during the trailing
+    # 5 minutes.
+    rejected_last_5m: int
 
 
 class AdminJobActionResult(BaseModel):

@@ -22,7 +22,7 @@
             "region_type": "paragraph",
             "block_label": "text",
             "is_table": false,
-            "has_text": true
+            "has_text": false
           },
           {
             "reading_order": 2,
@@ -78,7 +78,7 @@
             "region_type": "paragraph",
             "block_label": "text",
             "is_table": false,
-            "has_text": true
+            "has_text": false
           },
           {
             "reading_order": 10,
@@ -95,7 +95,7 @@
         "documents": 1,
         "pages": 1,
         "regions": 11,
-        "region_texts": 11,
+        "region_texts": 9,
         "tables": 0,
         "region_tables": 0,
         "table_cells": 0
@@ -107,7 +107,7 @@
         "documents": 1,
         "pages": 1,
         "regions": 11,
-        "region_texts": 11,
+        "region_texts": 9,
         "tables": 0,
         "region_tables": 0,
         "table_cells": 0

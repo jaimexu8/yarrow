@@ -166,7 +166,7 @@ function PageSection({
           <p className="not-prose my-4 flex items-center gap-2 text-sm text-slate-500">
             {pending === 'unfinished' ? (
               "This page hasn't been processed yet."
-            ) : status === 'queued' ? (
+            ) : status === 'queued' || status === 'pending' ? (
               'Waiting to be processed…'
             ) : status === 'canceled' ? (
               'Processing was canceled before this page.'

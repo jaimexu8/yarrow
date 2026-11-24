@@ -2,30 +2,21 @@
 # and docker-compose-lb.yml merged into one file):
 #
 #   gateway (nginx edge, API-key auth, publishes 8080)
-#     -> hybrid-gateway (fuses PP-StructureV3 layout + PaddleOCR-VL recognition)
-#       -> paddlex-pipeline (PP-StructureV3 on the host GPU)
-#       -> paddleocr-vl-api (PaddleOCR-VL layout on the host GPU, VLM via vlm-server)
-#         -> vlm-server (PaddlePaddle/PaddleOCR-VL on the host GPU)
+#     -> hybrid-gateway (fuses structure layout + VLM recognition)
+#       -> ort-structure (PP-StructureV3 geometry on the host GPU, no Paddle;
+#          the structure backend)
+#       -> vlm-server (SGLang PaddleOCR-VL, OpenAI /v1 chat API). The gateway
+#          calls it directly for every crop; there is no Paddle serving hop.
 #
-# All three inference services share the single host GPU (16 GB on my system): SGLang holds
-# ~6.6 GB at mem-fraction-static=0.4 (1.9 GB weights + ~4.8 GB KV cache),
-# the Paddle layout models (PP-OCRv5
-# mobile det/rec + PP-DocLayoutV2) hold ~2.5 GB combined, leaving the rest
-# for KV cache and activations.
+# The structure backend is chosen by STRUCTURE_GATEWAY_URL (which hybrid-gateway
+# posts page images to). It defaults to ort-structure. There is no second layout
+# stack in this file. Rollback is a commit revert, not an env change.
+#
+# The inference services share the single host GPU (16 GB on my system): SGLang
+# holds ~6.6 GB at mem-fraction-static=0.4 (1.9 GB weights + ~4.8 GB KV cache)
+# and ort-structure's five ONNX models hold ~3.7 GB. Together that is ~10.3 GB;
+# ORT_MEM_CAP exists to trim ORT's share on a memory-tight host.
 name: yarrow
-
-# x-pipeline-image: shared build definition for the two services that run the
-# PP-StructureV3 / PaddleOCR-VL paddlex image. Each service keeps its own image
-# tag: compose builds every service that declares a build, and with both
-# exporting the SAME tag the two exports race and one aborts with
-# "image ... already exists". Distinct tags avoid that; identical content means
-# the layers are content-addressed and shared anyway.
-x-pipeline-image: &pipeline-image
-  build:
-    context: .
-    dockerfile: paddlex.Dockerfile
-    additional_contexts:
-      - shared=../shared
 
 services:
   vlm-server:
@@ -39,12 +30,11 @@ services:
       - --host=0.0.0.0
       - --port=8000
       - --trust-remote-code
-      - --context-length=8192
+      - --context-length=16384
       - --max-running-requests=16
       - --mem-fraction-static=0.4
-      # OCR crops are unique per request, so prefix caching only wastes
-      # memory
       - --disable-radix-cache
+      - --enable-metrics
     volumes:
       - vlm-hf-cache:/root/.cache/huggingface
     shm_size: "2gb"
@@ -63,45 +53,27 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
-  paddlex-pipeline:
-    <<: *pipeline-image
-    image: yarrow-paddlex-pipeline:latest
+
+  ort-structure:
+    build:
+      context: ../shared/ort-structure
+      dockerfile: Dockerfile
+    image: yarrow-ort-structure:latest
     environment:
-      DEVICE: gpu
+      STRUCTURE_API_KEY: "${STRUCTURE_API_KEY:?set STRUCTURE_API_KEY in .env}"
+      CUDA_DEVICE_ID: "0"
+      MODEL_DIR: /opt/ort/models
+      # Per-model GPU memory cap, off by default
+      ORT_MEM_CAP: "0"
     mem_limit: 6g
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      # /ready returns 503 until the structure models are loaded, 200 when they
+      # are. 600 s start_period covers the five-model load on a contended GPU.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready')"]
       start_period: 600s
       interval: 15s
       timeout: 10s
       retries: 60
-    deploy:
-      replicas: 1
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    restart: unless-stopped
-
-  paddleocr-vl-api:
-    <<: *pipeline-image
-    image: yarrow-paddleocr-vl-api:latest
-    environment:
-      PIPELINE_NAME: PaddleOCR-VL
-      VLM_BACKEND: sglang-server
-      VLM_SERVER_URL: http://vlm-server:8000/v1
-      DEVICE: gpu
-    depends_on:
-      vlm-server:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
-      interval: 15s
-      timeout: 5s
-      retries: 40
-      start_period: 300s
     deploy:
       replicas: 1
       resources:
@@ -117,17 +89,28 @@ services:
       context: ../shared
       dockerfile: hybrid-gateway.Dockerfile
     environment:
-      STRUCTURE_GATEWAY_URL: http://paddlex-pipeline:8080/layout-parsing
-      VL_GATEWAY_URL: http://paddleocr-vl-api:8080/layout-parsing
+      VLM_URL: "${VLM_URL:-http://vlm-server:8000/v1}"
+      VLM_MODEL: "${VLM_MODEL:-}"
+      VLM_MAX_INFLIGHT: "${VLM_MAX_INFLIGHT:-16}"
+      VLM_MAX_COMPLETION_TOKENS: "${VLM_MAX_COMPLETION_TOKENS:-8192}"
+      VLM_JPEG_QUALITY: "${VLM_JPEG_QUALITY:-75}"
+      STRUCTURE_MAX_INFLIGHT: "${STRUCTURE_MAX_INFLIGHT:-2}"
+      STRUCTURE_QUEUE_TIMEOUT: "${STRUCTURE_QUEUE_TIMEOUT:-120}"
+      GATEWAY_DEADLINE: "${GATEWAY_DEADLINE:-480}"
+      VLM_PIXEL_BUDGETS: "${VLM_PIXEL_BUDGETS:-}"
+      REQUEST_TIMEOUT: "${REQUEST_TIMEOUT:-300}"
+      STRUCTURE_GATEWAY_URL: "${STRUCTURE_GATEWAY_URL:-http://ort-structure:8080/layout-parsing}"
+      STRUCTURE_API_KEY: "${STRUCTURE_API_KEY:?set STRUCTURE_API_KEY in .env}"
       MODEL_NAME: "${MODEL_NAME:?set MODEL_NAME in .env}"
       MODEL_VERSION: "${MODEL_VERSION:?set MODEL_VERSION in .env}"
     depends_on:
-      paddlex-pipeline:
+      ort-structure:
         condition: service_healthy
-      paddleocr-vl-api:
+      vlm-server:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      # /ready checks ort-structure and the VLM /models endpoint.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready')"]
       start_period: 20s
       interval: 15s
       timeout: 5s

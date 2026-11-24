@@ -13,9 +13,10 @@ export function PageStatusBadge({
   className?: string;
 }) {
   if (!status) return null;
+  const shown = status === 'pending' ? 'queued' : status;
   return (
     <StatusBadge
-      status={status}
+      status={shown}
       icon={
         status === 'processing' ? (
           <Spinner label={null} className="size-3" />

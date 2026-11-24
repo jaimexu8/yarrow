@@ -12,11 +12,11 @@ import requests
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import sessionmaker
-from yarrow_db.models import Base, Document, Job, JobPage, Page
+from yarrow_db.models import Base, Document, Job, JobPage
 
 from app.pipeline.document_parser import DocumentParser, PageError, page_error_code
 from app.tasks import ingestion
-from app.tasks.ingestion import _record_page_event, process_document_task
+from app.tasks.ingestion import _record_page_event
 
 OK_RESPONSE = {
     "result": {
@@ -64,21 +64,6 @@ def sessions(tmp_path, monkeypatch):
     engine.dispose()
 
 
-@pytest.fixture
-def storage(monkeypatch):
-    class Storage:
-        def download_bytes(self, key):
-            return b"file"
-
-        def upload_file(self, file, key):
-            return None
-
-        def delete_file(self, key):
-            return None
-
-    monkeypatch.setattr(ingestion, "get_storage", Storage)
-
-
 def _seed_job(session_scope, page_count: int, status: str = "queued") -> UUID:
     with session_scope() as session:
         document = Document(
@@ -121,13 +106,6 @@ def _job(session_scope, job_id: UUID) -> Job:
 def _job_pages(session_scope, job_id: UUID) -> dict[int, JobPage]:
     with session_scope() as session:
         rows = session.scalars(select(JobPage).where(JobPage.job_id == job_id))
-        return {row.page_number: row for row in rows}
-
-
-def _pages(session_scope, job_id: UUID) -> dict[int, Page]:
-    with session_scope() as session:
-        document_id = session.get(Job, job_id).document_id
-        rows = session.scalars(select(Page).where(Page.document_id == document_id))
         return {row.page_number: row for row in rows}
 
 
@@ -203,9 +181,11 @@ class TestPageErrorCode:
 
         parser.process_sync()
 
-        assert parser.page_errors == {
-            1: PageError("inference_timeout", "Timeout: gateway took 60s")
-        }
+        assert set(parser.page_errors) == {1}
+        error = parser.page_errors[1]
+        assert error.code == "inference_timeout"
+        assert error.message == "Timeout: gateway took 60s"
+        assert isinstance(error.raw, requests.Timeout)
         assert parser.failed_page_numbers == [2]
 
 
@@ -360,178 +340,3 @@ class TestRecordPageEvent:
             "canceled"
         }
         assert _job(sessions, job_id).pages_processed == 0
-
-
-@pytest.mark.usefixtures("storage")
-class TestProcessDocumentTask:
-    def test_progress_is_committed_while_pages_run(
-        self, sessions, inference, monkeypatch
-    ):
-        inference.configure(pages=3)
-        job_id = _seed_job(sessions, 3)
-        seen: list[tuple[str, int, dict[int, str]]] = []
-
-        def observe(page_number):
-            if page_number == 3:
-                job = _job(sessions, job_id)
-                pages = _job_pages(sessions, job_id)
-                seen.append(
-                    (
-                        job.current_stage,
-                        job.total_pages,
-                        {number: page.status for number, page in pages.items()},
-                    )
-                )
-
-        async def one_page_at_a_time(self, page_to_process=None):
-            self.page_errors = {}
-            self.parsed_result = [
-                self._process_page_isolated(index, page)
-                for index, page in enumerate(self.pages)
-            ]
-
-        inference.on_request(observe)
-        monkeypatch.setattr(DocumentParser, "process_async", one_page_at_a_time)
-
-        process_document_task(str(job_id))
-
-        assert seen == [
-            ("parsing", 3, {1: "completed", 2: "completed", 3: "processing"})
-        ]
-
-    def test_final_commit_reconciles_job_pages_with_pages(self, sessions, inference):
-        inference.configure(pages=3)
-        inference.fail(2, requests.Timeout("gateway took 60s"))
-        job_id = _seed_job(sessions, 3)
-
-        process_document_task(str(job_id))
-
-        job = _job(sessions, job_id)
-        job_pages = _job_pages(sessions, job_id)
-        pages = _pages(sessions, job_id)
-        assert job.status == "completed"
-        assert job.current_stage == "finished"
-        assert job.total_pages == 3
-        assert job.pages_processed == 3
-        assert sorted(job_pages) == sorted(pages) == [1, 2, 3]
-        for number, page in pages.items():
-            assert job_pages[number].status == page.status
-            assert job_pages[number].error_code == page.error_code
-            assert job_pages[number].finished_at is not None
-        assert pages[2].status == "failed"
-        assert pages[2].error_code == "inference_timeout"
-        assert pages[2].error_message == "Timeout: gateway took 60s"
-
-    def test_every_page_failing_ends_in_failed_stage(self, sessions, inference):
-        inference.configure(pages=2)
-        inference.fail(1, _http_error(500))
-        inference.fail(2, _http_error(500))
-        job_id = _seed_job(sessions, 2)
-
-        with pytest.raises(ingestion.AllPagesFailedError):
-            process_document_task(str(job_id))
-
-        job = _job(sessions, job_id)
-        assert job.status == "failed"
-        assert job.current_stage == "failed"
-        assert job.pages_processed == 2
-        assert {page.error_code for page in _job_pages(sessions, job_id).values()} == {
-            "inference_error"
-        }
-
-    def test_reprocess_tracks_only_its_pages(self, sessions, inference):
-        inference.configure(pages=3)
-        inference.fail(2, requests.ConnectionError("refused"))
-        job_id = _seed_job(sessions, 3)
-        process_document_task(str(job_id))
-
-        inference.configure(pages=3)
-        with sessions() as session:
-            session.execute(update(Job).where(Job.id == job_id).values(status="queued"))
-        process_document_task(str(job_id), page_to_process=(2,))
-
-        job = _job(sessions, job_id)
-        job_pages = _job_pages(sessions, job_id)
-        assert job.total_pages == 1
-        assert job.pages_processed == 1
-        assert list(job_pages) == [2]
-        assert job_pages[2].status == "completed"
-        assert job_pages[2].error_code is None
-        assert _pages(sessions, job_id)[2].error_code is None
-
-    def test_stages_advance_in_order(self, sessions, inference, monkeypatch):
-        inference.configure(pages=1)
-        job_id = _seed_job(sessions, 1)
-        stages: list[str] = []
-        set_stage = ingestion._set_stage
-
-        def record(job_id_text, stage):
-            set_stage(job_id_text, stage)
-            stages.append(_job(sessions, job_id).current_stage)
-
-        monkeypatch.setattr(ingestion, "_set_stage", record)
-        inference.on_request(
-            lambda page_number: stages.append(_job(sessions, job_id).current_stage)
-        )
-
-        process_document_task(str(job_id))
-
-        assert stages == ["preparing", "parsing", "saving"]
-        assert _job(sessions, job_id).current_stage == "finished"
-
-    def test_cancel_during_parsing_saves_nothing(self, sessions, inference):
-        inference.configure(pages=2)
-        job_id = _seed_job(sessions, 2)
-
-        canceled = threading.Event()
-
-        def cancel(page_number):
-            if page_number == 2:
-                assert canceled.wait(timeout=10)
-                return
-            with sessions() as session:
-                session.execute(
-                    update(Job)
-                    .where(Job.id == job_id)
-                    .values(status="canceled", current_stage="canceled")
-                )
-                session.execute(
-                    update(JobPage)
-                    .where(
-                        JobPage.job_id == job_id,
-                        JobPage.status.in_(("queued", "processing")),
-                    )
-                    .values(status="canceled")
-                )
-            canceled.set()
-
-        inference.on_request(cancel)
-
-        process_document_task(str(job_id))
-
-        job = _job(sessions, job_id)
-        assert job.status == "canceled"
-        assert job.current_stage == "canceled"
-        assert job.pages_processed == 0
-        assert {page.status for page in _job_pages(sessions, job_id).values()} == {
-            "canceled"
-        }
-        assert _pages(sessions, job_id) == {}
-
-    def test_failure_outside_pages_ends_in_failed_stage(
-        self, sessions, inference, monkeypatch
-    ):
-        inference.configure(pages=1)
-        job_id = _seed_job(sessions, 1)
-
-        def broken(self, file_data):
-            raise ValueError("No loader found for file extension: None")
-
-        monkeypatch.setattr(DocumentParser, "load_file", broken)
-
-        with pytest.raises(ValueError):
-            process_document_task(str(job_id))
-
-        job = _job(sessions, job_id)
-        assert job.status == "failed"
-        assert job.current_stage == "failed"

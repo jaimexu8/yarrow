@@ -93,4 +93,4 @@ jobs:
       - name: Run worker tests
         run: |
           cd worker
-          pytest -m "not integration"
+          pytest -m "not integration" -n 4 --dist load

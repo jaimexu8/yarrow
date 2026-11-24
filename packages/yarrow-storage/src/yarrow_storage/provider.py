@@ -2,6 +2,9 @@
 
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import lru_cache
 from io import BytesIO
 from typing import BinaryIO
@@ -25,6 +28,13 @@ class ObjectNotFoundError(Exception):
     retrying one only delays the failure the user is waiting on. Raising a
     provider-level exception keeps botocore error codes out of the callers.
     """
+
+
+@dataclass(frozen=True)
+class StoredObject:
+    key: str
+    last_modified: datetime  # timezone-aware UTC
+    size: int
 
 
 class StorageProvider(ABC):
@@ -52,6 +62,10 @@ class StorageProvider(ABC):
     @abstractmethod
     def delete_file(self, key: str) -> None:
         pass
+
+    @abstractmethod
+    def list_objects(self, prefix: str) -> Iterator[StoredObject]:
+        """Yield metadata for every object whose key starts with prefix."""
 
 
 class S3StorageProvider(StorageProvider):
@@ -100,6 +114,16 @@ class S3StorageProvider(StorageProvider):
     def delete_file(self, key: str) -> None:
         self.s3_client.delete_object(Bucket=self.bucket_name, Key=key)
 
+    def list_objects(self, prefix: str) -> Iterator[StoredObject]:
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self.bucket_name, Prefix=prefix):
+            for entry in page.get("Contents", []):
+                yield StoredObject(
+                    key=entry["Key"],
+                    last_modified=entry["LastModified"].astimezone(UTC),
+                    size=entry["Size"],
+                )
+
 
 class LocalStorageProvider(StorageProvider):
     """Disk-backed provider for running a single service without MinIO.
@@ -144,6 +168,21 @@ class LocalStorageProvider(StorageProvider):
         path = self._get_path(key)
         if os.path.exists(path):
             os.remove(path)
+
+    def list_objects(self, prefix: str) -> Iterator[StoredObject]:
+        for root, _dirs, files in os.walk(self.storage_dir):
+            for filename in files:
+                path = os.path.join(root, filename)
+                key = os.path.relpath(path, self.storage_dir).replace(os.sep, "/")
+                if not key.startswith(prefix):
+                    continue
+                yield StoredObject(
+                    key=key,
+                    last_modified=datetime.fromtimestamp(
+                        os.path.getmtime(path), tz=UTC
+                    ),
+                    size=os.path.getsize(path),
+                )
 
 
 @lru_cache(maxsize=1)

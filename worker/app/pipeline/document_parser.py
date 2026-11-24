@@ -34,6 +34,7 @@ from app.pipeline.file_loaders.png_loader import PNGLoader
 from app.pipeline.orientation import OrientationCorrector
 from app.pipeline.quality_checker import QualityChecker
 from app.pipeline.reading_order import order_blocks
+from app.pipeline.text_layer import Word, fill_pruned
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,10 @@ PageEventCallback = Callable[[int, PageEvent], None]
 class PageError(NamedTuple):
     code: str
     message: str
+    # The exception that produced this error, kept so the task can classify
+    # it as retriable or permanent (the stored code alone cannot tell a
+    # gateway 500 from a 4xx). None for errors built without a raw exception.
+    raw: BaseException | None = None
 
 
 UNAVAILABLE_HTTP_STATUSES = {502, 503, 504}
@@ -224,12 +229,17 @@ class DocumentParser:
         self.parsed_result: list[JsonDict] = []
         self.page_errors: dict[int, PageError] = {}
 
+        # Words extracted from a PDF's own text layer, in raster pixel
+        # coordinates. Empty means the gateway recognizes the text itself.
+        self.text_layer_words: list[Word] = []
+
         # PNG crops of the figure regions built by to_model_objects, by the
         # storage key their RegionImage points at. The caller uploads them.
         self.figure_images: dict[str, bytes] = {}
 
         # Corrected page images (upright) by storage key, built by
-        # correct_orientations for pages that were rotated. The caller
+        # correct_orientations for pages that were rotated, or by
+        # parse_single_page for a page it rotated itself. The caller
         # uploads them, mirroring figure_images.
         self.page_images: dict[str, bytes] = {}
         # Content rotation (degrees) applied to correct each page, keyed by
@@ -253,7 +263,7 @@ class DocumentParser:
         kind = filetype.guess(file_data)
         return None if kind is None else kind.extension
 
-    def load_file(self, file_data: bytes, password: str | None = None) -> None:
+    def _loader_for(self, file_data: bytes) -> FileLoader:
         file_extension = self.detect_extension(file_data)
 
         loader = (
@@ -263,8 +273,25 @@ class DocumentParser:
         )
         if loader is None:
             raise ValueError(f"No loader found for file extension: {file_extension}")
+        return loader
 
-        self.pages = loader.process_file(file_data, password=password)
+    def load_file(self, file_data: bytes, password: str | None = None) -> None:
+        self.pages = self._loader_for(file_data).process_file(
+            file_data, password=password
+        )
+
+    def count_pages(self, file_data: bytes, password: str | None = None) -> int:
+        return self._loader_for(file_data).count_pages(file_data, password=password)
+
+    def load_pages(
+        self,
+        file_data: bytes,
+        page_numbers: list[int],
+        password: str | None = None,
+    ) -> None:
+        self.pages = self._loader_for(file_data).process_pages(
+            file_data, page_numbers, password=password
+        )
 
     def correct_orientations(self, pages_to_process: tuple[int] | None = None) -> None:
         """Detect and fix the rotation of every page, in place.
@@ -314,8 +341,12 @@ class DocumentParser:
                 logger.info(f"Page {index + 1} manually rotated by {degrees}°")
             self.manual_rotations[index] = degrees
 
-    def process_page(self, page_data: str, page_index: int) -> JsonDict:
+    def process_page(
+        self, page_data: str, page_index: int, structure_only: bool = False
+    ) -> JsonDict:
         headers = {"Content-Type": "application/json"}
+        if structure_only:
+            headers["X-Yarrow-Structure-Only"] = "true"
         if settings.INFERENCE_API_KEY:
             headers["Authorization"] = f"Bearer {settings.INFERENCE_API_KEY}"
 
@@ -344,17 +375,22 @@ class DocumentParser:
         except Exception:
             logger.exception(f"Could not record page {page_number} as {event}")
 
-    def _process_page_isolated(self, page_index: int, page_data: str) -> JsonDict:
+    def _process_page_isolated(
+        self, page_index: int, page_data: str, structure_only: bool = False
+    ) -> JsonDict:
         page_number = page_index + 1
         self._emit_page_event(page_number, "started")
 
         try:
-            result = self.process_page(page_data, page_index)
+            if structure_only:
+                result = self.process_page(page_data, page_index, structure_only=True)
+            else:
+                result = self.process_page(page_data, page_index)
         except Exception as error:
             error_message = f"{type(error).__name__}: {error}"
             logger.error(f"Page {page_number} processing failed: ({error_message})")
             self.page_errors[page_index] = PageError(
-                page_error_code(error), error_message
+                page_error_code(error), error_message, raw=error
             )
             self._emit_page_event(page_number, "failed")
             return {}
@@ -965,6 +1001,189 @@ class DocumentParser:
         all_objects.extend(pages)
         all_objects.extend(warnings)
         all_objects.extend(regions)
+        all_objects.extend(tables)
+
+        return all_objects
+
+    def _merge_text_layer_words(self, result: JsonDict) -> None:
+        """Put the PDF's embedded words into the layout's pruned result.
+
+        The gateway returns geometry only when asked for structure, so the
+        words replace its recognized text before regions are built. A broken
+        payload leaves the gateway's own content in place.
+        """
+        try:
+            layouts = (result.get("result") or {}).get("layoutParsingResults")
+            if isinstance(layouts, (list, tuple)):
+                entry = layouts[0] if layouts else None
+            elif isinstance(layouts, dict):
+                entry = layouts.get(0) or next(iter(layouts.values()), None)
+            else:
+                entry = None
+            if not isinstance(entry, dict) or not isinstance(
+                entry.get("prunedResult"), dict
+            ):
+                return
+            entry["prunedResult"] = fill_pruned(
+                entry["prunedResult"], self.text_layer_words
+            )
+        except Exception:
+            logger.exception("Could not merge text layer words into the layout")
+
+    def parse_single_page(self, document: Document, page_index: int) -> list[Base]:
+        """Parse one page and return the model objects for it.
+
+        Runs the gateway call for the page at the given 0-based index,
+        corrects that page's orientation if needed, and
+        builds the Page row, its regions, its standalone Table parts and its
+        Warnings for that one page. The page's response is stored at
+        parsed_result[page_index] so get_pruned_result keeps working.
+
+        Table parts are built standalone (one Table per region table,
+        is_stitched=False); cross-page stitching is left to the finalize
+        step. figure_images and page_images are left populated for the
+        caller to upload, mirroring to_model_objects.
+        """
+        page_number = page_index + 1
+
+        # Orientation first: a manual override (any value, including 0)
+        # skips auto-detection, matching correct_orientations.
+        corrected_b64: str | None = None
+        if page_index in self.manual_rotations:
+            logger.info(
+                f"Page {page_number} kept its manual rotation of "
+                f"{self.manual_rotations[page_index]} degrees"
+            )
+        else:
+            corrected, angle, confidence = self.orientation_corrector.correct_page(
+                self.pages[page_index]
+            )
+            if angle != 0.0:
+                self.pages[page_index] = corrected
+                self.page_orientations[page_index] = angle
+                corrected_b64 = corrected
+                logger.info(
+                    f"Page {page_number} auto-rotated by {angle:.1f}° (confidence {confidence:.2f})"
+                )
+        page_data = self.pages[page_index]
+        if corrected_b64 is not None:
+            page_data = corrected_b64
+
+        structure_only = bool(self.text_layer_words)
+
+        # Gateway call for this page only; its ModelInfo lands in
+        # page_models on success, page_errors on failure. With embedded
+        # words the gateway skips recognition and returns layout only.
+        result = self._process_page_isolated(
+            page_index, page_data, structure_only=structure_only
+        )
+        if structure_only and result:
+            self._merge_text_layer_words(result)
+
+        # Fold the response into parsed_result so the whole-document
+        # helpers see it. Slots for pages
+        # not parsed yet stay empty.
+        if page_index >= len(self.parsed_result):
+            self.parsed_result.extend(
+                [{} for _ in range(page_index + 1 - len(self.parsed_result))]
+            )
+        self.parsed_result[page_index] = result
+
+        pruned = (
+            result.get("result", {})
+            .get("layoutParsingResults", {})[0]
+            .get("prunedResult")
+            if result
+            else None
+        )
+        page_error = self.page_errors.get(page_index)
+        model = None if page_error else self.page_models.get(page_index)
+        if structure_only and not page_error:
+            model = ModelInfo("model-free", "model-free")
+            self.page_models[page_index] = model
+
+        page_id = uuid.uuid4()
+        page = Page(
+            id=page_id,
+            document_id=document.id,
+            page_number=page_number,
+            width=pruned.get("width") if pruned else None,
+            height=pruned.get("height") if pruned else None,
+            status="failed" if page_error else "completed",
+            error_code=page_error.code if page_error else None,
+            error_message=page_error.message if page_error else None,
+            model_name=model.name if model else None,
+            model_version=model.version if model else None,
+        )
+
+        warnings: list[Warning] = []
+
+        # A page that was rotated is stored with
+        # its corrected image so the viewer shows the page the OCR ran on,
+        # and is warned about.
+        if page_index in self.page_orientations:
+            image_key = f"documents/{document.id}/pages/{page_number}.png"
+            page.page_image_key = image_key
+            self.page_images[image_key] = base64.b64decode(page_data)
+            warnings.append(
+                Warning(
+                    page_id=page_id,
+                    warning_type="quality",
+                    message=f"Page was auto-rotated by {self.page_orientations[page_index]:.0f}°",
+                )
+            )
+        elif page_index in self.manual_rotations:
+            # A manually rotated page keeps the user's override so the next
+            # run rotates it the same way, and stores its rotated image for
+            # the viewer. A 0 override is "original orientation": the raster
+            # is unchanged, so there is no image to re-store or warning to
+            # add, but the override is kept so auto-detection stays off.
+            degrees = self.manual_rotations[page_index]
+            page.manual_rotation_deg = degrees
+            if degrees:
+                image_key = f"documents/{document.id}/pages/{page_number}.png"
+                page.page_image_key = image_key
+                self.page_images[image_key] = base64.b64decode(page_data)
+                warnings.append(
+                    Warning(
+                        page_id=page_id,
+                        warning_type="quality",
+                        message=f"Page was manually rotated by {degrees}°",
+                    )
+                )
+
+        # Quality warnings do not stop the page's content from being built
+        try:
+            warnings.extend(
+                Warning(page_id=page_id, warning_type="quality", message=message)
+                for message in self.quality_checker.check_quality(
+                    base64.b64decode(page_data), pruned
+                )
+            )
+        except Exception:
+            logger.exception(f"Quality check failed for page {page_number}")
+
+        all_objects: list[Base] = [page]
+        all_objects.extend(warnings)
+
+        if not pruned:
+            # Page processing failed, nothing else to build.
+            return all_objects
+
+        page_regions, region_tables_data = self._construct_regions(
+            page_index, page_id, pruned, document.id
+        )
+
+        tables: list[Table] = []
+        for part in region_tables_data:
+            tables_per_part, region_tables_per_part, table_cells_per_part = (
+                self._build_table(document, [part])
+            )
+            tables.extend(tables_per_part)
+            all_objects.extend(region_tables_per_part)
+            all_objects.extend(table_cells_per_part)
+
+        all_objects.extend(page_regions)
         all_objects.extend(tables)
 
         return all_objects

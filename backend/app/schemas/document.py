@@ -5,6 +5,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from yarrow_db.models import JobErrorStage
 
 from app.schemas.common import StrictModel
 from app.schemas.tag import TagOut
@@ -24,6 +25,7 @@ class JobOut(BaseModel):
     pages_processed: int | None = None
     total_pages: int | None = None
     error_message: str | None = None
+    error_stage: JobErrorStage | None = None
     model_name: str | None = None
     model_version: str | None = None
     pipeline_version: str | None = None
@@ -54,6 +56,12 @@ class PageOut(BaseModel):
     def _only_user_facing_errors(self):
         self.error_message = page_error_message(self.error_code, self.status)
         return self
+
+
+class ReprocessRequest(BaseModel):
+    """Options for a single-document reprocess request."""
+
+    skip_text_layer: bool = False
 
 
 class ReprocessInfo(BaseModel):
@@ -87,6 +95,7 @@ class DocumentOut(BaseModel):
     page_count: int | None = None
     status: str | None = None
     error_message: str | None = None
+    error_stage: JobErrorStage | None = None
     created_at: datetime | None = None
     # Set while the document is in trash; null in the normal library.
     deleted_at: datetime | None = None

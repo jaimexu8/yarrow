@@ -1,277 +1,267 @@
+"""Unit-test fixtures.
+
+The Phase Celery tasks are tested against a real SQLite database
+(SQLite 3.46+ supports the FOR UPDATE row locks and the RETURNING clause the
+tasks use), a stubbed OCR gateway (the parser's per-page entry point is
+replaced so no network or live cluster is needed), an in-memory object
+store, and an in-memory Valkey DB 3 client for the delivery counters and
+sweep markers.
+"""
+
 from contextlib import contextmanager
-from typing import ClassVar
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from yarrow_db.models import Document, Job, JobPage, Page
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from yarrow_db.models import Base, Document, Job, Page, Warning
 from yarrow_db.models.region import RegionImage
+from yarrow_storage import ObjectNotFoundError, StoredObject
 
-from app.pipeline.document_parser import ModelInfo
+from app.pipeline.document_parser import ModelInfo, PageError, page_error_code
 from app.tasks import ingestion
 
 
-class FakeResult:
-    def __init__(self, rows=None):
-        self.rows = list(rows or [])
-
-    def scalar(self):
-        return self.rows[0] if self.rows else None
-
-    def scalar_one(self):
-        if len(self.rows) != 1:
-            raise ValueError(f"Expected exactly one result, got {len(self.rows)}")
-        return self.rows[0]
-
-    def scalar_one_or_none(self):
-        if len(self.rows) > 1:
-            raise ValueError(f"Expected at most one result, got {len(self.rows)}")
-        return self.rows[0] if self.rows else None
-
-    def all(self):
-        return self.rows
-
-    def scalars(self):
-        return FakeScalarResult(self.rows)
-
-
-class FakeScalarResult:
-    def __init__(self, rows):
-        self.rows = rows
-
-    def all(self):
-        return self.rows
-
-    def first(self):
-        return self.rows[0] if self.rows else None
-
-    def one(self):
-        if len(self.rows) != 1:
-            raise ValueError(f"Expected exactly one result, got {len(self.rows)}")
-        return self.rows[0]
-
-
-class FakeSession:
-    def __init__(self, store):
-        self.store = store
-        self.added = []
-        # Keys of the figure crops already stored for the pages being replaced
-        self.existing_image_keys: list[str] = []
-        # Corrected-page image keys already stored for the pages being replaced
-        self.existing_page_image_keys: list[str] = []
-        # (page_number, manual_rotation_deg) overrides stored for the pages
-        # being replaced; empty when no page has a manual rotation.
-        self.existing_manual_rotations: list[tuple[int, int]] = []
-
-    def get(self, model, key, with_for_update=False):
-        # with_for_update is accepted and ignored: there is no concurrency to
-        # serialize against in these tests, but ingestion locks the document
-        # row so the signature has to match.
-        return self.store.get((model.__name__, key))
-
-    def refresh(self, obj, with_for_update=False):
-        # Objects live in the store, so they are always current; the lock is
-        # ignored for the same reason as in get().
-        return None
-
-    def add_all(self, objects):
-        self.added.extend(objects)
-
-    def execute(self, statement):
-        # Only Page selects are answered, from the rows the task added: ingestion
-        # derives the document's status by reading its pages back, so returning
-        # nothing here would report every document as failed. Everything else the
-        # task executes is a delete or a table query these tests do not assert on.
-        entities = {
-            column.get("entity")
-            for column in getattr(statement, "column_descriptions", [])
-        }
-        if Page in entities:
-            # The page_image_key select reads the stored keys back; answer it
-            # from the configured prior-run keys so the replaced-list logic runs.
-            if any(
-                getattr(column, "name", None) == "page_image_key"
-                for column in getattr(statement, "column_descriptions", [])
-            ):
-                return FakeResult(self.existing_page_image_keys)
-            # The manual-rotation select reads the stored overrides back; answer
-            # with nothing (no override) unless a test sets one.
-            if any(
-                getattr(column, "name", None) == "manual_rotation_deg"
-                for column in getattr(statement, "column_descriptions", [])
-            ):
-                return FakeResult(self.existing_manual_rotations)
-            return FakeResult(
-                [
-                    (page.page_number, page.status)
-                    for page in self.added
-                    if isinstance(page, Page)
-                ]
-            )
-        if RegionImage in entities:
-            return FakeResult(self.existing_image_keys)
-        if JobPage in entities:
-            return FakeResult(
-                [job_page for job_page in self.added if isinstance(job_page, JobPage)]
-            )
-        return FakeResult()
-
-    def scalar(self, statement):
-        return 0
-
-    def flush(self):
-        return
-
-
 class FakeStorage:
+    """An in-memory object store; download_bytes raises when the key is
+    missing, like the real provider."""
+
     def __init__(self, store: dict[str, bytes]):
         self.store = store
 
-    def download_bytes(self, storage_key) -> bytes:
-        return b"fake"
+    def download_bytes(self, storage_key):
+        if storage_key in self.store:
+            return self.store[storage_key]
+        raise ObjectNotFoundError(storage_key)
 
-    def upload_file(self, file, key) -> None:
+    def upload_file(self, file, key):
         self.store[key] = file.read()
 
-    def delete_file(self, key) -> None:
+    def delete_file(self, key):
         self.store.pop(key, None)
 
-
-class FakeDocumentParser:
-    page_count = 1
-
-    failed = ()
-    load_error = None
-    inference_error = None
-    figures: ClassVar[dict[str, bytes]] = {}
-    # 1-based page number -> content rotation, for pages the fake corrects
-    corrected_pages: ClassVar[dict[int, float]] = {}
-    models: ClassVar[dict[int, ModelInfo]] = {}
-
-    def __init__(self, on_page_event=None) -> None:
-        self.on_page_event = on_page_event
-        self.pages: list[str] = []
-        self.page_count = 0
-        self.failed = ()
-        self.load_error = None
-        self.inference_error = None
-        self.figure_images: dict[str, bytes] = {}
-        self.page_images: dict[str, bytes] = {}
-        self.page_orientations: dict[int, float] = {}
-        self.manual_rotations: dict[int, int] = {}
-        self.page_models: dict[int, ModelInfo] = {}
-
-    @classmethod
-    def configure(
-        cls,
-        page_count=1,
-        failed=(),
-        load_error=None,
-        inference_error=None,
-        figures=None,
-        corrected_pages=None,
-        models=None,
-    ):
-        cls.page_count = page_count
-        cls.failed = failed
-        cls.load_error = load_error
-        cls.inference_error = inference_error
-        # Figure crops by storage key, each given a RegionImage row
-        cls.figures = dict(figures or {})
-        cls.corrected_pages = dict(corrected_pages or {})
-        cls.models = dict(models or {})
-
-    @property
-    def failed_page_numbers(self) -> list[int]:
-        return sorted(FakeDocumentParser.failed)
-
-    def load_file(self, file_data):
-        if FakeDocumentParser.load_error is not None:
-            raise FakeDocumentParser.load_error
-
-        self.pages = [f"page_{i}" for i in range(FakeDocumentParser.page_count)]
-
-    def correct_orientations(self, pages_to_process=None):
-        self.orientations_scope = pages_to_process
-        # The real parser rewrites self.pages in place; the fake keeps its
-        # placeholder pages and only records which were "corrected".
-        for page_number, angle in FakeDocumentParser.corrected_pages.items():
-            self.page_orientations[page_number - 1] = angle
-
-    def apply_manual_rotations(self, rotations):
-        # The real parser rotates the page image in place; the fake keeps its
-        # placeholder pages and only records which were manually rotated.
-        self.manual_rotations.update(rotations)
-
-    def process_sync(self, page_to_process=None):
-        if FakeDocumentParser.inference_error is not None:
-            raise FakeDocumentParser.inference_error
-        self.page_models = {
-            index: model
-            for index, model in FakeDocumentParser.models.items()
-            if index + 1 not in FakeDocumentParser.failed
-        }
-
-    def to_model_objects(
-        self, document, target_pages=None, merge_consecutive_tables=False
-    ):
-        output = []
-        self.page_images = {}
-        for number in range(1, len(self.pages) + 1):
-            failed = number in FakeDocumentParser.failed
-            model = self.page_models.get(number - 1)
-            page = Page(
-                id=uuid4(),
-                document_id=document.id,
-                page_number=number,
-                status="failed" if failed else "completed",
-                error_code="inference_error" if failed else None,
-                error_message="inference failed" if failed else None,
-                model_name=model.name if model else None,
-                model_version=model.version if model else None,
-            )
-            if number in FakeDocumentParser.corrected_pages:
-                key = f"documents/{document.id}/pages/{number}.png"
-                page.page_image_key = key
-                self.page_images[key] = b"corrected"
-            if number - 1 in self.manual_rotations:
-                page.manual_rotation_deg = self.manual_rotations[number - 1]
-            output.append(page)
-
-        document.page_count = len(self.pages)
-
-        self.figure_images = dict(FakeDocumentParser.figures)
-        output.extend(
-            RegionImage(id=uuid4(), region_id=uuid4(), image_key=key)
-            for key in self.figure_images
+    def list_objects(self, prefix):
+        return (
+            StoredObject(key=key, last_modified=datetime.now(UTC), size=len(value))
+            for key, value in self.store.items()
+            if key.startswith(prefix)
         )
 
-        return output
+
+class FakeRedis:
+    """In-memory stand-in for the Valkey DB 3 counter/sweep store."""
+
+    def __init__(self, store: dict, down: bool = False):
+        self.store = store
+        self.down = down
+
+    def _fail(self):
+        if self.down:
+            raise ConnectionError("valkey unreachable")
+
+    def incr(self, key):
+        self._fail()
+        value = int(self.store.get(key, 0)) + 1
+        self.store[key] = value
+        return value
+
+    def expire(self, key, ttl):
+        self._fail()
+
+    def delete(self, key):
+        self._fail()
+        self.store.pop(key, None)
+
+    def get(self, key):
+        self._fail()
+        return self.store.get(key)
+
+    def set(self, key, value, ex=None):
+        self._fail()
+        self.store[key] = value
+
+
+class Gateway:
+    """State + control for the stubbed OCR gateway.
+
+    The conftest `gateway` fixture turns these into plain functions (parser as
+    the first argument, so they bind correctly when called on a DocumentParser
+    instance) and patches them onto DocumentParser via monkeypatch.
+
+    - count_pages returns the configured page count without loading the file.
+    - load_file produces page_count placeholder pages (valid base64, not a real
+      image, so _raster_size / build_thumbnail fail gracefully).
+    - load_pages produces a full-length pages list but fills placeholders only
+      for the selected page numbers; every other slot is an empty string.
+    - correct_orientations records a rotation for each page in rotations.
+    - parse_single_page returns a completed Page (with optional corrected image
+      and figure crops), or records a page_error and returns a failed Page when
+      fail(page_no, error) was set.
+    """
+
+    def __init__(self):
+        self.page_count = 1
+        self.failures: dict[int, BaseException] = {}
+        self.rotations: dict[int, float] = {}
+        self.model = ModelInfo("M1", "1.0")
+        self.calls: list[int] = []
+        self.figures: dict[str, bytes] = {}
+        self.manual: dict[int, int] = {}
+        self.warnings: dict[int, str] = {}
+        self.text_layer_words: list[list] = []
+
+    def configure(
+        self,
+        pages=1,
+        model=None,
+        rotations=None,
+        figures=None,
+        manual=None,
+        warnings=None,
+    ):
+        self.page_count = pages
+        if model is not None:
+            self.model = model
+        self.rotations = dict(rotations or {})
+        self.figures = dict(figures or {})
+        self.manual = dict(manual or {})
+        self.warnings = dict(warnings or {})
+
+    def fail(self, page_no, error):
+        self.failures[page_no] = error
+
+    def count_pages(self, parser, file_data, **kwargs):
+        return self.page_count
+
+    def load_file(self, parser, file_data, **kwargs):
+        import base64
+
+        parser.pages = [
+            base64.b64encode(f"page_{i}".encode()).decode()
+            for i in range(self.page_count)
+        ]
+
+    def load_pages(self, parser, file_data, page_numbers, **kwargs):
+        import base64
+
+        selected = set(page_numbers)
+        parser.pages = [
+            base64.b64encode(f"page_{number}".encode()).decode()
+            if number in selected
+            else ""
+            for number in range(1, self.page_count + 1)
+        ]
+
+    def correct_orientations(self, parser, pages_to_process=None):
+        for number, angle in self.rotations.items():
+            parser.page_orientations[number - 1] = angle
+
+    def apply_manual_rotations(self, parser, rotations):
+        parser.manual_rotations.update(rotations)
+
+    def parse_single_page(self, parser, document, page_index):
+        number = page_index + 1
+        self.calls.append(number)
+        self.text_layer_words.append(list(getattr(parser, "text_layer_words", [])))
+        error = self.failures.get(number)
+        if error is not None:
+            parser.page_errors[page_index] = PageError(
+                page_error_code(error),
+                f"{type(error).__name__}: {error}",
+                error,
+            )
+            return [Page(document_id=document.id, page_number=number, status="failed")]
+        page = Page(
+            document_id=document.id,
+            page_number=number,
+            width=40.0,
+            height=40.0,
+            status="completed",
+            model_name=self.model.name,
+            model_version=self.model.version,
+        )
+        if page_index in self.rotations:
+            key = f"documents/{document.id}/pages/{number}.png"
+            page.page_image_key = key
+            parser.page_images[key] = b"corrected"
+        objects = [page]
+        if page_index in self.warnings:
+            objects.append(
+                Warning(
+                    page_id=page.id,
+                    warning_type="quality",
+                    message=self.warnings[page_index],
+                )
+            )
+        if self.figures:
+            parser.figure_images.update(self.figures)
+            objects.extend(
+                RegionImage(id=uuid4(), region_id=uuid4(), image_key=key)
+                for key in self.figures
+            )
+        return objects
 
 
 @pytest.fixture
-def job(store):
-    document = Document(
-        id=uuid4(),
-        owner_id=uuid4(),
-        filename="scan.pdf",
-        file_size_bytes=1234,
-        file_type="application/pdf",
-        storage_key="documents/abc/original",
-        status="queued",
-        page_count=1,
+def seed(sessions):
+    """Create a document + job row; the returned callable takes (page_count,
+    status) and returns (document, job)."""
+
+    def _seed(page_count=1, status="queued"):
+        with sessions() as session:
+            document = Document(
+                id=uuid4(),
+                owner_id=uuid4(),
+                filename="scan.pdf",
+                file_size_bytes=1234,
+                file_type="application/pdf",
+                storage_key="documents/abc/original",
+                status=status,
+                page_count=page_count,
+            )
+            job = Job(
+                id=uuid4(),
+                document_id=document.id,
+                status=status,
+                current_stage="queued",
+                pages_processed=0,
+                total_pages=0,
+            )
+            session.add_all([document, job])
+        return document, job
+
+    return _seed
+
+
+@pytest.fixture
+def sessions(tmp_path, monkeypatch):
+    """A real SQLite database (shared in-memory connection) so the tasks' raw
+    SQL and row locks behave as in Postgres."""
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
-    job = Job(
-        id=uuid4(),
-        document_id=document.id,
-        status="queued",
-        current_stage="queued",
-        pages_processed=0,
-        total_pages=0,
-    )
-    job.document = document
-    store[("Job", job.id)] = job
-    store[("Document", document.id)] = document
-    return job
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(engine, expire_on_commit=False)
+
+    @contextmanager
+    def session_scope():
+        session = factory()
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    monkeypatch.setattr(ingestion, "session_scope", session_scope)
+    yield session_scope
+    engine.dispose()
 
 
 @pytest.fixture
@@ -280,32 +270,64 @@ def store():
 
 
 @pytest.fixture
-def session(store, monkeypatch):
-    fake_session = FakeSession(store)
-
-    @contextmanager
-    def session_scope():
-        yield fake_session
-
-    monkeypatch.setattr(ingestion, "session_scope", session_scope)
-    return fake_session
-
-
-@pytest.fixture
 def storage(store, monkeypatch):
-    fake_storage = FakeStorage(store)
-
-    def get_storage():
-        return fake_storage
-
-    monkeypatch.setattr(ingestion, "get_storage", get_storage)
-    return fake_storage
+    fake = FakeStorage(store)
+    monkeypatch.setattr(ingestion, "get_storage", lambda: fake)
+    return fake
 
 
 @pytest.fixture
-def parser(monkeypatch):
-    # Configuration lives on the class, so reset what earlier tests set
-    FakeDocumentParser.configure()
-    parser = FakeDocumentParser()
-    monkeypatch.setattr(ingestion, "DocumentParser", FakeDocumentParser)
-    return parser
+def redis_stub(monkeypatch):
+    """Valkey DB 3, in memory. Set .down to simulate an unreachable Valkey
+    (the tasks must then skip the counters and continue)."""
+    store: dict = {}
+    fake = FakeRedis(store, down=False)
+    monkeypatch.setattr(ingestion, "_page_counters_client", lambda: fake)
+    return fake
+
+
+@pytest.fixture
+def gateway(monkeypatch):
+    from app.pipeline.document_parser import DocumentParser
+
+    gw = Gateway()
+
+    def count_pages(parser, file_data, **kwargs):
+        return gw.count_pages(parser, file_data, **kwargs)
+
+    def load_file(parser, file_data, **kwargs):
+        gw.load_file(parser, file_data, **kwargs)
+
+    def load_pages(parser, file_data, page_numbers, **kwargs):
+        gw.load_pages(parser, file_data, page_numbers, **kwargs)
+
+    def correct_orientations(parser, pages_to_process=None):
+        gw.correct_orientations(parser, pages_to_process)
+
+    def apply_manual_rotations(parser, rotations):
+        gw.apply_manual_rotations(parser, rotations)
+
+    def parse_single_page(parser, document, page_index):
+        return gw.parse_single_page(parser, document, page_index)
+
+    monkeypatch.setattr(DocumentParser, "count_pages", count_pages, raising=False)
+    monkeypatch.setattr(DocumentParser, "load_file", load_file)
+    monkeypatch.setattr(DocumentParser, "load_pages", load_pages, raising=False)
+    monkeypatch.setattr(DocumentParser, "correct_orientations", correct_orientations)
+    monkeypatch.setattr(
+        DocumentParser, "apply_manual_rotations", apply_manual_rotations
+    )
+    monkeypatch.setattr(DocumentParser, "parse_single_page", parse_single_page)
+    return gw
+
+
+@pytest.fixture
+def enqueue(monkeypatch):
+    """Record every task the tasks enqueue instead of sending to the broker."""
+    sent: list[tuple[str, str, list]] = []
+
+    def send_task(name, args=None, queue=None, **kwargs):
+        sent.append((name, queue or "default", list(args or [])))
+
+    monkeypatch.setattr(ingestion.celery_app, "send_task", send_task)
+    return sent

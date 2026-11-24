@@ -1,0 +1,162 @@
+{
+  "file": "digit_page.png",
+  "bytes": 252509,
+  "sha256": "54a8192b32255df20512eca16c8af2da05d0bc19da3a093732d5b74dc0ae3343",
+  "detected_extension": "png",
+  "kind": "processable",
+  "expected_pages": 1,
+  "model_graph": {
+    "pages": [
+      {
+        "page_number": 1,
+        "regions": [
+          {
+            "reading_order": 0,
+            "region_type": "paragraph",
+            "block_label": "figure_title",
+            "is_table": false,
+            "has_text": false
+          },
+          {
+            "reading_order": 1,
+            "region_type": "table",
+            "block_label": "table",
+            "is_table": true,
+            "has_text": false
+          },
+          {
+            "reading_order": 2,
+            "region_type": "paragraph",
+            "block_label": "footer",
+            "is_table": false,
+            "has_text": false
+          }
+        ]
+      }
+    ],
+    "unmerged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 3,
+        "region_texts": 0,
+        "tables": 1,
+        "region_tables": 1,
+        "table_cells": 30
+      },
+      "tables": [
+        {
+          "row_count": 10,
+          "col_count": 3,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 1,
+              "region_reading_order": 1,
+              "row_start": 0,
+              "row_end": 9,
+              "col_start": 0,
+              "col_end": 2,
+              "cells": [
+                [0, 0, 1, 1, false],
+                [0, 1, 1, 1, false],
+                [0, 2, 1, 1, false],
+                [1, 0, 1, 1, false],
+                [1, 1, 1, 1, false],
+                [1, 2, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false],
+                [2, 2, 1, 1, false],
+                [3, 0, 1, 1, false],
+                [3, 1, 1, 1, false],
+                [3, 2, 1, 1, false],
+                [4, 0, 1, 1, false],
+                [4, 1, 1, 1, false],
+                [4, 2, 1, 1, false],
+                [5, 0, 1, 1, false],
+                [5, 1, 1, 1, false],
+                [5, 2, 1, 1, false],
+                [6, 0, 1, 1, false],
+                [6, 1, 1, 1, false],
+                [6, 2, 1, 1, false],
+                [7, 0, 1, 1, false],
+                [7, 1, 1, 1, false],
+                [7, 2, 1, 1, false],
+                [8, 0, 1, 1, false],
+                [8, 1, 1, 1, false],
+                [8, 2, 1, 1, false],
+                [9, 0, 1, 1, false],
+                [9, 1, 1, 1, false],
+                [9, 2, 1, 1, false]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "merged": {
+      "counts": {
+        "documents": 1,
+        "pages": 1,
+        "regions": 3,
+        "region_texts": 0,
+        "tables": 1,
+        "region_tables": 1,
+        "table_cells": 30
+      },
+      "tables": [
+        {
+          "row_count": 10,
+          "col_count": 3,
+          "is_stitched": false,
+          "title": null,
+          "parts": [
+            {
+              "reading_order": 0,
+              "page_number": 1,
+              "region_reading_order": 1,
+              "row_start": 0,
+              "row_end": 9,
+              "col_start": 0,
+              "col_end": 2,
+              "cells": [
+                [0, 0, 1, 1, false],
+                [0, 1, 1, 1, false],
+                [0, 2, 1, 1, false],
+                [1, 0, 1, 1, false],
+                [1, 1, 1, 1, false],
+                [1, 2, 1, 1, false],
+                [2, 0, 1, 1, false],
+                [2, 1, 1, 1, false],
+                [2, 2, 1, 1, false],
+                [3, 0, 1, 1, false],
+                [3, 1, 1, 1, false],
+                [3, 2, 1, 1, false],
+                [4, 0, 1, 1, false],
+                [4, 1, 1, 1, false],
+                [4, 2, 1, 1, false],
+                [5, 0, 1, 1, false],
+                [5, 1, 1, 1, false],
+                [5, 2, 1, 1, false],
+                [6, 0, 1, 1, false],
+                [6, 1, 1, 1, false],
+                [6, 2, 1, 1, false],
+                [7, 0, 1, 1, false],
+                [7, 1, 1, 1, false],
+                [7, 2, 1, 1, false],
+                [8, 0, 1, 1, false],
+                [8, 1, 1, 1, false],
+                [8, 2, 1, 1, false],
+                [9, 0, 1, 1, false],
+                [9, 1, 1, 1, false],
+                [9, 2, 1, 1, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

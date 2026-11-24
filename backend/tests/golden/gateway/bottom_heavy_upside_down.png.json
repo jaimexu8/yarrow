@@ -1,0 +1,657 @@
+{
+  "bytes": 102794,
+  "detected_extension": "png",
+  "expected": {
+    "blocks": [
+      {
+        "block_bbox": [
+          55,
+          35,
+          1164,
+          692
+        ],
+        "block_content": "The budget reviewer市场份额是70%，而其他部门则认为，他们需要从不同角度来评估他们的业务表现。\n\nWe will pair on the risk-based several items for follow-up.\n\nRisks include the storage quota and the cluster downtime.\n\nThe plan covers the next two spirit and the final review.\n\nSuccess means a stable build and a clean, readable report.\n\nQuestions go to the channel so the whole team can weigh in.\n\nWe will refine the scope before the next planning meeting.\n\nThe owners will confirm the dates and the acceptance goals.\n\nPlease review the attached figures and note any objections.",
+        "block_id": 0,
+        "block_label": "text",
+        "block_order": 0
+      },
+      {
+        "block_bbox": [
+          984,
+          1414,
+          1159,
+          1443
+        ],
+        "block_content": "internal note",
+        "block_id": 1,
+        "block_label": "text",
+        "block_order": 1
+      },
+      {
+        "block_bbox": [
+          1017,
+          1482,
+          1154,
+          1522
+        ],
+        "block_content": "MEMO",
+        "block_id": 2,
+        "block_label": "text",
+        "block_order": 2
+      }
+    ],
+    "height": 1650,
+    "markdown": {
+      "markdown_images_count": 0,
+      "markdown_images_keys": [],
+      "markdown_images_sha256": {},
+      "text": "The budget reviewer市场份额是70%，而其他部门则认为，他们需要从不同角度来评估他们的业务表现。\n\nWe will pair on the risk-based several items for follow-up.\n\nRisks include the storage quota and the cluster downtime.\n\nThe plan covers the next two spirit and the final review.\n\nSuccess means a stable build and a clean, readable report.\n\nQuestions go to the channel so the whole team can weigh in.\n\nWe will refine the scope before the next planning meeting.\n\nThe owners will confirm the dates and the acceptance goals.\n\nPlease review the attached figures and note any objections.\n\ninternal note\n\nMEMO"
+    },
+    "table_res_list": [],
+    "width": 1275
+  },
+  "expected_pages": 1,
+  "file": "bottom_heavy_upside_down.png",
+  "kind": "image",
+  "recorded_structure": {
+    "height": 1650,
+    "overall_ocr_res": {
+      "dt_polys": [
+        [
+          [
+            173,
+            31
+          ],
+          [
+            1162,
+            36
+          ],
+          [
+            1161,
+            96
+          ],
+          [
+            172,
+            91
+          ]
+        ],
+        [
+          [
+            71,
+            101
+          ],
+          [
+            1160,
+            104
+          ],
+          [
+            1160,
+            162
+          ],
+          [
+            71,
+            159
+          ]
+        ],
+        [
+          [
+            58,
+            171
+          ],
+          [
+            1160,
+            178
+          ],
+          [
+            1159,
+            228
+          ],
+          [
+            58,
+            222
+          ]
+        ],
+        [
+          [
+            97,
+            233
+          ],
+          [
+            1160,
+            242
+          ],
+          [
+            1159,
+            299
+          ],
+          [
+            96,
+            289
+          ]
+        ],
+        [
+          [
+            50,
+            309
+          ],
+          [
+            1156,
+            310
+          ],
+          [
+            1156,
+            361
+          ],
+          [
+            50,
+            360
+          ]
+        ],
+        [
+          [
+            91,
+            380
+          ],
+          [
+            1158,
+            380
+          ],
+          [
+            1158,
+            429
+          ],
+          [
+            91,
+            429
+          ]
+        ],
+        [
+          [
+            118,
+            447
+          ],
+          [
+            1157,
+            446
+          ],
+          [
+            1157,
+            497
+          ],
+          [
+            118,
+            498
+          ]
+        ],
+        [
+          [
+            98,
+            511
+          ],
+          [
+            1159,
+            515
+          ],
+          [
+            1158,
+            569
+          ],
+          [
+            98,
+            565
+          ]
+        ],
+        [
+          [
+            196,
+            579
+          ],
+          [
+            1157,
+            584
+          ],
+          [
+            1156,
+            635
+          ],
+          [
+            196,
+            630
+          ]
+        ],
+        [
+          [
+            166,
+            637
+          ],
+          [
+            1163,
+            645
+          ],
+          [
+            1162,
+            708
+          ],
+          [
+            165,
+            701
+          ]
+        ],
+        [
+          [
+            979,
+            1414
+          ],
+          [
+            1158,
+            1416
+          ],
+          [
+            1157,
+            1459
+          ],
+          [
+            978,
+            1456
+          ]
+        ],
+        [
+          [
+            1014,
+            1482
+          ],
+          [
+            1154,
+            1482
+          ],
+          [
+            1154,
+            1529
+          ],
+          [
+            1014,
+            1529
+          ]
+        ]
+      ],
+      "model_settings": {
+        "use_doc_preprocessor": false,
+        "use_textline_orientation": true
+      },
+      "rec_boxes": [
+        [
+          172.0,
+          31.0,
+          1162.0,
+          96.0
+        ],
+        [
+          71.0,
+          101.0,
+          1160.0,
+          162.0
+        ],
+        [
+          58.0,
+          171.0,
+          1160.0,
+          228.0
+        ],
+        [
+          96.0,
+          233.0,
+          1160.0,
+          299.0
+        ],
+        [
+          50.0,
+          309.0,
+          1156.0,
+          361.0
+        ],
+        [
+          91.0,
+          380.0,
+          1158.0,
+          429.0
+        ],
+        [
+          118.0,
+          446.0,
+          1157.0,
+          498.0
+        ],
+        [
+          98.0,
+          511.0,
+          1159.0,
+          569.0
+        ],
+        [
+          196.0,
+          579.0,
+          1157.0,
+          635.0
+        ],
+        [
+          165.0,
+          637.0,
+          1163.0,
+          708.0
+        ],
+        [
+          978.0,
+          1414.0,
+          1158.0,
+          1459.0
+        ],
+        [
+          1014.0,
+          1482.0,
+          1154.0,
+          1529.0
+        ]
+      ],
+      "rec_polys": [
+        [
+          [
+            173,
+            31
+          ],
+          [
+            1162,
+            36
+          ],
+          [
+            1161,
+            96
+          ],
+          [
+            172,
+            91
+          ]
+        ],
+        [
+          [
+            71,
+            101
+          ],
+          [
+            1160,
+            104
+          ],
+          [
+            1160,
+            162
+          ],
+          [
+            71,
+            159
+          ]
+        ],
+        [
+          [
+            58,
+            171
+          ],
+          [
+            1160,
+            178
+          ],
+          [
+            1159,
+            228
+          ],
+          [
+            58,
+            222
+          ]
+        ],
+        [
+          [
+            97,
+            233
+          ],
+          [
+            1160,
+            242
+          ],
+          [
+            1159,
+            299
+          ],
+          [
+            96,
+            289
+          ]
+        ],
+        [
+          [
+            50,
+            309
+          ],
+          [
+            1156,
+            310
+          ],
+          [
+            1156,
+            361
+          ],
+          [
+            50,
+            360
+          ]
+        ],
+        [
+          [
+            91,
+            380
+          ],
+          [
+            1158,
+            380
+          ],
+          [
+            1158,
+            429
+          ],
+          [
+            91,
+            429
+          ]
+        ],
+        [
+          [
+            118,
+            447
+          ],
+          [
+            1157,
+            446
+          ],
+          [
+            1157,
+            497
+          ],
+          [
+            118,
+            498
+          ]
+        ],
+        [
+          [
+            98,
+            511
+          ],
+          [
+            1159,
+            515
+          ],
+          [
+            1158,
+            569
+          ],
+          [
+            98,
+            565
+          ]
+        ],
+        [
+          [
+            196,
+            579
+          ],
+          [
+            1157,
+            584
+          ],
+          [
+            1156,
+            635
+          ],
+          [
+            196,
+            630
+          ]
+        ],
+        [
+          [
+            166,
+            637
+          ],
+          [
+            1163,
+            645
+          ],
+          [
+            1162,
+            708
+          ],
+          [
+            165,
+            701
+          ]
+        ],
+        [
+          [
+            979,
+            1414
+          ],
+          [
+            1158,
+            1416
+          ],
+          [
+            1157,
+            1459
+          ],
+          [
+            978,
+            1456
+          ]
+        ],
+        [
+          [
+            1014,
+            1482
+          ],
+          [
+            1154,
+            1482
+          ],
+          [
+            1154,
+            1529
+          ],
+          [
+            1014,
+            1529
+          ]
+        ]
+      ],
+      "rec_scores": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "rec_texts": [],
+      "return_word_box": false,
+      "text_det_params": {
+        "box_thresh": 0.6,
+        "limit_side_len": 736,
+        "limit_type": "min",
+        "max_side_limit": 4000,
+        "thresh": 0.3,
+        "unclip_ratio": 1.5
+      },
+      "text_rec_score_thresh": 0.0,
+      "text_type": "general",
+      "textline_orientation_angles": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "parsing_res_list": [
+      {
+        "block_bbox": [
+          55,
+          35,
+          1164,
+          692
+        ],
+        "block_content": "",
+        "block_id": 0,
+        "block_label": "text",
+        "block_order": 0
+      },
+      {
+        "block_bbox": [
+          984,
+          1414,
+          1159,
+          1443
+        ],
+        "block_content": "",
+        "block_id": 1,
+        "block_label": "text",
+        "block_order": 1
+      },
+      {
+        "block_bbox": [
+          1017,
+          1482,
+          1154,
+          1522
+        ],
+        "block_content": "",
+        "block_id": 2,
+        "block_label": "text",
+        "block_order": 2
+      }
+    ],
+    "table_res_list": [],
+    "width": 1275
+  },
+  "sha256": "5537618abf3ebb97471c527ebba99d32a15ee8da00190feeef3964f69a8b3610",
+  "source_page": 1
+}

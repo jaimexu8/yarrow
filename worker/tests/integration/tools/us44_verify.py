@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..", "..")))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..")))
 
 from sqlalchemy import select
-from yarrow_db.models import Document, Page, Region, RegionText
+from yarrow_db.models import Document, JobPage, Page, Region, RegionText
 from yarrow_db.session import session_scope
 
 # A block wider than this fraction of the page width is treated as spanning
@@ -33,18 +33,42 @@ def find_document(session, key):
 
 
 def seed_and_process(filename):
-    """Run the real processing task on a test_docs file; rows cleaned up
-    by the caller after the check."""
+    """Drive the in-process Phase 2 pipeline on a test_docs file; rows are
+    cleaned up by the caller after the check."""
+    from unittest import mock
+
     from conftest import TestInitializer
 
-    from app.tasks.ingestion import process_document_task
+    from app.tasks import ingestion
+    from app.tasks.ingestion import finalize_document, ingest_document, parse_page
 
     initializer = TestInitializer()
     records = initializer.configure(
         filenames=[filename],
         filepaths=[os.path.join(HERE, "..", "test_docs", filename)],
     )
-    process_document_task(job_id=str(records[0].job_id))
+    job_uuid = records[0].job_id
+    job_id = str(job_uuid)
+
+    # Drive the new cascade in-process: ingest_document fans out by calling
+    # send_task, which we no-op and replace with direct parse_page/finalize
+    # calls (same helper shape as test_document_processing._run_pipeline).
+    with mock.patch.object(
+        ingestion.celery_app, "send_task", mock.MagicMock(return_value=None)
+    ):
+        ingest_document(job_id)
+        with session_scope() as session:
+            page_numbers = list(
+                session.execute(
+                    select(JobPage.page_number)
+                    .where(JobPage.job_id == job_uuid, JobPage.status == "queued")
+                    .order_by(JobPage.page_number)
+                ).scalars()
+            )
+        for page_no in page_numbers:
+            parse_page.apply(kwargs={"job_id": job_id, "page_no": page_no})
+        finalize_document.apply(kwargs={"job_id": job_id})
+
     return initializer, records[0].document_id
 
 

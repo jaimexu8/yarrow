@@ -296,6 +296,17 @@ class FakeStorage:
     def delete_file(self, key: str) -> None:
         self.objects.pop(key, None)
 
+    def list_objects(self, prefix: str):
+        from datetime import UTC, datetime
+
+        from yarrow_storage import StoredObject
+
+        return (
+            StoredObject(key=key, last_modified=datetime.now(UTC), size=len(value))
+            for key, value in self.objects.items()
+            if key.startswith(prefix)
+        )
+
 
 @pytest.fixture
 def fake_storage(monkeypatch: pytest.MonkeyPatch) -> FakeStorage:

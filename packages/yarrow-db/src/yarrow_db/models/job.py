@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime
 from typing import Literal, get_args
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -20,6 +29,9 @@ JobStage = Literal[
 ]
 JOB_STAGES: tuple[JobStage, ...] = get_args(JobStage)
 
+JobErrorStage = Literal["downloading", "parsing", "finalizing", "queue_timeout"]
+JOB_ERROR_STAGES: tuple[JobErrorStage, ...] = get_args(JobErrorStage)
+
 
 class Job(Base):
     __tablename__ = "jobs"
@@ -35,6 +47,7 @@ class Job(Base):
     pages_processed = Column(Integer, default=0)
     total_pages = Column(Integer, default=0)
     error_message = Column(String)
+    error_stage = Column(String(32))
     # Celery task id returned by send_task, needed to revoke a queued job (US-42).
     celery_task_id = Column(String, index=True)
     canceled_by_id = Column(
@@ -50,6 +63,12 @@ class Job(Base):
     model_name = Column(String(128))
     model_version = Column(String(64))
     pipeline_version = Column(String(64))
+    merge_consecutive_tables = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    skip_text_layer = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

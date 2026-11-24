@@ -178,11 +178,25 @@ async def documents_out(
     """DocumentOut for each document, with its reprocess info filled in."""
     info = await reprocess_info_for(db, documents)
     tags = await tags_for_documents(db, [document.id for document in documents])
+
+    # The failure stage of each document's latest job, in one query.
+    stages: dict[UUID, str | None] = {}
+    if documents:
+        ids = [document.id for document in documents]
+        stage_rows = await db.execute(
+            select(Job.document_id, Job.error_stage)
+            .where(Job.document_id.in_(ids))
+            .distinct(Job.document_id)
+            .order_by(Job.document_id, Job.created_at.desc())
+        )
+        stages = {row.document_id: row.error_stage for row in stage_rows}
+
     out = []
     for document in documents:
         item = DocumentOut.model_validate(document)
         item.reprocess = info[document.id]
         item.tags = tags.get(document.id, [])
+        item.error_stage = stages.get(document.id)
         out.append(item)
     return out
 
@@ -214,6 +228,7 @@ async def reprocess_document(
     *,
     requested_by_id: UUID | None = None,
     retry_of_job_id: UUID | None = None,
+    skip_text_layer: bool = False,
 ) -> ReprocessOutcome:
     """Queue a job that reprocesses the document; see the module docstring
     for which pages it covers
@@ -284,6 +299,7 @@ async def reprocess_document(
         total_pages=len(pages) if pages is not None else (document.page_count or 0),
         requested_by_id=requested_by_id,
         retry_of_job_id=retry_of_job_id,
+        skip_text_layer=skip_text_layer,
     )
 
     db.add(new_job)
@@ -331,7 +347,7 @@ async def rotate_document_page(
 
     `degrees` is the absolute rotation (0, 90, 180 or 270, CW from the
     original page); `degrees=None` clears the override so auto-detection
-    decides the page's orientation again.     """
+    decides the page's orientation again."""
     # Document row first, then job: the same order as cancel, document
     # deletion and the worker, so none of them can deadlock with this.
     document = (

@@ -142,6 +142,15 @@ export function ReprocessButton({
 }) {
   const { document } = useViewer();
   const reprocess = useReprocessAction(document, onReprocessed, onReprocessed);
+  // Opt out of the text layer for a full reprocess of a finished document.
+  const reprocessMl = useReprocessAction(
+    document,
+    onReprocessed,
+    onReprocessed,
+    {
+      skipTextLayer: true,
+    }
+  );
   if (document.reprocess?.scope !== 'all') return null;
   return (
     <>
@@ -153,7 +162,16 @@ export function ReprocessButton({
         <RotateCw aria-hidden="true" className="size-4" />
         Reprocess
       </Button>
+      <Button
+        variant="secondary"
+        className="w-auto px-3 py-1.5"
+        onClick={reprocessMl.request}
+      >
+        <RotateCw aria-hidden="true" className="size-4" />
+        Reprocess with ML
+      </Button>
       {reprocess.dialog}
+      {reprocessMl.dialog}
     </>
   );
 }

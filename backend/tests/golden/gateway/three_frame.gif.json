@@ -1,0 +1,125 @@
+{
+  "bytes": 9019,
+  "detected_extension": "gif",
+  "expected": {
+    "blocks": [
+      {
+        "block_bbox": [
+          59,
+          60,
+          214,
+          72
+        ],
+        "block_content": "",
+        "block_id": 0,
+        "block_label": "text",
+        "block_order": 0
+      }
+    ],
+    "height": 400,
+    "markdown": {
+      "markdown_images_count": 0,
+      "markdown_images_keys": [],
+      "markdown_images_sha256": {},
+      "text": ""
+    },
+    "table_res_list": [],
+    "width": 600
+  },
+  "expected_pages": 1,
+  "file": "three_frame.gif",
+  "kind": "image",
+  "recorded_structure": {
+    "height": 400,
+    "overall_ocr_res": {
+      "dt_polys": [
+        [
+          [
+            60,
+            59
+          ],
+          [
+            214,
+            59
+          ],
+          [
+            214,
+            72
+          ],
+          [
+            60,
+            72
+          ]
+        ]
+      ],
+      "model_settings": {
+        "use_doc_preprocessor": false,
+        "use_textline_orientation": true
+      },
+      "rec_boxes": [
+        [
+          60.0,
+          59.0,
+          214.0,
+          72.0
+        ]
+      ],
+      "rec_polys": [
+        [
+          [
+            60,
+            59
+          ],
+          [
+            214,
+            59
+          ],
+          [
+            214,
+            72
+          ],
+          [
+            60,
+            72
+          ]
+        ]
+      ],
+      "rec_scores": [
+        null
+      ],
+      "rec_texts": [],
+      "return_word_box": false,
+      "text_det_params": {
+        "box_thresh": 0.6,
+        "limit_side_len": 736,
+        "limit_type": "min",
+        "max_side_limit": 4000,
+        "thresh": 0.3,
+        "unclip_ratio": 1.5
+      },
+      "text_rec_score_thresh": 0.0,
+      "text_type": "general",
+      "textline_orientation_angles": [
+        0
+      ]
+    },
+    "parsing_res_list": [
+      {
+        "block_bbox": [
+          59,
+          60,
+          214,
+          72
+        ],
+        "block_content": "",
+        "block_id": 0,
+        "block_label": "text",
+        "block_order": 0
+      }
+    ],
+    "table_res_list": [],
+    "width": 600
+  },
+  "sha256": "4896f993759a0393d4b8282072a1b52be43c3b44eb57b549491ee674b6de053e",
+  "source_page": 1
+}

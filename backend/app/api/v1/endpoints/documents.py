@@ -78,6 +78,7 @@ from app.schemas import (
     UploadRejected,
     UploadResponse,
 )
+from app.schemas.document import ReprocessRequest
 from app.services.batch_notifications import (
     acknowledge_batch_notifications,
     claim_batch_notifications,
@@ -578,6 +579,7 @@ async def upload_documents(
             logger.exception(f"Queueing job {item.job_id} failed")
             job.status = "failed"
             job.error_message = QUEUE_FAILED_MESSAGE
+            job.error_stage = "downloading"
             document = documents_by_job[item.job_id]
             document.status = "failed"
             document.error_message = QUEUE_FAILED_MESSAGE
@@ -972,6 +974,7 @@ async def rotate_page_endpoint(
 
 @router.post("/{document_id}/reprocess", response_model=DocumentOut)
 async def reprocess_document_endpoint(
+    body: ReprocessRequest | None = None,
     access: DocumentAccess = Depends(require_edit_access),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -981,6 +984,9 @@ async def reprocess_document_endpoint(
     Interrupted, failed or partly failed documents reprocess only the pages
     that are not completed, so the task resumes and finished pages are kept.
     Fully processed (or canceled) documents are processed again in full.
+
+    An optional body with ``skip_text_layer`` set tells the worker to ignore
+    the stored text layer and run the OCR pipeline again from the image.
     """
     document_id = access.document.id
     outcome = await reprocess_document(
@@ -988,6 +994,7 @@ async def reprocess_document_endpoint(
         document_id,
         enqueue_document_processing,
         requested_by_id=current_user.id,
+        skip_text_layer=body.skip_text_layer if body is not None else False,
     )
     if not outcome.ok:
         raise HTTPException(

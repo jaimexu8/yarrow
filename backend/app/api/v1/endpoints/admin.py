@@ -2,14 +2,16 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
+import redis
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import and_, func, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarrow_db.locking import is_lock_timeout, lock_timeout_statement
-from yarrow_db.models import Document, Job, ServiceNode, User
+from yarrow_db.models import Document, Job, JobPage, ServiceNode, User
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.queue import enqueue_document_processing, revoke_document_processing
 from app.core.security import get_current_active_admin
@@ -23,10 +25,13 @@ from app.schemas.admin import (
     AdminStats,
     JobStatusCounts,
     NodeStatusReport,
+    OcrMetrics,
 )
 from app.services.account import delete_account
+from app.services.failure_messages import is_user_facing
 from app.services.job_progress import cancel_open_job_pages
 from app.services.node_health import check_nodes
+from app.services.ocr_metrics import _queue_depth, collect_ocr_metrics
 from app.services.reprocess import (
     ACTIVE_JOB_STATES,
     LATEST_JOB_FIRST,
@@ -152,6 +157,19 @@ def _retry_refusal(job: Job, latest: Job | None) -> str | None:
     return None
 
 
+def _error_detail(job: Job, page_errors: dict[UUID, list[str]]) -> str | None:
+    """The raw, operator-only reason a job failed.
+
+    A job-level raw message takes precedence. Otherwise fall back to the
+    messages the worker left on failed pages, in page order.
+    """
+    message = job.error_message
+    if message and not is_user_facing(message):
+        return message
+    parts = page_errors.get(job.id, [])
+    return "\n".join(parts) if parts else None
+
+
 @router.get("/jobs", response_model=list[AdminJob])
 async def list_jobs(
     db: AsyncSession = Depends(get_db),
@@ -187,8 +205,28 @@ async def list_jobs(
             latest[job.document_id] = job
     now = datetime.now(UTC).replace(tzinfo=None)
 
+    # Raw failure text from failed pages, fetched for every listed job at once.
+    listed = processing + queued + rest
+    listed_job_ids = [job.id for job, _, _ in listed]
+    page_errors: dict[UUID, list[str]] = {}
+    if listed_job_ids:
+        page_rows = (
+            await db.execute(
+                select(JobPage.job_id, JobPage.error_message)
+                .where(
+                    JobPage.job_id.in_(listed_job_ids),
+                    JobPage.status == "failed",
+                    JobPage.error_message.is_not(None),
+                )
+                .order_by(JobPage.job_id, JobPage.page_number)
+            )
+        ).all()
+        for job_id, message in page_rows:
+            if message:
+                page_errors.setdefault(job_id, []).append(message)
+
     out: list[AdminJob] = []
-    for job, document, user in processing + queued + rest:
+    for job, document, user in listed:
         document_latest = latest[job.document_id]
         out.append(
             AdminJob(
@@ -204,6 +242,8 @@ async def list_jobs(
                 pages_processed=job.pages_processed,
                 total_pages=job.total_pages,
                 error_message=job.error_message,
+                error_stage=job.error_stage,
+                error_detail=_error_detail(job, page_errors),
                 created_at=job.created_at,
                 is_stuck=is_interrupted(
                     {"status": job.status, "updated_at": job.updated_at}, now
@@ -482,3 +522,24 @@ async def forget_node(
         )
     await db.delete(node)
     await db.commit()
+
+
+@router.get("/ocr/metrics", response_model=OcrMetrics)
+async def get_ocr_metrics(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_active_admin),
+):
+    depth = await run_in_threadpool(_ocr_queue_depth)
+    return await collect_ocr_metrics(db, depth)
+
+
+def _ocr_queue_depth() -> int:
+    """Pages waiting on the ocr queue, 0 when the broker is unreachable."""
+    client = redis.from_url(settings.CELERY_BROKER_URL, socket_timeout=2)
+    try:
+        return _queue_depth(client)
+    except Exception:
+        logger.warning("OCR metrics: broker unreachable", exc_info=True)
+        return 0
+    finally:
+        client.close()
