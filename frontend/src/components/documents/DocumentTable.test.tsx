@@ -485,6 +485,8 @@ test('Set password keeps the dialog open when the password is wrong', async () =
   expect(
     await within(dialog).findByText('Incorrect password. Try again.')
   ).toBeTruthy();
+});
+
 describe('FailureNote', () => {
   test('shows the stage phrase and reason for a failed document', () => {
     render(

@@ -80,7 +80,9 @@ afterEach(() => {
 test('a finished document shows both Reprocess and Reprocess with ML', () => {
   render(<ReprocessButton onReprocessed={() => {}} />);
   expect(screen.getByRole('button', { name: 'Reprocess' })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Reprocess with ML' })).toBeTruthy();
+  expect(
+    screen.getByRole('button', { name: 'Reprocess with ML' })
+  ).toBeTruthy();
 });
 
 test('clicking Reprocess with ML posts skip_text_layer true', async () => {
@@ -99,7 +101,9 @@ test('clicking Reprocess with ML posts skip_text_layer true', async () => {
 test('clicking the ordinary Reprocess still posts no body', async () => {
   render(<ReprocessButton onReprocessed={() => {}} />);
   fireEvent.click(screen.getByRole('button', { name: 'Reprocess' }));
-  fireEvent.click(within(openDialog()).getByRole('button', { name: 'Reprocess' }));
+  fireEvent.click(
+    within(openDialog()).getByRole('button', { name: 'Reprocess' })
+  );
   await waitFor(() =>
     expect(post).toHaveBeenCalledWith('/api/v1/documents/doc-1/reprocess')
   );

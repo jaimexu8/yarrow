@@ -143,9 +143,14 @@ export function ReprocessButton({
   const { document } = useViewer();
   const reprocess = useReprocessAction(document, onReprocessed, onReprocessed);
   // Opt out of the text layer for a full reprocess of a finished document.
-  const reprocessMl = useReprocessAction(document, onReprocessed, onReprocessed, {
-    skipTextLayer: true,
-  });
+  const reprocessMl = useReprocessAction(
+    document,
+    onReprocessed,
+    onReprocessed,
+    {
+      skipTextLayer: true,
+    }
+  );
   if (document.reprocess?.scope !== 'all') return null;
   return (
     <>
