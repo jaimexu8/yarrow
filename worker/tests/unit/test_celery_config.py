@@ -1,6 +1,7 @@
 """Phase 2 Celery wiring: queue routing, delivery guarantees, and beat."""
 
 from app.celery_app import celery_app
+from app.core.config import settings
 from app.tasks.ingestion import finalize_document, ingest_document, parse_page
 
 
@@ -26,6 +27,12 @@ def test_broker_visibility_timeout():
 
 def test_beat_sweeper_schedule():
     assert celery_app.conf.beat_schedule["sweep-stuck-jobs"]["schedule"] == 120
+
+
+def test_storage_sweep_beat_schedule():
+    entry = celery_app.conf.beat_schedule["storage-sweep"]
+    assert entry["task"] == "app.tasks.storage_sweep.sweep_orphaned_objects"
+    assert entry["schedule"].hour == {settings.STORAGE_SWEEP_CRON_HOUR}
 
 
 def test_parse_page_route():

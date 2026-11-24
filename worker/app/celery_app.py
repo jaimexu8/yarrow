@@ -1,6 +1,9 @@
 import os
 
 from celery import Celery
+from celery.schedules import crontab
+
+from app.core.config import settings
 
 # Broker and result backend live on their own Valkey databases (1 and 2) so
 # queue traffic never shares a database with the auth data on database 0.
@@ -8,7 +11,10 @@ broker_url = os.getenv("CELERY_BROKER_URL", "redis://valkey:6379/1")
 result_backend = os.getenv("CELERY_RESULT_BACKEND", "redis://valkey:6379/2")
 
 celery_app = Celery(
-    "worker", broker=broker_url, backend=result_backend, include=["app.tasks.ingestion"]
+    "worker",
+    broker=broker_url,
+    backend=result_backend,
+    include=["app.tasks.ingestion", "app.tasks.storage_sweep"],
 )
 
 celery_app.conf.update(
@@ -28,6 +34,10 @@ celery_app.conf.update(
         "sweep-stuck-jobs": {
             "task": "app.tasks.ingestion.sweep_stuck_jobs",
             "schedule": 120,
+        },
+        "storage-sweep": {
+            "task": "app.tasks.storage_sweep.sweep_orphaned_objects",
+            "schedule": crontab(hour=settings.STORAGE_SWEEP_CRON_HOUR, minute=0),
         },
     },
     # redis ignores send_task priority unless these are set. 0 is highest.

@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     MAX_PAGE_DELIVERIES: int = 6
     PAGE_COUNTERS_REDIS_URL: str = "redis://valkey:6379/3"
 
+    # Nightly storage sweep. Dry run is on by default so the first run only
+    # reports what it would remove. The grace window covers the gap between
+    # uploading a page object and committing the row that references it.
+    STORAGE_SWEEP_ENABLED: bool = True
+    STORAGE_SWEEP_DRY_RUN: bool = True
+    STORAGE_SWEEP_GRACE_HOURS: int = 24
+    STORAGE_SWEEP_MAX_DELETES: int = 10000
+    STORAGE_SWEEP_LOCK_SECONDS: int = 7200
+    STORAGE_SWEEP_CRON_HOUR: int = 3
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
