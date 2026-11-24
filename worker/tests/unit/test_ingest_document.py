@@ -154,7 +154,7 @@ class TestIngest:
         assert enqueue == []
 
     def test_unsupported_file_fails_and_raises(
-        self, sessions, storage, gateway, seed, monkeypatch
+        self, sessions, storage, gateway, enqueue, seed, monkeypatch
     ):
         document, job = seed(page_count=1)
         storage.store[document.storage_key] = b"file"
@@ -177,7 +177,7 @@ class TestIngest:
                 session.query(Page).filter(Page.document_id == document.id).count() == 0
             )
 
-    def test_missing_file_marks_failed(self, sessions, storage, gateway, seed):
+    def test_missing_file_marks_failed(self, sessions, storage, gateway, enqueue, seed):
         _document, job = seed(page_count=1)
         gateway.configure(pages=1)
         # No object in storage -> download raises ObjectNotFoundError.

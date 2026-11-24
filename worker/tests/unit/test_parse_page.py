@@ -125,7 +125,7 @@ class TestParsePage:
             assert page.status == "failed"
             assert page.error_code == "inference_error"
 
-    def test_timeout_is_retriable(self, sessions, storage, gateway, seed):
+    def test_timeout_is_retriable(self, sessions, storage, gateway, enqueue, seed):
         document, job = _seed_job(sessions, seed, 1)
         gateway.configure(pages=1)
         gateway.fail(1, requests.Timeout("slow"))
@@ -134,7 +134,9 @@ class TestParsePage:
         with pytest.raises(requests.Timeout):
             parse_page(str(job.id), 1)
 
-    def test_missing_raster_is_permanent(self, sessions, storage, gateway, seed):
+    def test_missing_raster_is_permanent(
+        self, sessions, storage, gateway, enqueue, seed
+    ):
         document, job = _seed_job(sessions, seed, 1)
         gateway.configure(pages=1)
         # No raster uploaded -> download raises ObjectNotFoundError.
@@ -187,7 +189,7 @@ class TestParsePage:
         # The gateway was never called (early exit).
         assert gateway.calls == []
 
-    def test_canceled_job_is_a_noop(self, sessions, storage, gateway, seed):
+    def test_canceled_job_is_a_noop(self, sessions, storage, gateway, enqueue, seed):
         document, job = _seed_job(sessions, seed, 1)
         gateway.configure(pages=1)
         storage.store[f"documents/{document.id}/rasters/1.png"] = b"raster"
@@ -201,7 +203,7 @@ class TestParsePage:
         assert gateway.calls == []
 
     def test_integrity_23503_is_swallowed(
-        self, sessions, storage, gateway, seed, monkeypatch
+        self, sessions, storage, gateway, enqueue, seed, monkeypatch
     ):
         document, job = _seed_job(sessions, seed, 1)
         gateway.configure(pages=1)
@@ -226,7 +228,7 @@ class TestParsePage:
             assert page.status == "pending"
 
     def test_integrity_23505_is_swallowed(
-        self, sessions, storage, gateway, seed, monkeypatch
+        self, sessions, storage, gateway, enqueue, seed, monkeypatch
     ):
         document, job = _seed_job(sessions, seed, 1)
         gateway.configure(pages=1)
@@ -291,7 +293,7 @@ class TestParsePage:
 
 class TestParsePageTextLayer:
     def test_stored_text_layer_is_loaded_into_the_parser(
-        self, sessions, storage, gateway, seed, monkeypatch
+        self, sessions, storage, gateway, enqueue, seed, monkeypatch
     ):
         document, job = _seed_job(sessions, seed, 1)
         gateway.configure(pages=1)
@@ -307,7 +309,9 @@ class TestParsePageTextLayer:
         assert gateway.calls == [1]
         assert [w.text for w in gateway.text_layer_words[0]] == ["embedded"]
 
-    def test_missing_text_layer_is_ignored(self, sessions, storage, gateway, seed):
+    def test_missing_text_layer_is_ignored(
+        self, sessions, storage, gateway, enqueue, seed
+    ):
         document, job = _seed_job(sessions, seed, 1)
         gateway.configure(pages=1)
         storage.store[f"documents/{document.id}/rasters/1.png"] = b"raster"
@@ -318,7 +322,7 @@ class TestParsePageTextLayer:
         assert gateway.text_layer_words == [[]]
 
     def test_skip_text_layer_prevents_loading_even_when_stored(
-        self, sessions, storage, gateway, seed, monkeypatch
+        self, sessions, storage, gateway, enqueue, seed, monkeypatch
     ):
         document, job = _seed_job(sessions, seed, 1)
         gateway.configure(pages=1)
@@ -337,7 +341,7 @@ class TestParsePageTextLayer:
         assert gateway.text_layer_words == [[]]
 
     def test_malformed_text_layer_is_ignored(
-        self, sessions, storage, gateway, seed, monkeypatch
+        self, sessions, storage, gateway, enqueue, seed, monkeypatch
     ):
         document, job = _seed_job(sessions, seed, 1)
         gateway.configure(pages=1)

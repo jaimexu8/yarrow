@@ -226,7 +226,7 @@ class TestPreparePages:
         assert ingestion.prepare_pages.queue == "ocr"
 
     def test_missing_raster_is_still_a_permanent_failure(
-        self, sessions, storage, gateway, seed
+        self, sessions, storage, gateway, enqueue, seed
     ):
         document, job = seed(page_count=1, status="processing")
         gateway.configure(pages=1)
@@ -294,7 +294,7 @@ class FakeTextLayer:
 
 class TestTextLayerExtraction:
     def test_usable_pdf_page_uploads_serialized_words(
-        self, sessions, storage, gateway, seed, text_layer, monkeypatch
+        self, sessions, storage, gateway, enqueue, seed, text_layer, monkeypatch
     ):
         monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
         document, job = _preparing_job(sessions, seed, page_count=2)
@@ -312,7 +312,7 @@ class TestTextLayerExtraction:
             }
 
     def test_rejected_page_writes_no_text_layer(
-        self, sessions, storage, gateway, seed, text_layer, monkeypatch
+        self, sessions, storage, gateway, enqueue, seed, text_layer, monkeypatch
     ):
         monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
         document, job = _preparing_job(sessions, seed, page_count=2)
@@ -326,7 +326,7 @@ class TestTextLayerExtraction:
         assert f"documents/{document.id}/text_layer/2.json" not in storage.store
 
     def test_forced_ml_job_writes_no_text_layer(
-        self, sessions, storage, gateway, seed, text_layer, monkeypatch
+        self, sessions, storage, gateway, enqueue, seed, text_layer, monkeypatch
     ):
         monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
         document, job = _preparing_job(sessions, seed, page_count=1)
@@ -342,7 +342,7 @@ class TestTextLayerExtraction:
         assert f"documents/{document.id}/text_layer/1.json" not in storage.store
 
     def test_non_pdf_input_writes_no_text_layer(
-        self, sessions, storage, gateway, seed, text_layer, monkeypatch
+        self, sessions, storage, gateway, enqueue, seed, text_layer, monkeypatch
     ):
         monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
         document, job = _preparing_job(sessions, seed, page_count=1)
@@ -356,7 +356,7 @@ class TestTextLayerExtraction:
         assert f"documents/{document.id}/text_layer/1.json" not in storage.store
 
     def test_storage_failure_does_not_fail_the_batch(
-        self, sessions, storage, gateway, seed, text_layer, monkeypatch, caplog
+        self, sessions, storage, gateway, enqueue, seed, text_layer, monkeypatch, caplog
     ):
         monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
         document, job = _preparing_job(sessions, seed, page_count=1)
@@ -388,7 +388,7 @@ class TestTextLayerExtraction:
             )
 
     def test_extraction_error_does_not_fail_the_batch(
-        self, sessions, storage, gateway, seed, text_layer, monkeypatch, caplog
+        self, sessions, storage, gateway, enqueue, seed, text_layer, monkeypatch, caplog
     ):
         monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
         document, job = _preparing_job(sessions, seed, page_count=1)
