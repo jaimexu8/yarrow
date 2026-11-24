@@ -335,6 +335,11 @@ def _structure_headers() -> dict:
     return {}
 
 
+def _is_structure_only(value: str | None) -> bool:
+    """Whether the caller asked for layout results without VLM recognition."""
+    return (value or "").strip().lower() in ("true", "1", "yes")
+
+
 def _is_repetition_loop(text: str) -> bool:
     """Detect a model loop without punishing legitimate repeated content.
 
@@ -663,6 +668,9 @@ def _normalize_direct_table_content(text: str) -> str:
 async def _run_direct(req: LayoutParsingRequest, request: Request, ctx):
     app = request.app
     _ensure_runtime(app)
+    structure_only = _is_structure_only(
+        request.headers.get("x-yarrow-structure-only")
+    )
     start = time.perf_counter()
     body, err = await _structure_call(
         app, _build_structure_payload(req), _structure_headers(), ctx
@@ -689,6 +697,11 @@ async def _run_direct(req: LayoutParsingRequest, request: Request, ctx):
 
     image = await asyncio.to_thread(_decode_image, req.file)
     ctx.width, ctx.height = image.size
+    if structure_only:
+        page["markdown"] = {"text": "", "markdown_images": {}}
+        _log_request(ctx)
+        return body
+
     selected = await asyncio.to_thread(_select_blocks, image, pruned)
 
     crop_start = time.perf_counter()

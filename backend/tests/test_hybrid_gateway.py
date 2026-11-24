@@ -72,6 +72,18 @@ def _structure_body(blocks):
     }
 
 
+def _structure_only_body():
+    body = _structure_body(
+        [_block("text", "STRUCTURE TEXT"), _block("table", "STRUCTURE TABLE", 1)]
+    )
+    pruned = body["result"]["layoutParsingResults"][0]["prunedResult"]
+    pruned["overall_ocr_res"] = {"rec_texts": ["LAYOUT ONLY"]}
+    pruned["table_res_list"] = [
+        {"table_region_id": 1, "cell_box_list": [[0, 0, 10, 10]]}
+    ]
+    return body
+
+
 def _chat(text="ok", finish_reason="stop"):
     return httpx.Response(
         200,
@@ -161,6 +173,134 @@ def test_layout_parsing_replaces_structure_text_with_vlm_output(gateway):
     ][0]
     assert block["block_content"] == "VLM TEXT"
     assert block["vlm_failed"] is False
+
+
+def test_structure_only_returns_layout_and_skips_vlm(gateway):
+    body = _structure_only_body()
+    calls = {"structure": 0, "models": 0, "chat": 0}
+
+    def handler(request):
+        path = request.url.path
+        if path.endswith("/layout-parsing"):
+            calls["structure"] += 1
+            return httpx.Response(200, json=body)
+        if path.endswith("/models"):
+            calls["models"] += 1
+            return _models()
+        if path.endswith("/chat/completions"):
+            calls["chat"] += 1
+            return _chat("VLM TEXT")
+        return httpx.Response(404)
+
+    with TestClient(gateway.app) as client:
+        # No preset model: any accidental VLM work would trigger discovery.
+        _mock_client(gateway, handler, model=None)
+        response = client.post(
+            "/layout-parsing",
+            json={"file": _png(), "fileType": 1},
+            headers={"X-Yarrow-Structure-Only": "true"},
+        )
+
+    assert response.status_code == 200
+    page = response.json()["result"]["layoutParsingResults"][0]
+    expected = body["result"]["layoutParsingResults"][0]["prunedResult"]
+    fields = ("parsing_res_list", "table_res_list", "overall_ocr_res")
+    assert {key: page["prunedResult"][key] for key in fields} == {
+        key: expected[key] for key in fields
+    }
+    assert page["markdown"] == {"text": "", "markdown_images": {}}
+    assert calls == {"structure": 1, "models": 0, "chat": 0}
+    assert response.headers["X-Yarrow-Model-Name"] == "PP-StructureV3+PaddleOCR-VL"
+    assert response.headers["X-Yarrow-Model-Version"] == "3.2.0+vl-0.9b"
+
+
+def test_structure_only_skips_crop_and_markdown_and_logs(gateway, monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("VLM preparation ran in structure-only mode")
+
+    logged = []
+    original_log = gateway._log_request
+
+    def spy(ctx):
+        logged.append(ctx)
+        original_log(ctx)
+
+    monkeypatch.setattr(gateway, "_select_blocks", forbidden)
+    monkeypatch.setattr(gateway, "_prepare_blocks_sync", forbidden)
+    monkeypatch.setattr(gateway, "_assemble_markdown", forbidden)
+    monkeypatch.setattr(gateway, "_log_request", spy)
+
+    def handler(request):
+        if request.url.path.endswith("/layout-parsing"):
+            return httpx.Response(200, json=_structure_only_body())
+        return httpx.Response(404)
+
+    with TestClient(gateway.app) as client:
+        _mock_client(gateway, handler, model=None)
+        response = client.post(
+            "/layout-parsing",
+            json={"file": _png(), "fileType": 1},
+            headers={"X-Yarrow-Structure-Only": " true "},
+        )
+
+    assert response.status_code == 200
+    assert len(logged) == 1
+    ctx = logged[0]
+    assert ctx.vlm_ms == 0
+    assert ctx.vlm_queue_samples == []
+    assert ctx.vlm_inflight_samples == []
+    assert ctx.per_label_counts == {}
+
+
+def test_structure_only_header_value_is_case_insensitive(gateway):
+    vlm_calls = []
+
+    def handler(request):
+        path = request.url.path
+        if path.endswith("/layout-parsing"):
+            return httpx.Response(200, json=_structure_body([_block("text")]))
+        vlm_calls.append(path)
+        return httpx.Response(200, json={"data": [{"id": "test-model"}]})
+
+    with TestClient(gateway.app) as client:
+        _mock_client(gateway, handler, model=None)
+        response = client.post(
+            "/layout-parsing",
+            json={"file": _png(), "fileType": 1},
+            headers={"x-yarrow-structure-only": "YeS"},
+        )
+
+    assert response.status_code == 200
+    assert vlm_calls == []
+
+
+def test_without_structure_only_header_vlm_is_still_called(gateway):
+    calls = {"models": 0, "chat": 0}
+
+    def handler(request):
+        path = request.url.path
+        if path.endswith("/layout-parsing"):
+            return httpx.Response(
+                200, json=_structure_body([_block("text", "STRUCTURE TEXT")])
+            )
+        if path.endswith("/models"):
+            calls["models"] += 1
+            return _models()
+        if path.endswith("/chat/completions"):
+            calls["chat"] += 1
+            return _chat("VLM TEXT")
+        return httpx.Response(404)
+
+    with TestClient(gateway.app) as client:
+        _mock_client(gateway, handler, model=None)
+        response = client.post("/layout-parsing", json={"file": _png(), "fileType": 1})
+
+    assert response.status_code == 200
+    assert calls == {"models": 1, "chat": 1}
+    block = response.json()["result"]["layoutParsingResults"][0]["prunedResult"][
+        "parsing_res_list"
+    ][0]
+    assert block["block_content"] == "VLM TEXT"
 
 
 @pytest.mark.asyncio

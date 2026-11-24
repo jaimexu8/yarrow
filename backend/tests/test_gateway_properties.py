@@ -406,3 +406,27 @@ def test_concurrent_vlm_calls_never_exceed_semaphore(gateway, cap):
     assert response.status_code == 200
     assert calls == len(blocks)
     assert 1 <= peak <= cap
+
+
+# --- 8. Structure-only header ------------------------------------------------
+
+
+_AFFIRMATIVE_HEADER_VALUES = ("true", "TRUE", " True ", "1", " 1 ", "yes", "YeS", "YES")
+_NEGATIVE_HEADER_VALUES = (
+    "false",
+    "FALSE",
+    "0",
+    "no",
+    "NO",
+    "",
+    " ",
+    "none",
+    "trueish",
+    None,
+)
+
+
+@PROPS
+@given(value=st.sampled_from(_AFFIRMATIVE_HEADER_VALUES + _NEGATIVE_HEADER_VALUES))
+def test_structure_only_header_accepts_only_affirmative_values(gateway, value):
+    assert gateway._is_structure_only(value) is (value in _AFFIRMATIVE_HEADER_VALUES)
