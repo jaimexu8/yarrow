@@ -58,6 +58,12 @@ class PageOut(BaseModel):
         return self
 
 
+class ReprocessRequest(BaseModel):
+    """Options for a single-document reprocess request."""
+
+    skip_text_layer: bool = False
+
+
 class ReprocessInfo(BaseModel):
     # some pages to be processed (incomplete) or all of them (all)
     scope: Literal["incomplete", "all"]

@@ -66,6 +66,9 @@ class Job(Base):
     merge_consecutive_tables = Column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    skip_text_layer = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

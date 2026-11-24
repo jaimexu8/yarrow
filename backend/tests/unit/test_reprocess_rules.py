@@ -1,6 +1,11 @@
+import importlib.util
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+import sqlalchemy as sa
+from yarrow_db.models import Job
 
 from app.core.config import settings
 from app.services.reprocess import (
@@ -83,3 +88,57 @@ class TestPagesToProcess:
 
     def test_nothing_left(self):
         assert pages_to_process(2, [1, 2]) == []
+
+
+class TestSkipTextLayerModelAndRequest:
+    def test_job_column_matches_the_other_boolean_flags(self):
+        column = Job.__table__.c.skip_text_layer
+        assert column.nullable is False
+        assert column.default.arg is False
+        assert str(column.server_default.arg) == "false"
+
+    def test_request_defaults_to_false(self):
+        from app.schemas.document import ReprocessRequest
+
+        assert ReprocessRequest().skip_text_layer is False
+        assert ReprocessRequest(skip_text_layer=True).skip_text_layer is True
+
+
+MIGRATION_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "0031_job_skip_text_layer.py"
+)
+
+
+def _load_migration():
+    spec = importlib.util.spec_from_file_location("revision_0031", MIGRATION_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestSkipTextLayerMigration:
+    def test_revision_follows_0030(self):
+        module = _load_migration()
+        assert module.revision == "0031"
+        assert module.down_revision == "0030"
+
+    def test_upgrade_adds_the_column_and_downgrade_removes_it(self):
+        module = _load_migration()
+        with (
+            patch("alembic.op.add_column") as add,
+            patch("alembic.op.drop_column") as drop,
+        ):
+            module.upgrade()
+            module.downgrade()
+
+        add.assert_called_once()
+        table, column = add.call_args.args
+        assert table == "jobs"
+        assert column.name == "skip_text_layer"
+        assert isinstance(column.type, sa.Boolean)
+        assert column.nullable is False
+        assert str(column.server_default.arg) == "false"
+        drop.assert_called_once_with("jobs", "skip_text_layer")

@@ -228,6 +228,7 @@ async def reprocess_document(
     *,
     requested_by_id: UUID | None = None,
     retry_of_job_id: UUID | None = None,
+    skip_text_layer: bool = False,
 ) -> ReprocessOutcome:
     """Queue a job that reprocesses the document; see the module docstring
     for which pages it covers
@@ -298,6 +299,7 @@ async def reprocess_document(
         total_pages=len(pages) if pages is not None else (document.page_count or 0),
         requested_by_id=requested_by_id,
         retry_of_job_id=retry_of_job_id,
+        skip_text_layer=skip_text_layer,
     )
 
     db.add(new_job)

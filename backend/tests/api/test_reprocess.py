@@ -109,17 +109,17 @@ class TestFailedPagesAreReprocessed:
         body = response.json()
         assert body["status"] == "queued"
         assert body["error_message"] is None
-        
+
         # A job is running now, so reprocessing is not offered
         assert body["reprocess"] is None
-        
+
         new_job_id = fake_queue[-1]
         assert fake_queue.pages[new_job_id] == [2]
-        
+
         new_job = await db_session.get(Job, new_job_id)
         assert new_job.status == "queued"
         assert new_job.celery_task_id == f"task-{len(fake_queue)}"
-        
+
         # Completed pages and their data are kept
         assert await _completed_pages(db_session, document_id) == [1, 3]
 
@@ -160,7 +160,7 @@ class TestInterruptedRunIsResumed:
         response = await _reprocess(client, auth_headers, document_id)
 
         assert response.status_code == 200, response.text
-        
+
         job = await db_session.get(Job, job_id)
         await db_session.refresh(job)
         assert job.status == "failed"
@@ -354,3 +354,77 @@ class TestAccess:
     async def test_requires_sign_in(self, client):
         response = await client.post(f"{DOCUMENTS}{uuid.uuid4()}/reprocess")
         assert response.status_code == 401
+
+
+class TestSkipTextLayer:
+    """The "reprocess without the text layer" opt-out is stored on the new job."""
+
+    async def test_flag_is_stored_on_the_replacement_job(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        document_id, job_id = await _upload(client, auth_headers)
+        await _finish(db_session, document_id, job_id, {1: "completed", 2: "failed"})
+
+        response = await client.post(
+            f"{DOCUMENTS}{document_id}/reprocess",
+            headers=auth_headers,
+            json={"skip_text_layer": True},
+        )
+
+        assert response.status_code == 200, response.text
+        new_job_id = fake_queue[-1]
+        new_job = await db_session.get(Job, new_job_id)
+        await db_session.refresh(new_job)
+        assert new_job.skip_text_layer is True
+
+        # Everything else about this reprocess is unchanged.
+        assert fake_queue.pages[new_job_id] == [2]
+        assert response.json()["status"] == "queued"
+        assert response.json()["error_message"] is None
+        old_job = await db_session.get(Job, job_id)
+        await db_session.refresh(old_job)
+        assert old_job.status == "completed"
+        assert old_job.skip_text_layer is False
+        assert await _completed_pages(db_session, document_id) == [1]
+
+    async def test_no_body_leaves_the_flag_false(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        document_id, job_id = await _upload(client, auth_headers)
+        await _finish(db_session, document_id, job_id, {1: "completed"})
+
+        response = await _reprocess(client, auth_headers, document_id)
+
+        assert response.status_code == 200, response.text
+        new_job = await db_session.get(Job, fake_queue[-1])
+        await db_session.refresh(new_job)
+        assert new_job.skip_text_layer is False
+
+    async def test_each_reprocess_carries_its_own_flag(
+        self, client, auth_headers, fake_storage, fake_queue, db_session
+    ):
+        document_id, job_id = await _upload(client, auth_headers)
+        await _finish(db_session, document_id, job_id, {1: "completed"})
+
+        first = await _reprocess(client, auth_headers, document_id)
+        assert first.status_code == 200, first.text
+        first_job_id = fake_queue[-1]
+
+        # The first reprocess is queued, so mark it finished before asking
+        # for another one.
+        await _set_status(db_session, document_id, first_job_id, "completed")
+        second = await client.post(
+            f"{DOCUMENTS}{document_id}/reprocess",
+            headers=auth_headers,
+            json={"skip_text_layer": True},
+        )
+        assert second.status_code == 200, second.text
+        second_job_id = fake_queue[-1]
+
+        first_job = await db_session.get(Job, first_job_id)
+        second_job = await db_session.get(Job, second_job_id)
+        await db_session.refresh(first_job)
+        await db_session.refresh(second_job)
+        assert first_job.skip_text_layer is False
+        assert second_job.skip_text_layer is True
+        assert second_job_id != first_job_id
