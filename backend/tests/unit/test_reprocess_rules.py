@@ -108,22 +108,22 @@ MIGRATION_PATH = (
     Path(__file__).resolve().parents[2]
     / "alembic"
     / "versions"
-    / "0031_job_skip_text_layer.py"
+    / "0033_job_skip_text_layer.py"
 )
 
 
 def _load_migration():
-    spec = importlib.util.spec_from_file_location("revision_0031", MIGRATION_PATH)
+    spec = importlib.util.spec_from_file_location("revision_0033", MIGRATION_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
 class TestSkipTextLayerMigration:
-    def test_revision_follows_0030(self):
+    def test_revision_follows_0032(self):
         module = _load_migration()
-        assert module.revision == "0031"
-        assert module.down_revision == "0030"
+        assert module.revision == "0033"
+        assert module.down_revision == "0032"
 
     def test_upgrade_adds_the_column_and_downgrade_removes_it(self):
         module = _load_migration()

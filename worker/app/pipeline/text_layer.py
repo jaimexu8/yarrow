@@ -61,7 +61,9 @@ def _is_private_use(character: str) -> bool:
     )
 
 
-def extract_page_text(file_data: bytes, page_number: int) -> PageText:
+def extract_page_text(
+    file_data: bytes, page_number: int, password: str | None = None
+) -> PageText:
     """Read one 1-based page's words and text in PDF point coordinates.
 
     An unreadable file or an out-of-range page yields an empty PageText, which
@@ -72,6 +74,10 @@ def extract_page_text(file_data: bytes, page_number: int) -> PageText:
         return empty
     try:
         with fitz.open(stream=file_data, filetype="pdf") as document:
+            if document.needs_pass and (
+                password is None or not document.authenticate(password)
+            ):
+                return empty
             if page_number > document.page_count:
                 return empty
             page = document[page_number - 1]

@@ -95,15 +95,15 @@ def storage(monkeypatch):
 def pages(monkeypatch):
     page_count = {"value": 3}
 
-    def count_pages(self, file_data):
+    def count_pages(self, file_data, **kwargs):
         return page_count["value"]
 
-    def load_file(self, file_data):
+    def load_file(self, file_data, **kwargs):
         self.pages = [
             _page_image(number) for number in range(1, page_count["value"] + 1)
         ]
 
-    def load_pages(self, file_data, page_numbers):
+    def load_pages(self, file_data, page_numbers, **kwargs):
         selected = set(page_numbers)
         self.pages = [
             _page_image(number) if number in selected else ""

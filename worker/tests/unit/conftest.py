@@ -132,10 +132,10 @@ class Gateway:
     def fail(self, page_no, error):
         self.failures[page_no] = error
 
-    def count_pages(self, parser, file_data):
+    def count_pages(self, parser, file_data, **kwargs):
         return self.page_count
 
-    def load_file(self, parser, file_data):
+    def load_file(self, parser, file_data, **kwargs):
         import base64
 
         parser.pages = [
@@ -143,7 +143,7 @@ class Gateway:
             for i in range(self.page_count)
         ]
 
-    def load_pages(self, parser, file_data, page_numbers):
+    def load_pages(self, parser, file_data, page_numbers, **kwargs):
         import base64
 
         selected = set(page_numbers)
@@ -292,14 +292,14 @@ def gateway(monkeypatch):
 
     gw = Gateway()
 
-    def count_pages(parser, file_data):
-        return gw.count_pages(parser, file_data)
+    def count_pages(parser, file_data, **kwargs):
+        return gw.count_pages(parser, file_data, **kwargs)
 
-    def load_file(parser, file_data):
-        gw.load_file(parser, file_data)
+    def load_file(parser, file_data, **kwargs):
+        gw.load_file(parser, file_data, **kwargs)
 
-    def load_pages(parser, file_data, page_numbers):
-        gw.load_pages(parser, file_data, page_numbers)
+    def load_pages(parser, file_data, page_numbers, **kwargs):
+        gw.load_pages(parser, file_data, page_numbers, **kwargs)
 
     def correct_orientations(parser, pages_to_process=None):
         gw.correct_orientations(parser, pages_to_process)

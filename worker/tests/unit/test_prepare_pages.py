@@ -270,7 +270,7 @@ class FakeTextLayer:
         self.extracted: list[int] = []
         self.word = Word(1.0, 2.0, 3.0, 4.0, "embedded", 0, 0, 0)
 
-    def extract_page_text(self, file_data, page_number):
+    def extract_page_text(self, file_data, page_number, **kwargs):
         self.extracted.append(page_number)
         if page_number in self.fail_extract:
             raise RuntimeError("extractor exploded")
@@ -402,3 +402,26 @@ class TestTextLayerExtraction:
         assert f"documents/{document.id}/rasters/1.png" in storage.store
         assert f"documents/{document.id}/text_layer/1.json" not in storage.store
         assert "Could not store text layer" in caplog.text
+
+    def test_pdf_password_reaches_the_parser(
+        self, sessions, storage, gateway, enqueue, redis_stub, seed, monkeypatch
+    ):
+        monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
+        document, job = _preparing_job(sessions, seed, page_count=1)
+        gateway.configure(pages=1)
+        storage.store[document.storage_key] = PDF_BYTES
+        with sessions() as session:
+            session.get(Job, job.id).password = "secret"
+
+        seen: dict = {}
+        original = DocumentParser.load_pages
+
+        def spy(self, file_data, page_numbers, **kwargs):
+            seen.update(kwargs)
+            return original(self, file_data, page_numbers, **kwargs)
+
+        monkeypatch.setattr(DocumentParser, "load_pages", spy)
+
+        ingestion.prepare_pages(str(job.id), [1])
+
+        assert seen.get("password") == "secret"

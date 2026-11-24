@@ -159,7 +159,7 @@ class TestIngest:
         document, job = seed(page_count=1)
         storage.store[document.storage_key] = b"file"
 
-        def broken_count(self, file_data):
+        def broken_count(self, file_data, **kwargs):
             raise ValueError("No loader found for file extension: None")
 
         monkeypatch.setattr(DocumentParser, "count_pages", broken_count)

@@ -176,6 +176,7 @@ def _store_text_layers(
     file_data: bytes,
     page_numbers: list[int],
     skip_text_layer: bool,
+    password: str | None = None,
 ) -> None:
     """Stage usable PDF text words for the parse stage.
 
@@ -195,7 +196,7 @@ def _store_text_layers(
 
     for number in page_numbers:
         try:
-            page_text = extract_page_text(file_data, number)
+            page_text = extract_page_text(file_data, number, password=password)
             decision = evaluate_text_layer(page_text)
             if not decision.usable:
                 logger.debug(
@@ -629,6 +630,7 @@ def ingest_document(
     logger.info(f"Starting ingest for job {job_id}")
     storage_key = ""
     already_preparing = False
+    pdf_password: str | None = None
 
     with session_scope() as session:
         job = session.get(Job, UUID(job_id))
@@ -653,6 +655,7 @@ def ingest_document(
             job.current_stage = "downloading"
         job.document.status = "processing"
         storage_key = job.document.storage_key
+        pdf_password = job.password or job.document.pdf_password
 
     file_data = None
     try:
@@ -668,7 +671,7 @@ def ingest_document(
 
     parser = DocumentParser()
     try:
-        page_count = parser.count_pages(file_data)
+        page_count = parser.count_pages(file_data, password=pdf_password)
     except ValueError as error:
         _mark_failed(job_id, str(error))
         raise
@@ -740,15 +743,18 @@ def prepare_pages(job_id: str, page_numbers: list[int]):
             document_id = document.id
             storage_key = document.storage_key
             skip_text_layer = bool(job.skip_text_layer)
+            pdf_password = job.password or document.pdf_password
     except (JobCanceledError, JobDeletedError):
         logger.info(f"Job {job_id} was canceled or deleted; skipping prepare_pages")
         return
 
     file_data = get_storage().download_bytes(storage_key)
-    _store_text_layers(job_id, document_id, file_data, page_numbers, skip_text_layer)
+    _store_text_layers(
+        job_id, document_id, file_data, page_numbers, skip_text_layer, pdf_password
+    )
 
     parser = DocumentParser()
-    parser.load_pages(file_data, page_numbers)
+    parser.load_pages(file_data, page_numbers, password=pdf_password)
 
     # Manual-rotation overrides first, then auto detection for this batch.
     with session_scope() as session:
