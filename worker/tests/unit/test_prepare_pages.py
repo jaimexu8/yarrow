@@ -5,13 +5,20 @@ _maybe_start_parsing may only flip a preparing job to parsing when the set of
 queued pages equals the set of run pages.
 """
 
+import json
+import logging
+from types import SimpleNamespace
+
+import pytest
 from yarrow_db.models import Job, JobPage, Page, Warning
 
 from app.pipeline.document_parser import DocumentParser
+from app.pipeline.text_layer import TextLayerDecision, Word
 from app.tasks import ingestion
 from app.tasks.ingestion import _utcnow, parse_page
 
 PARSE = "app.tasks.ingestion.parse_page"
+PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
 
 # The gateway fixture replaces apply_manual_rotations with a recorder that never
 # decodes pages. Keep the production implementation so the out-of-batch rotation
@@ -242,3 +249,156 @@ class TestPreparePages:
                 .one()
             )
             assert page.status == "failed"
+
+
+@pytest.fixture
+def text_layer(monkeypatch):
+    """Stub the text-layer API so the gate's thresholds are not under test here."""
+    fake = FakeTextLayer()
+    monkeypatch.setattr(ingestion.settings, "TEXT_LAYER_ENABLED", True)
+    monkeypatch.setattr(ingestion, "extract_page_text", fake.extract_page_text)
+    monkeypatch.setattr(ingestion, "evaluate_text_layer", fake.evaluate_text_layer)
+    monkeypatch.setattr(ingestion, "scale_words", fake.scale_words)
+    monkeypatch.setattr(ingestion, "serialize_words", fake.serialize_words)
+    return fake
+
+
+class FakeTextLayer:
+    def __init__(self):
+        self.usable: set[int] = set()
+        self.fail_extract: set[int] = set()
+        self.extracted: list[int] = []
+        self.word = Word(1.0, 2.0, 3.0, 4.0, "embedded", 0, 0, 0)
+
+    def extract_page_text(self, file_data, page_number):
+        self.extracted.append(page_number)
+        if page_number in self.fail_extract:
+            raise RuntimeError("extractor exploded")
+        return SimpleNamespace(page_number=page_number, words=[self.word])
+
+    def evaluate_text_layer(self, page_text):
+        usable = page_text.page_number in self.usable
+        return TextLayerDecision(usable, "ok" if usable else "rejected: stub")
+
+    def scale_words(self, page_text):
+        return list(page_text.words)
+
+    def serialize_words(self, words):
+        return {
+            "words": [
+                [w.x0, w.y0, w.x1, w.y1, w.text, w.block_no, w.line_no, w.word_no]
+                for w in words
+            ]
+        }
+
+
+class TestTextLayerExtraction:
+    def test_usable_pdf_page_uploads_serialized_words(
+        self, sessions, storage, gateway, seed, text_layer, monkeypatch
+    ):
+        monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
+        document, job = _preparing_job(sessions, seed, page_count=2)
+        gateway.configure(pages=2)
+        storage.store[document.storage_key] = PDF_BYTES
+        text_layer.usable = {1, 2}
+
+        ingestion.prepare_pages(str(job.id), [1, 2])
+
+        assert text_layer.extracted == [1, 2]
+        for number in (1, 2):
+            key = f"documents/{document.id}/text_layer/{number}.json"
+            assert json.loads(storage.store[key]) == {
+                "words": [[1.0, 2.0, 3.0, 4.0, "embedded", 0, 0, 0]]
+            }
+
+    def test_rejected_page_writes_no_text_layer(
+        self, sessions, storage, gateway, seed, text_layer, monkeypatch
+    ):
+        monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
+        document, job = _preparing_job(sessions, seed, page_count=2)
+        gateway.configure(pages=2)
+        storage.store[document.storage_key] = PDF_BYTES
+        text_layer.usable = {1}
+
+        ingestion.prepare_pages(str(job.id), [1, 2])
+
+        assert f"documents/{document.id}/text_layer/1.json" in storage.store
+        assert f"documents/{document.id}/text_layer/2.json" not in storage.store
+
+    def test_forced_ml_job_writes_no_text_layer(
+        self, sessions, storage, gateway, seed, text_layer, monkeypatch
+    ):
+        monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
+        document, job = _preparing_job(sessions, seed, page_count=1)
+        gateway.configure(pages=1)
+        storage.store[document.storage_key] = PDF_BYTES
+        text_layer.usable = {1}
+        with sessions() as session:
+            session.get(Job, job.id).skip_text_layer = True
+
+        ingestion.prepare_pages(str(job.id), [1])
+
+        assert text_layer.extracted == []
+        assert f"documents/{document.id}/text_layer/1.json" not in storage.store
+
+    def test_non_pdf_input_writes_no_text_layer(
+        self, sessions, storage, gateway, seed, text_layer, monkeypatch
+    ):
+        monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
+        document, job = _preparing_job(sessions, seed, page_count=1)
+        gateway.configure(pages=1)
+        storage.store[document.storage_key] = b"not a pdf"
+        text_layer.usable = {1}
+
+        ingestion.prepare_pages(str(job.id), [1])
+
+        assert text_layer.extracted == []
+        assert f"documents/{document.id}/text_layer/1.json" not in storage.store
+
+    def test_storage_failure_does_not_fail_the_batch(
+        self, sessions, storage, gateway, seed, text_layer, monkeypatch, caplog
+    ):
+        monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
+        document, job = _preparing_job(sessions, seed, page_count=1)
+        gateway.configure(pages=1)
+        storage.store[document.storage_key] = PDF_BYTES
+        text_layer.usable = {1}
+        original_upload = storage.upload_file
+
+        def failing_upload(file, key):
+            if "/text_layer/" in key:
+                raise OSError("bucket unavailable")
+            return original_upload(file, key)
+
+        monkeypatch.setattr(storage, "upload_file", failing_upload)
+
+        with caplog.at_level(logging.ERROR):
+            ingestion.prepare_pages(str(job.id), [1])
+
+        assert f"documents/{document.id}/rasters/1.png" in storage.store
+        assert f"documents/{document.id}/text_layer/1.json" not in storage.store
+        assert "Could not store text layer" in caplog.text
+        with sessions() as session:
+            assert (
+                session.query(JobPage)
+                .filter(JobPage.job_id == job.id, JobPage.page_number == 1)
+                .one()
+                .status
+                == "queued"
+            )
+
+    def test_extraction_error_does_not_fail_the_batch(
+        self, sessions, storage, gateway, seed, text_layer, monkeypatch, caplog
+    ):
+        monkeypatch.setattr(ingestion, "build_thumbnail", lambda _data: b"thumb")
+        document, job = _preparing_job(sessions, seed, page_count=1)
+        gateway.configure(pages=1)
+        storage.store[document.storage_key] = PDF_BYTES
+        text_layer.fail_extract = {1}
+
+        with caplog.at_level(logging.ERROR):
+            ingestion.prepare_pages(str(job.id), [1])
+
+        assert f"documents/{document.id}/rasters/1.png" in storage.store
+        assert f"documents/{document.id}/text_layer/1.json" not in storage.store
+        assert "Could not store text layer" in caplog.text

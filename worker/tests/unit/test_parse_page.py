@@ -1,11 +1,15 @@
 """Unit tests for parse_page."""
 
+import json
+
 import pytest
 import requests
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from yarrow_db.models import Job, JobPage, Page, Warning
 
+from app.pipeline.text_layer import Word, serialize_words
+from app.tasks import ingestion
 from app.tasks.ingestion import parse_page
 
 
@@ -29,9 +33,7 @@ def _seed_job(sessions, seed, page_count):
             session.add(
                 JobPage(job_id=job.id, page_number=n, status="queued", queued_at=None)
             )
-            session.add(
-                Page(document_id=document.id, page_number=n, status="pending")
-            )
+            session.add(Page(document_id=document.id, page_number=n, status="pending"))
     return document, job
 
 
@@ -190,7 +192,9 @@ class TestParsePage:
         gateway.configure(pages=1)
         storage.store[f"documents/{document.id}/rasters/1.png"] = b"raster"
         with sessions() as session:
-            session.execute(update(Job).where(Job.id == job.id).values(status="canceled"))
+            session.execute(
+                update(Job).where(Job.id == job.id).values(status="canceled")
+            )
 
         parse_page(str(job.id), 1)
 
@@ -283,3 +287,65 @@ class TestParsePage:
                 )
             )
         assert messages == ["Image is blurry", "Page was auto-rotated by 90°"]
+
+
+class TestParsePageTextLayer:
+    def test_stored_text_layer_is_loaded_into_the_parser(
+        self, sessions, storage, gateway, seed, monkeypatch
+    ):
+        document, job = _seed_job(sessions, seed, 1)
+        gateway.configure(pages=1)
+        storage.store[f"documents/{document.id}/rasters/1.png"] = b"raster"
+        word = Word(1.0, 2.0, 3.0, 4.0, "embedded", 0, 0, 0)
+        storage.store[f"documents/{document.id}/text_layer/1.json"] = json.dumps(
+            serialize_words([word])
+        ).encode()
+        monkeypatch.setattr(ingestion.settings, "TEXT_LAYER_ENABLED", True)
+
+        parse_page(str(job.id), 1)
+
+        assert gateway.calls == [1]
+        assert [w.text for w in gateway.text_layer_words[0]] == ["embedded"]
+
+    def test_missing_text_layer_is_ignored(self, sessions, storage, gateway, seed):
+        document, job = _seed_job(sessions, seed, 1)
+        gateway.configure(pages=1)
+        storage.store[f"documents/{document.id}/rasters/1.png"] = b"raster"
+
+        parse_page(str(job.id), 1)
+
+        assert gateway.calls == [1]
+        assert gateway.text_layer_words == [[]]
+
+    def test_skip_text_layer_prevents_loading_even_when_stored(
+        self, sessions, storage, gateway, seed, monkeypatch
+    ):
+        document, job = _seed_job(sessions, seed, 1)
+        gateway.configure(pages=1)
+        storage.store[f"documents/{document.id}/rasters/1.png"] = b"raster"
+        word = Word(1.0, 2.0, 3.0, 4.0, "embedded", 0, 0, 0)
+        storage.store[f"documents/{document.id}/text_layer/1.json"] = json.dumps(
+            serialize_words([word])
+        ).encode()
+        monkeypatch.setattr(ingestion.settings, "TEXT_LAYER_ENABLED", True)
+        with sessions() as session:
+            session.get(Job, job.id).skip_text_layer = True
+
+        parse_page(str(job.id), 1)
+
+        assert gateway.calls == [1]
+        assert gateway.text_layer_words == [[]]
+
+    def test_malformed_text_layer_is_ignored(
+        self, sessions, storage, gateway, seed, monkeypatch
+    ):
+        document, job = _seed_job(sessions, seed, 1)
+        gateway.configure(pages=1)
+        storage.store[f"documents/{document.id}/rasters/1.png"] = b"raster"
+        storage.store[f"documents/{document.id}/text_layer/1.json"] = b"not json"
+        monkeypatch.setattr(ingestion.settings, "TEXT_LAYER_ENABLED", True)
+
+        parse_page(str(job.id), 1)
+
+        assert gateway.calls == [1]
+        assert gateway.text_layer_words == [[]]

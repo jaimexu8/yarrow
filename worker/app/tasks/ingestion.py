@@ -1,10 +1,12 @@
 import base64
 import io
+import json
 import logging
 import random
 from datetime import UTC, datetime
 from uuid import UUID
 
+import filetype
 import redis
 import requests
 from celery.exceptions import SoftTimeLimitExceeded
@@ -41,6 +43,14 @@ from app.pipeline.document_parser import (
     ModelInfo,
     PageEvent,
     page_error_code,
+)
+from app.pipeline.text_layer import (
+    Word,
+    deserialize_words,
+    evaluate_text_layer,
+    extract_page_text,
+    scale_words,
+    serialize_words,
 )
 from app.pipeline.thumbnails import build_thumbnail
 
@@ -148,6 +158,71 @@ def _discard_thumbnails(document_id: UUID | None, keys: list[str]) -> None:
         logger.exception(f"Could not check thumbnails of document {document_id}")
         return
     _delete_stored([key for key in keys if key not in kept])
+
+
+def _text_layer_key(document_id: UUID, page_number: int) -> str:
+    return f"documents/{document_id}/text_layer/{page_number}.json"
+
+
+def _store_text_layers(
+    job_id: str,
+    document_id: UUID,
+    file_data: bytes,
+    page_numbers: list[int],
+    skip_text_layer: bool,
+) -> None:
+    """Stage usable PDF text words for the parse stage.
+
+    A rejection or any failure leaves the page on the ML path. These files are
+    an optimization, so a broken extractor or object store must not fail the
+    batch.
+    """
+    if not settings.TEXT_LAYER_ENABLED or skip_text_layer:
+        return
+    try:
+        kind = filetype.guess(file_data)
+    except Exception:
+        logger.exception(f"Could not detect the file type for job {job_id}")
+        return
+    if kind is None or kind.extension != "pdf":
+        return
+
+    for number in page_numbers:
+        try:
+            page_text = extract_page_text(file_data, number)
+            decision = evaluate_text_layer(page_text)
+            if not decision.usable:
+                logger.debug(
+                    f"Text layer rejected for page {number} of job {job_id}: "
+                    f"{decision.reason}"
+                )
+                continue
+            payload = serialize_words(scale_words(page_text))
+            key = _text_layer_key(document_id, number)
+            get_storage().upload_file(
+                io.BytesIO(json.dumps(payload).encode("utf-8")), key
+            )
+        except Exception:
+            logger.exception(
+                f"Could not store text layer for page {number} of job {job_id}"
+            )
+
+
+def _load_text_layer_words(
+    document_id: UUID, page_no: int, skip_text_layer: bool
+) -> list[Word]:
+    """Read staged words for one page, or [] when the ML path must be used."""
+    if not settings.TEXT_LAYER_ENABLED or skip_text_layer:
+        return []
+    key = _text_layer_key(document_id, page_no)
+    try:
+        payload = json.loads(get_storage().download_bytes(key))
+        return deserialize_words(payload)
+    except ObjectNotFoundError:
+        logger.debug(f"No text layer at {key}; using the ML path")
+    except Exception:
+        logger.exception(f"Could not read text layer {key}; using the ML path")
+    return []
 
 
 def _job_deleted(job_id: str) -> bool:
@@ -658,11 +733,13 @@ def prepare_pages(job_id: str, page_numbers: list[int]):
                 return
             document_id = document.id
             storage_key = document.storage_key
+            skip_text_layer = bool(job.skip_text_layer)
     except (JobCanceledError, JobDeletedError):
         logger.info(f"Job {job_id} was canceled or deleted; skipping prepare_pages")
         return
 
     file_data = get_storage().download_bytes(storage_key)
+    _store_text_layers(job_id, document_id, file_data, page_numbers, skip_text_layer)
 
     parser = DocumentParser()
     parser.load_pages(file_data, page_numbers)
@@ -828,6 +905,7 @@ def parse_page(self, job_id: str, page_no: int):
             .first()
         )
         document_id = document.id
+        skip_text_layer = bool(job.skip_text_layer)
         manual_rotation = page.manual_rotation_deg if page is not None else None
         if page is not None and page.status in ("completed", "failed"):
             # A redelivered or late delivery of an already-terminal page: keep
@@ -860,9 +938,14 @@ def parse_page(self, job_id: str, page_no: int):
         _bump_progress(job_id)
         return
 
+    # Staged text words, when the job allows them. A missing or unreadable
+    # file leaves the parser on the ML path.
+    text_layer_words = _load_text_layer_words(document_id, page_no, skip_text_layer)
+
     # 4. Per-page parse on a 1-page parser: page_index 0. A manual
     # override keeps auto-detection off.
     parser = DocumentParser()
+    parser.text_layer_words = text_layer_words
     parser.pages = [base64.b64encode(raster).decode()]
     if manual_rotation is not None:
         parser.manual_rotations = {0: manual_rotation}

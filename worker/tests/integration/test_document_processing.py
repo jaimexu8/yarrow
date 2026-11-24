@@ -592,3 +592,39 @@ class TestRotationCorrection:
             f"expected no rotation warnings, got {rotation_warnings}"
         )
         assert page.page_image_key is None, "upright page should not be re-stored"
+
+
+class TestTextLayerPath:
+    def test_pdf_text_layer_page_is_model_free_with_embedded_text(
+        self, test_initializer, monkeypatch
+    ):
+        """A PDF page with a usable text layer skips OCR for its text content."""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "TEXT_LAYER_ENABLED", True)
+        filename = "three_page.pdf"
+        filepath = os.path.join(TestDocumentProcessing.TEST_DOCS_DIR, filename)
+        (seeded_document,) = test_initializer.configure(
+            filenames=[filename], filepaths=[filepath]
+        )
+
+        _run_pipeline(job_id=seeded_document.job_id, pages=[1])
+
+        with session_scope() as session:
+            page = session.scalar(
+                select(Page).where(
+                    Page.document_id == seeded_document.document_id,
+                    Page.page_number == 1,
+                )
+            )
+            contents = session.scalars(
+                select(RegionText.text_content)
+                .join(Region, RegionText.region_id == Region.id)
+                .where(Region.page_id == page.id)
+            ).all()
+
+        assert page.status == "completed"
+        assert page.model_name == "model-free"
+        assert page.model_version == "model-free"
+        assert contents, "expected RegionText rows filled from the embedded words"
+        assert any(content.strip() for content in contents)

@@ -102,6 +102,7 @@ class Gateway:
         self.figures: dict[str, bytes] = {}
         self.manual: dict[int, int] = {}
         self.warnings: dict[int, str] = {}
+        self.text_layer_words: list[list] = []
 
     def configure(
         self,
@@ -155,6 +156,7 @@ class Gateway:
     def parse_single_page(self, parser, document, page_index):
         number = page_index + 1
         self.calls.append(number)
+        self.text_layer_words.append(list(getattr(parser, "text_layer_words", [])))
         error = self.failures.get(number)
         if error is not None:
             parser.page_errors[page_index] = PageError(

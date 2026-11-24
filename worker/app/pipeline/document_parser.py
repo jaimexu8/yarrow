@@ -34,6 +34,7 @@ from app.pipeline.file_loaders.png_loader import PNGLoader
 from app.pipeline.orientation import OrientationCorrector
 from app.pipeline.quality_checker import QualityChecker
 from app.pipeline.reading_order import order_blocks
+from app.pipeline.text_layer import Word, fill_pruned
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +229,10 @@ class DocumentParser:
         self.parsed_result: list[JsonDict] = []
         self.page_errors: dict[int, PageError] = {}
 
+        # Words extracted from a PDF's own text layer, in raster pixel
+        # coordinates. Empty means the gateway recognizes the text itself.
+        self.text_layer_words: list[Word] = []
+
         # PNG crops of the figure regions built by to_model_objects, by the
         # storage key their RegionImage points at. The caller uploads them.
         self.figure_images: dict[str, bytes] = {}
@@ -336,8 +341,12 @@ class DocumentParser:
                 logger.info(f"Page {index + 1} manually rotated by {degrees}°")
             self.manual_rotations[index] = degrees
 
-    def process_page(self, page_data: str, page_index: int) -> JsonDict:
+    def process_page(
+        self, page_data: str, page_index: int, structure_only: bool = False
+    ) -> JsonDict:
         headers = {"Content-Type": "application/json"}
+        if structure_only:
+            headers["X-Yarrow-Structure-Only"] = "true"
         if settings.INFERENCE_API_KEY:
             headers["Authorization"] = f"Bearer {settings.INFERENCE_API_KEY}"
 
@@ -366,12 +375,17 @@ class DocumentParser:
         except Exception:
             logger.exception(f"Could not record page {page_number} as {event}")
 
-    def _process_page_isolated(self, page_index: int, page_data: str) -> JsonDict:
+    def _process_page_isolated(
+        self, page_index: int, page_data: str, structure_only: bool = False
+    ) -> JsonDict:
         page_number = page_index + 1
         self._emit_page_event(page_number, "started")
 
         try:
-            result = self.process_page(page_data, page_index)
+            if structure_only:
+                result = self.process_page(page_data, page_index, structure_only=True)
+            else:
+                result = self.process_page(page_data, page_index)
         except Exception as error:
             error_message = f"{type(error).__name__}: {error}"
             logger.error(f"Page {page_number} processing failed: ({error_message})")
@@ -991,6 +1005,31 @@ class DocumentParser:
 
         return all_objects
 
+    def _merge_text_layer_words(self, result: JsonDict) -> None:
+        """Put the PDF's embedded words into the layout's pruned result.
+
+        The gateway returns geometry only when asked for structure, so the
+        words replace its recognized text before regions are built. A broken
+        payload leaves the gateway's own content in place.
+        """
+        try:
+            layouts = (result.get("result") or {}).get("layoutParsingResults")
+            if isinstance(layouts, (list, tuple)):
+                entry = layouts[0] if layouts else None
+            elif isinstance(layouts, dict):
+                entry = layouts.get(0) or next(iter(layouts.values()), None)
+            else:
+                entry = None
+            if not isinstance(entry, dict) or not isinstance(
+                entry.get("prunedResult"), dict
+            ):
+                return
+            entry["prunedResult"] = fill_pruned(
+                entry["prunedResult"], self.text_layer_words
+            )
+        except Exception:
+            logger.exception("Could not merge text layer words into the layout")
+
     def parse_single_page(self, document: Document, page_index: int) -> list[Base]:
         """Parse one page and return the model objects for it.
 
@@ -1030,9 +1069,16 @@ class DocumentParser:
         if corrected_b64 is not None:
             page_data = corrected_b64
 
+        structure_only = bool(self.text_layer_words)
+
         # Gateway call for this page only; its ModelInfo lands in
-        # page_models on success, page_errors on failure.
-        result = self._process_page_isolated(page_index, page_data)
+        # page_models on success, page_errors on failure. With embedded
+        # words the gateway skips recognition and returns layout only.
+        result = self._process_page_isolated(
+            page_index, page_data, structure_only=structure_only
+        )
+        if structure_only and result:
+            self._merge_text_layer_words(result)
 
         # Fold the response into parsed_result so the whole-document
         # helpers see it. Slots for pages
@@ -1052,6 +1098,9 @@ class DocumentParser:
         )
         page_error = self.page_errors.get(page_index)
         model = None if page_error else self.page_models.get(page_index)
+        if structure_only and not page_error:
+            model = ModelInfo("model-free", "model-free")
+            self.page_models[page_index] = model
 
         page_id = uuid.uuid4()
         page = Page(

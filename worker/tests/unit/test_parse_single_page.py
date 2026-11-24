@@ -30,6 +30,7 @@ from yarrow_db.models import (
 )
 
 from app.pipeline.document_parser import DocumentParser, ModelInfo
+from app.pipeline.text_layer import Word
 
 MODEL = ModelInfo("M1", "1.0")
 
@@ -134,17 +135,19 @@ def document():
 def gateway(monkeypatch):
     outcomes: dict[str, object] = {}
     sent: list[str] = []
+    headers: list[dict] = []
 
     def post(url, **kwargs):
         page = kwargs["json"]["file"]
         sent.append(page)
+        headers.append(kwargs.get("headers", {}))
         outcome = outcomes[page]
         if isinstance(outcome, BaseException):
             raise outcome
         return _gateway_response(outcome)(url, **kwargs)
 
     monkeypatch.setattr("app.pipeline.document_parser.requests.post", post)
-    return SimpleNamespace(sent=sent, outcomes=outcomes)
+    return SimpleNamespace(sent=sent, outcomes=outcomes, headers=headers)
 
 
 class TestParseSinglePageSuccess:
@@ -617,3 +620,78 @@ class TestParseSinglePageProperties:
             assert region_table_id in {
                 region_table.id for region_table in region_tables
             }
+
+
+class TestTextLayerRouting:
+    def test_words_trigger_structure_only_gateway_and_model_free(
+        self, document, gateway
+    ):
+        parser = _parser_with_pages(1)
+        _stub_orientation(parser)
+        # The word's centre (20, 20) is inside the text block's bbox.
+        parser.text_layer_words = [Word(18.0, 18.0, 22.0, 22.0, "embedded", 0, 0, 0)]
+        gateway.outcomes[parser.pages[0]] = _body(
+            40, 40, [_text_block("OCR guess", (5, 5, 35, 30), 0)]
+        )
+
+        objects = parser.parse_single_page(document, 0)
+
+        assert gateway.headers == [
+            {
+                "Content-Type": "application/json",
+                "X-Yarrow-Structure-Only": "true",
+            }
+        ]
+        texts = [obj for obj in objects if isinstance(obj, RegionText)]
+        assert [text.text_content for text in texts] == ["embedded"]
+        page = _only(objects, Page)
+        assert (page.model_name, page.model_version) == ("model-free", "model-free")
+        assert parser.page_models == {0: ModelInfo("model-free", "model-free")}
+        # The merged layout is what downstream helpers see.
+        assert (
+            parser.get_pruned_result()[0]["parsing_res_list"][0]["block_content"]
+            == "embedded"
+        )
+
+    def test_words_fill_table_cells_and_keep_figure_crops(self, document, gateway):
+        parser = _parser_with_pages(1)
+        _stub_orientation(parser)
+        parser.text_layer_words = [
+            Word(6.0, 6.0, 10.0, 10.0, "cell", 0, 0, 0),
+            Word(28.0, 28.0, 32.0, 32.0, "caption", 0, 0, 0),
+        ]
+        gateway.outcomes[parser.pages[0]] = _body(
+            40,
+            40,
+            [
+                _table_block("<table></table>", (4, 4, 20, 16), 0),
+                {
+                    "block_label": "figure",
+                    "block_bbox": [24, 24, 36, 36],
+                    "block_content": "",
+                    "block_order": 1,
+                },
+            ],
+            table_res_list=[{"cell_box_list": [[4.0, 4.0, 20.0, 16.0]]}],
+        )
+
+        objects = parser.parse_single_page(document, 0)
+
+        cells = [obj for obj in objects if isinstance(obj, TableCell)]
+        assert [cell.text_content for cell in cells] == ["cell"]
+        images = [obj for obj in objects if isinstance(obj, RegionImage)]
+        assert len(images) == 1
+        assert images[0].image_key in parser.figure_images
+
+    def test_no_words_keeps_the_normal_gateway_call(self, document, gateway):
+        parser = _parser_with_pages(1)
+        _stub_orientation(parser)
+        gateway.outcomes[parser.pages[0]] = _body(
+            40, 40, [_text_block("hello", (5, 5, 35, 30), 0)]
+        )
+
+        objects = parser.parse_single_page(document, 0)
+
+        assert gateway.headers == [{"Content-Type": "application/json"}]
+        page = _only(objects, Page)
+        assert (page.model_name, page.model_version) == (MODEL.name, MODEL.version)
