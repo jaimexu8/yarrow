@@ -24,7 +24,6 @@ import {
   Search,
   SearchX,
   Tag as TagIcon,
-  Upload,
   Trash,
   X,
   XCircle,
@@ -80,6 +79,7 @@ import {
   useReprocessAction,
   useCancelProcessing,
 } from './documentActions';
+import { FirstTimeGuide } from './FirstTimeGuide';
 
 const FILE_TYPE_LABELS: Record<string, string> = {
   'application/pdf': 'PDF',
@@ -138,6 +138,15 @@ export function DocumentLibrary() {
   const [announcement, setAnnouncement] = useState('');
   const filterId = useId();
   const filterInput = useRef<HTMLInputElement>(null);
+  // The first-time guide is replaced by the library once its sample is in
+  // the list. Its button goes with it, so focus is handed to the search box.
+  const sampleAdded = useRef(false);
+  const hasDocuments = (documents?.length ?? 0) > 0;
+  useEffect(() => {
+    if (!sampleAdded.current || !hasDocuments) return;
+    sampleAdded.current = false;
+    filterInput.current?.focus();
+  }, [hasDocuments]);
   const [deletions, setDeletions] = useState(0);
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [foldersError, setFoldersError] = useState<string | null>(null);
@@ -494,7 +503,17 @@ export function DocumentLibrary() {
         </div>
 
         {documents.length === 0 ? (
-          <EmptyLibrary />
+          <FirstTimeGuide
+            onSampleUploaded={(sample) => {
+              setAnnouncement(
+                sample.processingStarted
+                  ? 'Sample document added. Processing has started.'
+                  : `Sample document added. ${sample.message ?? 'Processing could not be started.'}`
+              );
+              sampleAdded.current = true;
+              reload();
+            }}
+          />
         ) : inFolder.length === 0 ? (
           <EmptyFolder selection={currentFolder} folders={folders} />
         ) : visible.length === 0 ? (
@@ -1098,30 +1117,6 @@ function LoadingRows() {
           <div className="h-5 w-20 rounded-full bg-slate-100" />
         </div>
       ))}
-    </div>
-  );
-}
-
-function EmptyLibrary() {
-  return (
-    <div className="flex flex-col items-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-      <span className="flex size-11 items-center justify-center rounded-full bg-amber-50 text-amber-600">
-        <FileText aria-hidden="true" className="size-5" />
-      </span>
-      <h2 className="mt-4 text-base font-semibold text-slate-900">
-        No documents yet
-      </h2>
-      <p className="mt-1 max-w-sm text-sm text-slate-600">
-        Upload scanned PDFs or images and Yarrow will extract their text and
-        tables.
-      </p>
-      <Link
-        href="/upload"
-        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-      >
-        <Upload aria-hidden="true" className="size-4" />
-        Upload documents
-      </Link>
     </div>
   );
 }
