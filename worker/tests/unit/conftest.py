@@ -9,6 +9,7 @@ sweep markers.
 """
 
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -17,7 +18,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from yarrow_db.models import Base, Document, Job, Page, Warning
 from yarrow_db.models.region import RegionImage
-from yarrow_storage import ObjectNotFoundError
+from yarrow_storage import ObjectNotFoundError, StoredObject
 
 from app.pipeline.document_parser import ModelInfo, PageError, page_error_code
 from app.tasks import ingestion
@@ -40,6 +41,13 @@ class FakeStorage:
 
     def delete_file(self, key):
         self.store.pop(key, None)
+
+    def list_objects(self, prefix):
+        return (
+            StoredObject(key=key, last_modified=datetime.now(UTC), size=len(value))
+            for key, value in self.store.items()
+            if key.startswith(prefix)
+        )
 
 
 class FakeRedis:

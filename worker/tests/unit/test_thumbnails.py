@@ -1,6 +1,7 @@
 import base64
 import io
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -9,6 +10,7 @@ from PIL import Image
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import sessionmaker
 from yarrow_db.models import Base, Document, Job, Page
+from yarrow_storage import StoredObject
 
 from app.core.config import settings
 from app.pipeline.document_parser import DocumentParser
@@ -73,6 +75,13 @@ class Storage:
 
     def delete_file(self, key):
         self.objects.pop(key, None)
+
+    def list_objects(self, prefix):
+        return (
+            StoredObject(key=key, last_modified=datetime.now(UTC), size=len(value))
+            for key, value in self.objects.items()
+            if key.startswith(prefix)
+        )
 
 
 @pytest.fixture
