@@ -143,16 +143,22 @@ def _store_thumbnails(
 
 
 def _discard_thumbnails(document_id: UUID | None, keys: list[str]) -> None:
+    """Remove uploaded thumbnails that no committed Page row still references.
+
+    A reprocess overwrites the same deterministic keys. If its run aborts, the
+    earlier run's rows still point at them, so those objects must stay.
+    """
     if document_id is None or not keys:
         return
     try:
         with session_scope() as session:
             kept = set(
-                session.execute(
+                session.scalars(
                     select(Page.thumbnail_key).where(
-                        Page.document_id == document_id, Page.thumbnail_key.in_(keys)
+                        Page.document_id == document_id,
+                        Page.thumbnail_key.in_(keys),
                     )
-                ).scalars()
+                )
             )
     except Exception:
         logger.exception(f"Could not check thumbnails of document {document_id}")
@@ -765,92 +771,103 @@ def prepare_pages(job_id: str, page_numbers: list[int]):
     parser.correct_orientations(tuple(page_numbers))
 
     thumbnail_keys = _store_thumbnails(document_id, parser, page_numbers)
-
-    # Upload this batch's corrected rasters; a rotated page also gets its
-    # upright image at pages/{n}.png because parse_page will not re-rotate.
-    for number in page_numbers:
-        raster = base64.b64decode(parser.pages[number - 1])
-        get_storage().upload_file(
-            io.BytesIO(raster), f"documents/{document_id}/rasters/{number}.png"
-        )
-        if _is_rotated(parser, number - 1):
+    thumbnails_committed = False
+    try:
+        # Upload this batch's corrected rasters; a rotated page also gets its
+        # upright image at pages/{n}.png because parse_page will not re-rotate.
+        for number in page_numbers:
+            raster = base64.b64decode(parser.pages[number - 1])
             get_storage().upload_file(
-                io.BytesIO(raster), f"documents/{document_id}/pages/{number}.png"
+                io.BytesIO(raster), f"documents/{document_id}/rasters/{number}.png"
             )
-
-    with session_scope() as session:
-        job = _lock_running_job(session, job_id)
-        if job.status != "processing" or job.current_stage != "preparing":
-            return
-        batch_page_ids = [
-            row
-            for row in session.execute(
-                select(Page.id).where(
-                    Page.document_id == document_id,
-                    Page.page_number.in_(page_numbers),
-                )
-            ).scalars()
-        ]
-        _delete_page_children(session, batch_page_ids)
-
-        batch_page_objs: dict[int, Page] = {}
-        for number in page_numbers:
-            page = (
-                session.execute(
-                    select(Page).where(
-                        Page.document_id == document_id, Page.page_number == number
-                    )
-                )
-                .scalars()
-                .first()
-            )
-            if page is None:
-                page = Page(document_id=document_id, page_number=number)
-                session.add(page)
-            page.status = "pending"
-            page.error_message = None
-            page.error_code = None
-            page.width, page.height = _raster_size(parser.pages[number - 1])
             if _is_rotated(parser, number - 1):
-                page.page_image_key = f"documents/{document_id}/pages/{number}.png"
-            if number - 1 in parser.manual_rotations:
-                page.manual_rotation_deg = parser.manual_rotations[number - 1]
-            if number in thumbnail_keys:
-                page.thumbnail_key = thumbnail_keys[number]
-            batch_page_objs[number] = page
+                get_storage().upload_file(
+                    io.BytesIO(raster), f"documents/{document_id}/pages/{number}.png"
+                )
 
-        # Auto-rotation happens here, so the warning is recorded now; parse_page
-        # sees only the upright raster. Manual-rotation warnings come from
-        # parse_single_page via the seeded manual_rotations.
-        session.flush()
-        for number, page in batch_page_objs.items():
-            angle = parser.page_orientations.get(number - 1)
-            if angle:
+        with session_scope() as session:
+            job = _lock_running_job(session, job_id)
+            if job.status != "processing" or job.current_stage != "preparing":
+                _discard_thumbnails(document_id, list(thumbnail_keys.values()))
+                return
+            batch_page_ids = [
+                row
+                for row in session.execute(
+                    select(Page.id).where(
+                        Page.document_id == document_id,
+                        Page.page_number.in_(page_numbers),
+                    )
+                ).scalars()
+            ]
+            _delete_page_children(session, batch_page_ids)
+
+            batch_page_objs: dict[int, Page] = {}
+            for number in page_numbers:
+                page = (
+                    session.execute(
+                        select(Page).where(
+                            Page.document_id == document_id,
+                            Page.page_number == number,
+                        )
+                    )
+                    .scalars()
+                    .first()
+                )
+                if page is None:
+                    page = Page(document_id=document_id, page_number=number)
+                    session.add(page)
+                page.status = "pending"
+                page.error_message = None
+                page.error_code = None
+                page.width, page.height = _raster_size(parser.pages[number - 1])
+                if _is_rotated(parser, number - 1):
+                    page.page_image_key = f"documents/{document_id}/pages/{number}.png"
+                if number - 1 in parser.manual_rotations:
+                    page.manual_rotation_deg = parser.manual_rotations[number - 1]
+                if number in thumbnail_keys:
+                    page.thumbnail_key = thumbnail_keys[number]
+                batch_page_objs[number] = page
+
+            # Auto-rotation happens here, so the warning is recorded now;
+            # parse_page sees only the upright raster. Manual-rotation warnings
+            # come from parse_single_page via the seeded manual_rotations.
+            session.flush()
+            for number, page in batch_page_objs.items():
+                angle = parser.page_orientations.get(number - 1)
+                if angle:
+                    session.add(
+                        Warning(
+                            page_id=page.id,
+                            warning_type="quality",
+                            message=f"Page was auto-rotated by {angle:.0f}°",
+                        )
+                    )
+
+            queued = set(
+                session.execute(
+                    select(JobPage.page_number).where(JobPage.job_id == job.id)
+                ).scalars()
+            )
+            now = _utcnow()
+            for number in page_numbers:
+                if number in queued:
+                    continue
                 session.add(
-                    Warning(
-                        page_id=page.id,
-                        warning_type="quality",
-                        message=f"Page was auto-rotated by {angle:.0f}°",
+                    JobPage(
+                        job_id=job.id,
+                        page_number=number,
+                        status="queued",
+                        queued_at=now,
                     )
                 )
 
-        queued = set(
-            session.execute(
-                select(JobPage.page_number).where(JobPage.job_id == job.id)
-            ).scalars()
-        )
-        now = _utcnow()
-        for number in page_numbers:
-            if number in queued:
-                continue
-            session.add(
-                JobPage(
-                    job_id=job.id,
-                    page_number=number,
-                    status="queued",
-                    queued_at=now,
-                )
-            )
+        thumbnails_committed = True
+    except BaseException:
+        # This run's row write never committed. Delete only keys that no
+        # earlier committed run still references.
+        if not thumbnails_committed:
+            _discard_thumbnails(document_id, list(thumbnail_keys.values()))
+        raise
 
     _maybe_start_parsing(job_id)
 
