@@ -310,11 +310,12 @@ class FakeStorage:
 
 @pytest.fixture
 def fake_storage(monkeypatch: pytest.MonkeyPatch) -> FakeStorage:
-    from app.api.v1.endpoints import documents, uploads
+    from app.api.v1.endpoints import documents, parsed, uploads
     from app.services import cloud_storage
 
     storage = FakeStorage()
     monkeypatch.setattr(documents, "get_storage", lambda: storage)
+    monkeypatch.setattr(parsed, "get_storage", lambda: storage)
     monkeypatch.setattr(uploads, "get_storage", lambda: storage)
     monkeypatch.setattr(cloud_storage, "get_storage", lambda: storage)
     return storage
