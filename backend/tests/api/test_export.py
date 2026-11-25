@@ -537,7 +537,7 @@ class TestExportImages:
             assert sorted(archive.namelist()) == ["images/figure-1.png", "sample.txt"]
             assert archive.read("images/figure-1.png") == b"png-bytes"
             text = archive.read("sample.txt").decode()
-        assert "Figure on page 1" in text
+        assert "[figure on page 1]" in text
         assert key not in text
 
     async def test_csv_export_with_figures_is_zipped_without_rewriting_content(
