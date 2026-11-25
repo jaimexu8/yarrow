@@ -519,7 +519,7 @@ class TestExportImages:
         assert "gone.png" not in response.text
         assert "Figure on page 1" in response.text
 
-    async def test_text_export_stays_a_single_file(
+    async def test_text_export_with_figures_is_zipped_without_rewriting_content(
         self, client, auth_headers, db_session, fake_storage
     ):
         # Constructs document with a figure
@@ -532,8 +532,38 @@ class TestExportImages:
         # Export as text
         response = await _export(client, auth_headers, document_id, format="text")
 
-        # Check if the response is a single text file
-        assert response.headers["content-type"] == "text/plain; charset=utf-8"
+        assert response.headers["content-type"] == "application/zip"
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            assert sorted(archive.namelist()) == ["images/figure-1.png", "sample.txt"]
+            assert archive.read("images/figure-1.png") == b"png-bytes"
+            text = archive.read("sample.txt").decode()
+        assert "Figure on page 1" in text
+        assert key not in text
+
+    async def test_csv_export_with_figures_is_zipped_without_rewriting_content(
+        self, client, auth_headers, db_session, fake_storage
+    ):
+        document_id = await _upload(client, auth_headers)
+        await _complete(db_session, document_id)
+        await _add_table(
+            db_session,
+            document_id,
+            [["Name", "Amount"], ["Rent", "1200"]],
+            title="Costs",
+            page_number=3,
+        )
+        key = f"documents/{document_id}/figures/a.png"
+        fake_storage.objects[key] = b"png-bytes"
+        await _add_figure(db_session, document_id, 1, key)
+
+        response = await _export(client, auth_headers, document_id, format="csv")
+
+        assert response.headers["content-type"] == "application/zip"
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            assert sorted(archive.namelist()) == ["images/figure-1.png", "sample.csv"]
+            assert archive.read("images/figure-1.png") == b"png-bytes"
+            csv_body = archive.read("sample.csv").decode("utf-8-sig")
+        assert csv_body == "Costs\nName,Amount\nRent,1200\n"
 
     async def test_unicode_zip_filename_keeps_its_characters(
         self, client, auth_headers, db_session, fake_storage

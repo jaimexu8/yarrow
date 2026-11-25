@@ -30,8 +30,8 @@ class ExportFormat(str, Enum):
     CSV = "csv"
 
 
-# Text and CSV never reference figure images, so they stay a single file.
-IMAGE_FORMATS = {ExportFormat.JSON, ExportFormat.MARKDOWN}
+# Only these formats can carry references to the image paths in the archive.
+REFERENCE_FORMATS = {ExportFormat.JSON, ExportFormat.MARKDOWN}
 
 
 router = APIRouter()
@@ -127,9 +127,10 @@ async def export_document(
         db, access, page=page, include_warnings=export_format is ExportFormat.JSON
     )
 
-    # Collect images and modifies the image keys in the tree to point to the archive paths
-    images: dict[str, bytes] = (
-        await _collect_images(tree) if export_format in IMAGE_FORMATS else {}
+    # Images are included for every format, but only reference-capable formats
+    # have their serialized content updated to use the archive paths.
+    images = await _collect_images(
+        tree, rewrite_references=export_format in REFERENCE_FORMATS
     )
 
     fallback = f"document-{access.document.id}"
@@ -159,8 +160,10 @@ async def export_document(
     )
 
 
-async def _collect_images(tree: DocumentTree) -> dict[str, bytes]:
-    """Fetch the tree's figure images and point their regions at the archive paths."""
+async def _collect_images(
+    tree: DocumentTree, *, rewrite_references: bool
+) -> dict[str, bytes]:
+    """Fetch figure images and optionally point their regions at archive paths."""
     regions = [
         region for page in tree.pages for region in page.regions if region.image_key
     ]
@@ -179,7 +182,8 @@ async def _collect_images(tree: DocumentTree) -> dict[str, bytes]:
             else:
                 paths[key] = f"images/figure-{len(files) + 1}.{key.rsplit('.', 1)[-1]}"
                 files[paths[key]] = data
-        region.image_key = paths[key]
+        if rewrite_references:
+            region.image_key = paths[key]
     return files
 
 
