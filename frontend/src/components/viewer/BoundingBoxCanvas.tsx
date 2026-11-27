@@ -12,7 +12,14 @@ export function BoundingBoxCanvas({
   const { activeRegionId, setActiveRegionId, regionFilter, showLowConfidence } =
     useViewer();
 
-  if (!page || !page.width || !page.height) return null;
+  if (
+    !page ||
+    !page.width ||
+    !page.height ||
+    displayWidth <= 0 ||
+    displayHeight <= 0
+  )
+    return null;
 
   const scaleX = displayWidth / page.width;
   const scaleY = displayHeight / page.height;
@@ -27,6 +34,10 @@ export function BoundingBoxCanvas({
           region.bbox.x1,
           region.bbox.y1,
         ];
+        const scaledX0 = Math.round(x0 * scaleX);
+        const scaledY0 = Math.round(y0 * scaleY);
+        const scaledX1 = Math.round(x1 * scaleX);
+        const scaledY1 = Math.round(y1 * scaleY);
         const { confidence } = region;
         const isActive = activeRegionId === region.id;
         const isFilterMatch = isRegionFilterMatch(region, regionFilter);
@@ -47,10 +58,10 @@ export function BoundingBoxCanvas({
                     : 'border-transparent hover:border-blue-300 hover:bg-blue-300/10 z-10'
             )}
             style={{
-              left: Math.round(x0 * scaleX),
-              top: Math.round(y0 * scaleY),
-              width: Math.max(Math.round((x1 - x0) * scaleX), 2),
-              height: Math.max(Math.round((y1 - y0) * scaleY), 2),
+              left: scaledX0,
+              top: scaledY0,
+              width: Math.max(scaledX1 - scaledX0, 2),
+              height: Math.max(scaledY1 - scaledY0, 2),
             }}
             onClick={() => setActiveRegionId(isActive ? null : region.id)}
             onMouseEnter={() => setActiveRegionId(region.id)}

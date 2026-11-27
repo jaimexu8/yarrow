@@ -17,6 +17,11 @@ import type { DocumentTree } from '@/lib/viewer';
 
 export type ViewMode = 'original' | 'split' | 'extracted';
 
+export const MIN_ZOOM = 0.5;
+export const MAX_ZOOM = 3.0;
+export const ZOOM_STEP = 0.25;
+export const DEFAULT_ZOOM = 1.0;
+
 // Margin left alone on top of a page when navigating to it
 const PAGE_SCROLL_MARGIN = 16;
 
@@ -110,6 +115,12 @@ type ViewerState = {
   showBoundingBoxes: boolean;
   setShowBoundingBoxes: (show: boolean) => void;
 
+  zoom: number;
+  setZoom: (zoom: number | ((prev: number) => number)) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetZoom: () => void;
+
   thumbnailsOpen: boolean;
   setThumbnailsOpen: (open: boolean) => void;
   toggleThumbnails: () => void;
@@ -146,6 +157,7 @@ export function ViewerProvider({
   progress = null,
   initialMode = 'split',
   initialPage = 1,
+  initialZoom = DEFAULT_ZOOM,
   refresh,
   highlightRegionId: initialHighlightRegionId = null,
   highlightQuery: initialHighlightQuery = '',
@@ -157,6 +169,7 @@ export function ViewerProvider({
   progress?: DocumentProgress | null;
   initialMode?: ViewMode;
   initialPage?: number;
+  initialZoom?: number;
   refresh: () => void;
   highlightRegionId?: string | null;
   highlightQuery?: string;
@@ -177,6 +190,24 @@ export function ViewerProvider({
   );
   const [activeRegionId, setActiveRegionId] = useState<string | null>(null);
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
+  const [zoom, setZoom] = useState(initialZoom);
+
+  const zoomIn = useCallback(() => {
+    setZoom((current) =>
+      Math.min(MAX_ZOOM, Math.round((current + ZOOM_STEP) * 100) / 100)
+    );
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setZoom((current) =>
+      Math.max(MIN_ZOOM, Math.round((current - ZOOM_STEP) * 100) / 100)
+    );
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    setZoom(DEFAULT_ZOOM);
+  }, []);
+
   const [thumbnailsOpen, setThumbnailsOpenState] = useState(
     initialThumbnailsOpen
   );
@@ -400,6 +431,11 @@ export function ViewerProvider({
       setActiveRegionId,
       showBoundingBoxes,
       setShowBoundingBoxes,
+      zoom,
+      setZoom,
+      zoomIn,
+      zoomOut,
+      resetZoom,
       thumbnailsOpen,
       setThumbnailsOpen,
       toggleThumbnails,
@@ -437,6 +473,10 @@ export function ViewerProvider({
       setHighlight,
       activeRegionId,
       showBoundingBoxes,
+      zoom,
+      zoomIn,
+      zoomOut,
+      resetZoom,
       thumbnailsOpen,
       setThumbnailsOpen,
       toggleThumbnails,
