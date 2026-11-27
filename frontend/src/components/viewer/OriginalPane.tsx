@@ -79,6 +79,7 @@ export function OriginalPane({
     tree,
     originalPages,
     toggleOriginalPage,
+    zoom,
   } = useViewer();
   const onScroll = usePageTracking('original');
   const [original, setOriginal] = useState<Original | null>(null);
@@ -176,7 +177,7 @@ export function OriginalPane({
     <div
       data-viewer-scroll
       onScroll={onScroll}
-      className="h-full overflow-y-auto bg-slate-100 px-4 py-6 sm:px-6"
+      className="h-full overflow-auto bg-slate-100 px-4 py-6 sm:px-6"
     >
       <h2 className="sr-only">Original document</h2>
       <Modal
@@ -243,7 +244,14 @@ export function OriginalPane({
           <Spinner label="Loading the original document" />
         </div>
       ) : (
-        <div className="mx-auto max-w-3xl space-y-6">
+        <div
+          data-viewer-pages
+          className="mx-auto space-y-6"
+          style={{
+            width: `${zoom * 100}%`,
+            maxWidth: `${zoom * 48}rem`,
+          }}
+        >
           {original.kind === 'pdf'
             ? original.aspectRatios.map((aspectRatio, index) => {
                 const pageNumber = index + 1;

@@ -12,6 +12,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Share2,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/Badge';
 import { cn } from '@/lib/cn';
@@ -20,7 +22,7 @@ import { FindInDocument } from './FindInDocument';
 import { RegionFilterDropdown } from './RegionFilter';
 import { ShareModal } from './ShareModal';
 import { THUMBNAIL_SIDEBAR_ID } from './ThumbnailSidebar';
-import { useViewer } from './ViewerContext';
+import { MIN_ZOOM, MAX_ZOOM, useViewer } from './ViewerContext';
 
 const ICON_BUTTON =
   'rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
@@ -84,6 +86,49 @@ function ThumbnailsToggle() {
       )}
       <span className="sr-only">Page thumbnails</span>
     </button>
+  );
+}
+
+function ZoomControls() {
+  const { zoom, zoomIn, zoomOut, resetZoom } = useViewer();
+  const percentage = Math.round(zoom * 100);
+
+  return (
+    <div
+      className="flex items-center gap-0.5 text-sm text-slate-600"
+      role="group"
+      aria-label="Zoom controls"
+    >
+      <button
+        type="button"
+        className={ICON_BUTTON}
+        disabled={zoom <= MIN_ZOOM}
+        onClick={zoomOut}
+        title="Zoom out"
+        aria-label="Zoom out"
+      >
+        <ZoomOut aria-hidden="true" className="size-4" />
+      </button>
+      <button
+        type="button"
+        className="min-w-[3.5rem] rounded px-1.5 py-1 text-center text-xs font-medium tabular-nums text-slate-700 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        onClick={resetZoom}
+        title="Reset zoom (100%)"
+        aria-label={`Reset zoom, currently ${percentage}%`}
+      >
+        {percentage}%
+      </button>
+      <button
+        type="button"
+        className={ICON_BUTTON}
+        disabled={zoom >= MAX_ZOOM}
+        onClick={zoomIn}
+        title="Zoom in"
+        aria-label="Zoom in"
+      >
+        <ZoomIn aria-hidden="true" className="size-4" />
+      </button>
+    </div>
   );
 }
 
@@ -154,6 +199,7 @@ export function ViewerHeader({ actions }: { actions?: ReactNode }) {
       <FindInDocument />
       <RegionFilterDropdown />
       <PageIndicator />
+      <ZoomControls />
       <div className="flex items-center gap-1 border-l border-slate-200 pl-4">
         <BoundingBoxToggle />
         <ShortcutsHelpButton />
